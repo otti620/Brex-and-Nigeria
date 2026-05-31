@@ -1,0 +1,128 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile and state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "kycLevel": { "type": "number" },
+        "balance": { "type": "number" },
+        "monthlyGains": { "type": "number" },
+        "streak": { "type": "number" },
+        "badges": { "type": "array" },
+        "memojiState": { "type": "string" },
+        "teamSize": { "type": "number" },
+        "rechargeMembers": { "type": "number" },
+        "invitationCode": { "type": "string" },
+        "referredBy": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "investments": { "type": "array" },
+        "transactionPIN": { "type": "string" },
+        "linkedCardNumber": { "type": "string" },
+        "linkedCardExpiry": { "type": "string" },
+        "linkedCardCvv": { "type": "string" },
+        "linkedBankName": { "type": "string" },
+        "linkedBankCode": { "type": "string" },
+        "linkedBankOwner": { "type": "string" },
+        "isSuspended": { "type": "boolean" }
+      }
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Transaction logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "date": { "type": "string" },
+        "details": { "type": "string" },
+        "bank": { "type": "string" },
+        "code": { "type": "string" },
+        "owner": { "type": "string" }
+      }
+    },
+    "SupportTicket": {
+      "title": "Support Ticket",
+      "description": "Dispute grievances submitted by users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "message": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userId": { "type": "string" },
+        "status": { "type": "string" },
+        "date": { "type": "string" },
+        "reply": { "type": "string" }
+      }
+    },
+    "Broadcast": {
+      "title": "Broadcast",
+      "description": "System admin broad announcements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string" },
+        "epoch": { "type": "number" }
+      }
+    },
+    "SecurityLog": {
+      "title": "Security Log",
+      "description": "System security and audit logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "type": { "type": "string" },
+        "date": { "type": "string" }
+      }
+    },
+    "Config": {
+      "title": "Config",
+      "description": "Platform global configuration document",
+      "type": "object",
+      "properties": {
+        "contactLine": { "type": "string" },
+        "opayAccount": { "type": "string" },
+        "moniepointAccount": { "type": "string" },
+        "palmpayAccount": { "type": "string" },
+        "showFaqsText": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "User transactions"
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "User support tickets and dispute queries"
+    },
+    "/broadcasts/{broadcastId}": {
+      "schema": "Broadcast",
+      "description": "Announcements"
+    },
+    "/security_logs/{logId}": {
+      "schema": "SecurityLog",
+      "description": "System activity logs"
+    },
+    "/config/{configId}": {
+      "schema": "Config",
+      "description": "CMS system variables"
+    }
+  }
+}

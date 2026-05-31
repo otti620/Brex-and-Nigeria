@@ -1,0 +1,188 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,850;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-brand-cream: #FAF8F5;
+  --color-brand-paper: #FCFAF7;
+  --color-brand-card: #F5F1E8;
+  --color-brand-border: #E2D9C8;
+  --color-brand-ink: #112C1E;
+  --color-brand-ochre: #B07C33;
+  --color-brand-forest: #143D26;
+  --color-brand-moss: #556B5C;
+}
+
+/* ========================================== */
+/* WARM LUXURY EDITORIAL SYSTEM WIDE STYLES */
+/* ========================================== */
+
+body {
+  background-color: #FAF8F5 !important;
+  color: #112C1E !important;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Elegant Serifs for headings and numerical status indicators */
+h1, h2, h3, h4, th, .h2, .font-serif, .tracking-tight, .text-xl, .text-2xl, .text-3xl {
+  font-family: "Playfair Display", Georgia, serif !important;
+  color: #112C1E !important;
+  font-weight: 700 !important;
+}
+
+p, span, div, td, label, button, input {
+  font-family: 'Inter', sans-serif;
+}
+
+/* High-priority override maps for all original dark template tags */
+
+/* Background Elements */
+.bg-\[\#0C1017\] {
+  background-color: #FCFAF7 !important;
+}
+
+div.bg-\[\#0C1017\] {
+  background-color: #FCFAF7 !important;
+}
+
+main.bg-\[\#0C1017\] {
+  background-color: #FCFAF7 !important;
+}
+
+.bg-slate-900, .bg-slate-950, .bg-[#0a0f18] {
+  background-color: #FAF8F5 !important;
+}
+
+/* Secondary Panels & Interactive surfaces mapping */
+.bg-\[\#131926\] {
+  background-color: #F5F1E8 !important;
+  border-color: #E2D9C8 !important;
+}
+
+.bg-\[\#131926\]\/80 {
+  background-color: rgba(245, 241, 232, 0.8) !important;
+}
+
+.bg-slate-800, .bg-[#1e293b], .bg-slate-900 {
+  background-color: #EFEAE0 !important;
+}
+
+/* Borders mapping to elegant linen thread */
+.border-slate-800, .border-slate-700, .border-\[\#1E293B\], .border-\[\#1E293B\]\/20, .border-\[\#1E293B\]\/60 {
+  border-color: #E2D9C8 !important;
+}
+
+.border-x, .border-y, .border, .border-t, .border-b {
+  border-color: #E2D9C8 !important;
+}
+
+/* Primary text to spruce forest ink */
+.text-white, .text-slate-100, .text-slate-200 {
+  color: #112C1E !important;
+}
+
+/* Subtitles to refined sage/moss gray */
+.text-slate-300, .text-slate-400, .text-slate-500, .text-\[\#64748B\] {
+  color: #556B5C !important;
+}
+
+/* Accents mapping to gold-satin Luxury Ochre */
+.text-\[\#8CEE47\] {
+  color: #B07C33 !important;
+}
+
+.text-emerald-400 {
+  color: #143D26 !important;
+}
+
+/* High visibility tags, buttons and interactive controls (Ochre background & light creamy text) */
+.bg-\[\#8CEE47\], .bg-emerald-500 {
+  background-color: #143D26 !important; /* Forest green */
+  color: #FCFAF7 !important;
+}
+
+.bg-\[\#8CEE47\]\/10, .bg-emerald-500\/10 {
+  background-color: rgba(20, 61, 38, 0.08) !important;
+}
+
+.bg-\[\#8CEE47\]\/20 {
+  background-color: rgba(176, 124, 51, 0.15) !important;
+}
+
+.border-\[\#8CEE47\]\/30, .border-emerald-500\/20 {
+  border-color: rgba(20, 61, 38, 0.2) !important;
+}
+
+span.bg-\[\#8CEE47\]\/20 {
+  background-color: rgba(176, 124, 51, 0.15) !important;
+  color: #B07C33 !important;
+  border-color: rgba(176, 124, 51, 0.3) !important;
+}
+
+/* Buttons active/hover effects */
+button.bg-\[\#8CEE47\]:hover, button.bg-emerald-500:hover {
+  background-color: #1B4D3E !important;
+}
+
+.hover\:border-\[\#8CEE47\]\/30:hover {
+  border-color: #B07C33 !important;
+}
+
+/* Forms & inputs customization */
+input, select, textarea {
+  background-color: #FAF8F5 !important;
+  border: 1px solid #E2D9C8 !important;
+  color: #112C1E !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #B07C33 !important;
+  outline: none !important;
+}
+
+::placeholder {
+  color: #8CA091 !important;
+}
+
+/* Terracotta/Burgundy override for red alerts */
+.text-red-400, .text-red-500 {
+  color: #9C382A !important;
+}
+
+.bg-red-500, .bg-red-500\/20 {
+  background-color: rgba(156, 56, 42, 0.1) !important;
+  color: #9C382A !important;
+}
+
+.bg-red-500\/10 {
+  background-color: rgba(156, 56, 42, 0.07) !important;
+}
+
+/* Chart customized colors */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: #E2D9C8 !important;
+}
+
+.recharts-text {
+  fill: #556B5C !important;
+  font-weight: 500 !important;
+}
+
+/* Glass element styles */
+.glass {
+  background: rgba(250, 248, 245, 0.85) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 217, 200, 0.6) !important;
+}
+
+/* Custom styled inputs */
+input[type="text"], input[type="password"], input[type="email"], select, textarea {
+  border-radius: 12px;
+  padding: 12px 16px !important;
+  background-color: #FCFAF7 !important;
+  font-weight: 550 !important;
+}

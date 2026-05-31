@@ -1,0 +1,10 @@
+{
+  "name": "Brex",
+  "description": "A secure, modern high-yield wealth management and investment portfolio dashboard. Claim daily yields directly to your wallet.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
