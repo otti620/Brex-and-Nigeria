@@ -11,6 +11,7 @@ import {
   Area, 
   Tooltip, 
 } from 'recharts';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -1899,17 +1900,32 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    switch (currentScreen) {
-      case Screen.Auth: return renderAuth();
-      case Screen.Admin: return <AdminPanel onBack={() => navigate(Screen.Profile)} onRefreshUser={refreshProfile} />;
-      case Screen.Dashboard: return renderDashboard();
-      case Screen.Market: return renderMarket();
-      case Screen.Portfolio: return renderPortfolio();
-      case Screen.Profile: return renderProfile();
-      case Screen.Fund: return renderFund();
-      case Screen.AIAdvisor: return renderAIAdvisor();
-      default: return renderDashboard();
-    }
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+           key={currentScreen}
+           initial={{ opacity: 0, y: 10 }}
+           animate={{ opacity: 1, y: 0 }}
+           exit={{ opacity: 0, y: -10 }}
+           transition={{ duration: 0.2, ease: "easeOut" }}
+           className="h-full"
+        >
+          {(() => {
+            switch (currentScreen) {
+              case Screen.Auth: return renderAuth();
+              case Screen.Admin: return <AdminPanel onBack={() => navigate(Screen.Profile)} onRefreshUser={refreshProfile} />;
+              case Screen.Dashboard: return renderDashboard();
+              case Screen.Market: return renderMarket();
+              case Screen.Portfolio: return renderPortfolio();
+              case Screen.Profile: return renderProfile();
+              case Screen.Fund: return renderFund();
+              case Screen.AIAdvisor: return renderAIAdvisor();
+              default: return renderDashboard();
+            }
+          })()}
+        </motion.div>
+      </AnimatePresence>
+    );
   };
 
   const isNavHidden = [Screen.Auth, Screen.AIAdvisor].includes(currentScreen);

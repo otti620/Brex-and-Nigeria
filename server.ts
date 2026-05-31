@@ -14,12 +14,12 @@ async function startServer() {
 
   // Server-side Firebase integration for webhook processing
   const firebaseServerConfig = {
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "seedstreet-app",
-    appId: process.env.VITE_FIREBASE_APP_ID || "1:425883713028:web:b1d79dd4ae414771fd0b79",
-    apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyBewBW-Z9P5HtcUTsLvmEn0aZtBjwvD68I",
-    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "seedstreet-app.firebaseapp.com",
-    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "seedstreet-app.appspot.com",
-    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "425883713028",
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+    appId: process.env.VITE_FIREBASE_APP_ID,
+    apiKey: process.env.VITE_FIREBASE_API_KEY,
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   };
 
   const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
@@ -794,12 +794,12 @@ async function startServer() {
         }
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash' as any,
+      const result = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
         contents: `User is a Gen Z investor in Nigeria interested in traditional asset classes like Naira Treasury Bills, bonds, and dollar-hedged pathways. Their current intent category is ${selectedIntent}. They ask: "${message}". Give concise, friendly investment advice using a modern, objective, and premium financial brand tone. Do not refer to "QuantVerse" or VIP trading levels since those are disabled. Focus purely on realistic Naira yields, inflation preservation, and commercial paper rates in Nigeria.`,
       });
       
-      const aiResponse = response.text || "I'm having a bit of a brain freeze. Try asking that again!";
+      const aiResponse = result.text || "I'm having a bit of a brain freeze. Try asking that again!";
       res.json({ text: aiResponse });
     } catch (error: any) {
       console.error("Gemini Error:", error);
