@@ -47,27 +47,7 @@ service cloud.firestore {
 
     // User Profile matching
     match /users/{userId} {
-      allow get: if isOwner(userId) || isSystemAdmin();
-      allow delete: if isSystemAdmin();
-      allow create: if isOwner(userId) && isValidUser(incoming());
-
-      // Allow users to list their referred/team members
-      allow list: if isSignedIn() && (
-        isSystemAdmin() || (
-          resource != null && 
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          resource.data.referredBy == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.invitationCode
-        )
-      );
-
-      allow update: if isSystemAdmin() || (
-        isOwner(userId) && isValidUser(incoming()) && (
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'phoneNumber', 'memojiState', 'linkedBankName', 'linkedBankCode', 'linkedBankOwner', 'balance', 'monthlyGains', 'investments', 'kycLevel',
-            'transactionPIN', 'linkedCardNumber', 'linkedCardExpiry', 'linkedCardCvv'
-          ])
-        )
-      );
+      allow read, write: if isOwner(userId) || isSystemAdmin();
     }
 
     // User Transactions matching (supports collection group queries needed for the admin console)

@@ -73,17 +73,62 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         
         // Listen to user document
         if (unsubDoc) unsubDoc();
-        unsubDoc = onSnapshot(doc(db, 'users', fbUser.uid), (docSnap) => {
+        let firstCheck = true;
+        unsubDoc = onSnapshot(doc(db, 'users', fbUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
             console.log("User data loaded:", data);
             setUserData({ ...data, isLoggedIn: true } as UserState);
             setLoading(false);
           } else {
-            console.log("No user data found, signing out");
-            // User auth exists but profile is missing (maybe wiped test user). Log them out to reset state!
-            setLoading(false);
-            signOut(auth);
+            // Document missing (often during active registration or test account refresh).
+            if (firstCheck) {
+              firstCheck = false;
+              // Wait 2.5 seconds to allow register() setDoc operation to complete
+              await new Promise(resolve => setTimeout(resolve, 2500));
+              // Fetch once more directly to see if now populated
+              const verifySnap = await getDoc(doc(db, 'users', fbUser.uid));
+              if (verifySnap.exists()) {
+                const data = verifySnap.data();
+                setUserData({ ...data, isLoggedIn: true } as UserState);
+                setLoading(false);
+                return;
+              }
+            }
+
+            // If still missing, automatically provision a default user profile to heal account state
+            console.log("No user data found, auto-creating standard profile...");
+            const ourOwnCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
+            const defaultProfile = {
+              id: fbUser.uid,
+              name: fbUser.displayName || fbUser.email.split('@')[0] || 'User',
+              email: fbUser.email,
+              phoneNumber: fbUser.phoneNumber || '',
+              kycLevel: 0,
+              balance: 1000,
+              monthlyGains: 0,
+              streak: 1,
+              badges: ["First Brex 💧"],
+              memojiState: "Neutral",
+              selectedIntent: "safe",
+              teamSize: 0,
+              rechargeMembers: 0,
+              effectiveSizeToday: 0,
+              teamSizeToday: 0,
+              invitationCode: ourOwnCode,
+              referredBy: "",
+              isAdmin: fbUser.email === "ottigospel@gmail.com",
+              investments: CLIENT_DEFAULT_VIP_PLANS
+            };
+            try {
+              await setDoc(doc(db, 'users', fbUser.uid), defaultProfile);
+              setUserData({ ...defaultProfile, isLoggedIn: true } as any);
+              setLoading(false);
+            } catch (err) {
+              console.error("Failed to auto-create user profile:", err);
+              setLoading(false);
+              signOut(auth);
+            }
           }
         }, (err) => {
           console.error("Firestore user onSnapshot error:", err);

@@ -3,12 +3,118 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./server-db";
+import { initializeApp as initFirebaseServer } from "firebase/app";
+import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, writeBatch } from "firebase/firestore";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Server-side Firebase integration for webhook processing
+  const firebaseServerConfig = {
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "seedstreet-app",
+    appId: process.env.VITE_FIREBASE_APP_ID || "1:425883713028:web:b1d79dd4ae414771fd0b79",
+    apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyBewBW-Z9P5HtcUTsLvmEn0aZtBjwvD68I",
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "seedstreet-app.firebaseapp.com",
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "seedstreet-app.appspot.com",
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "425883713028",
+  };
+
+  const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
+  const serverDb = getFirestoreServer(serverFirebaseApp, "(default)");
+
+  // Paystack Webhook Handler
+  app.post("/api/webhook/paystack", async (req, res) => {
+    console.log("[Paystack Webhook] Received payload: ", JSON.stringify(req.body));
+    try {
+      const event = req.body;
+      if (!event || event.event !== "charge.success") {
+        return res.json({ status: "ignored", message: "Not a successful charge event" });
+      }
+
+      const { data } = event;
+      const amountInKobo = data.amount; // kobo (e.g. 500000 = 5000 NGN)
+      const amountNGN = Math.floor(amountInKobo / 100);
+      const email = data.customer && data.customer.email ? data.customer.email.toLowerCase().trim() : "";
+      const reference = data.reference || `ref_ps_${Date.now()}`;
+
+      if (!email || amountNGN <= 0) {
+        return res.status(400).json({ error: "Invalid webhook transaction details" });
+      }
+
+      console.log(`[Paystack Webhook] Executing credit of ₦${amountNGN} for user: ${email}`);
+
+      // 1. Double credit sync: Local file database (if used in fallback mode)
+      try {
+        const dbLocal = loadDatabase();
+        const userLocalIdx = dbLocal.users.findIndex(u => u.email.toLowerCase() === email);
+        if (userLocalIdx !== -1) {
+          dbLocal.users[userLocalIdx].balance += amountNGN;
+          dbLocal.users[userLocalIdx].monthlyGains += Math.floor(amountNGN * 0.05);
+          dbLocal.users[userLocalIdx].transactions.unshift({
+            id: `paystack_txn_${Date.now()}`,
+            amount: amountNGN,
+            type: "recharge",
+            status: "success",
+            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            details: `Paystack Deposit (Ref: ${reference})`
+          });
+          saveDatabase(dbLocal);
+          console.log(`[Paystack Webhook] Successfully credited local database record`);
+        }
+      } catch (localErr) {
+        console.error("[Paystack Webhook] Local database update failed: ", localErr);
+      }
+
+      // 2. Double credit sync: Real-time Cloud Firestone DB (Main production)
+      try {
+        const usersCol = collection(serverDb, "users");
+        const q = query(usersCol, where("email", "==", email));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+          console.warn(`[Paystack Webhook] No real-time Firestore user found matched to ${email}`);
+        } else {
+          const userDoc = snapshot.docs[0];
+          const userId = userDoc.id;
+          const userData = userDoc.data();
+
+          const prevBalance = userData.balance || 0;
+          const prevGains = userData.monthlyGains || 0;
+
+          const batch = writeBatch(serverDb);
+          batch.update(doc(serverDb, 'users', userId), {
+            balance: prevBalance + amountNGN,
+            monthlyGains: prevGains + Math.floor(amountNGN * 0.05)
+          });
+
+          // Insert verified transaction
+          const txnId = `txn_paystack_${Date.now()}`;
+          batch.set(doc(serverDb, `users/${userId}/transactions/${txnId}`), {
+            id: txnId,
+            userId: userId,
+            amount: amountNGN,
+            type: "recharge",
+            status: "success",
+            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            details: `Verified Paystack Network Credit (Ref: ${reference})`
+          });
+
+          await batch.commit();
+          console.log(`[Paystack Webhook] Firestore production records successfully incremented! User: ${userId}`);
+        }
+      } catch (firestoreErr) {
+        console.error("[Paystack Webhook] Production Firestore update failed: ", firestoreErr);
+      }
+
+      return res.status(200).json({ status: "success", message: "Accounts synchronized" });
+    } catch (err: any) {
+      console.error("[Paystack Webhook] Internal Handler Failure: ", err);
+      return res.status(500).json({ error: "Webhook handler failed" });
+    }
+  });
 
   // -------------------------
   // CUSTOM AUTH & ACCOUNT APIS

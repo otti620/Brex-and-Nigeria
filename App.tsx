@@ -31,7 +31,12 @@ import {
   Gift,
   Building2,
   Lock,
-  UserCheck
+  UserCheck,
+  Clock,
+  CreditCard,
+  Eye,
+  EyeOff,
+  ChevronDown
 } from 'lucide-react';
 
 const CLIENT_DEFAULT_VIP_PLANS = [
@@ -124,8 +129,88 @@ const App: React.FC = () => {
   // Fund screen states
   const [fundTab, setFundTab] = useState<'recharge' | 'withdrawal'>('recharge');
   
+  // Custom Webhook-driven Paystack Checkout simulation states
+  const [paystackShowSimulator, setPaystackShowSimulator] = useState(false);
+  const [paystackCheckingPayment, setPaystackCheckingPayment] = useState(false);
+  const [paystackReference, setPaystackReference] = useState('');
+
+  // Check daily processing window: 9 AM - 2 PM WAT Monday-Saturday (Excluding Sunday)
+  const checkWithdrawalAvailability = () => {
+    const now = new Date();
+    // Calculate current WAT time based on offset
+    const utcTimestamp = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const watDate = new Date(utcTimestamp + 3600000);
+    
+    const watDay = watDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const watHour = watDate.getHours(); // Hour 0-23
+    
+    const isSunday = watDay === 0;
+    const isWithinHours = watHour >= 9 && watHour < 14;
+    
+    return {
+      watDay,
+      watHour,
+      isSunday,
+      isWithinHours,
+      canWithdraw: !isSunday && isWithinHours
+    };
+  };
+
+  const triggerPaystackCheckout = () => {
+    if (rechargeAmt < 1000) {
+      showToast("Minimum deposit is ₦1,000 NGN");
+      return;
+    }
+    const ref = `ref_ps_${Date.now()}_` + Math.floor(100+Math.random()*900);
+    setPaystackReference(ref);
+    setPaystackShowSimulator(true);
+  };
+
+  const handlePaystackWebhookAuthorize = async () => {
+    if (!userData) return;
+    setPaystackCheckingPayment(true);
+    showToast("Initializing secure Paystack settlement Node...");
+    
+    // Construct real-world Paystack charge.success webhook payload
+    const payload = {
+      event: "charge.success",
+      data: {
+        amount: rechargeAmt * 100, // kobo conversion
+        reference: paystackReference,
+        status: "success",
+        customer: {
+          email: userData.email || userData.phoneNumber.replace(/\s+/g, '') + "@seedstreet.com"
+        }
+      }
+    };
+
+    try {
+      const response = await fetch("/api/webhook/paystack", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      const res = await response.json();
+      if (response.ok && res.status === "success") {
+        showToast("Success! Webhook received & account balance synchronized! 📥");
+        setPaystackShowSimulator(false);
+        setPaystackCheckingPayment(false);
+        setRechargeAmt(0);
+      } else {
+        throw new Error(res.error || "Webhook endpoint returned error response");
+      }
+    } catch (err: any) {
+      console.error("Paystack simulation err: ", err);
+      showToast("Sync failed: Webhook failed to register. " + err.message);
+      setPaystackCheckingPayment(false);
+    }
+  };
+
   // Recharge states
-  const [rechargeAmt, setRechargeAmt] = useState<number>(3000);
+  const [rechargeAmt, setRechargeAmt] = useState<number>(10000);
   const [selectedGateway, setSelectedGateway] = useState<string>('Hpay');
   const [rechargeStep, setRechargeStep] = useState<'input' | 'payment_instructions' | 'confirming' | 'success'>('input');
   const [rechargeSenderName, setRechargeSenderName] = useState('');
@@ -272,16 +357,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!loading) {
       if (user) {
-        if (!userData) {
-          // Document missing for logged in user -> force logout
-          setCurrentScreen(Screen.Auth);
-          return;
-        }
-        if (currentScreen === Screen.Auth) {
-          if (userData?.email?.toLowerCase() === 'ottigospel@gmail.com') {
-            setCurrentScreen(Screen.Admin);
-          } else {
-            setCurrentScreen(Screen.Dashboard);
+        if (userData) {
+          if (currentScreen === Screen.Auth) {
+            if (userData?.email?.toLowerCase() === 'ottigospel@gmail.com') {
+              setCurrentScreen(Screen.Admin);
+            } else {
+              setCurrentScreen(Screen.Dashboard);
+            }
           }
         }
       } else {
@@ -359,11 +441,11 @@ const App: React.FC = () => {
     try {
       setAuthError('');
       const payload = {
-        name: 'Brex Investor',
-        email: userEmail.trim(),
+        name: 'Brex Member',
+        email: enteredPhone + '@brex.com', // fallback since screen removed email
         phoneNumber: enteredPhone,
         password: password,
-        invitationCode: 'BREX-8854',
+        invitationCode: invitationCode || '16662861',
         selectedIntent: 'safe'
       };
       await register(payload);
@@ -446,6 +528,20 @@ const App: React.FC = () => {
 
   // Withdrawal validation REST submit
   const handleWithdrawSubmit = async () => {
+    // 1. Time check restriction: Daily 9am - 2pm WAT (UTC+1), excluding Sunday
+    const { canWithdraw, isSunday } = checkWithdrawalAvailability();
+    if (!canWithdraw) {
+      setWithdrawErrorMsg(isSunday 
+        ? "Withdrawals are closed on Sundays. Standard payouts take place from Monday to Saturday." 
+        : "Standard settlements are only open between 9:00 AM and 2:00 PM WAT daily."
+      );
+      return;
+    }
+
+    const activeBank = userData?.linkedBankName || withdrawBank;
+    const activeAccount = userData?.linkedBankCode || payeeAccount;
+    const activeOwner = userData?.linkedBankOwner || verifiedPayoutName || userData?.name || "Verified Holder";
+
     if (withdrawAmt < 1000) {
       setWithdrawErrorMsg('Minimum payout threshold is ₦1,000');
       return;
@@ -454,8 +550,8 @@ const App: React.FC = () => {
       setWithdrawErrorMsg('Insufficient account balance');
       return;
     }
-    if (payeeAccount.trim().length !== 10) {
-      setWithdrawErrorMsg('Recipient account must be exactly a 10-digit NUBAN number');
+    if (!activeAccount || activeAccount.trim().length !== 10) {
+      setWithdrawErrorMsg('Recipient account must be exactly a 10-digit NUBAN number/card link');
       return;
     }
     
@@ -467,10 +563,10 @@ const App: React.FC = () => {
 
     setWithdrawErrorMsg('');
     try {
-      await withdraw(withdrawAmt, withdrawBank, payeeAccount, verifiedPayoutName);
+      await withdraw(withdrawAmt, activeBank, activeAccount, activeOwner);
       
       const expectedPayout = withdrawAmt * 0.98;
-      setWithdrawSuccessMsg(`Request settled! Beneficiary: ${verifiedPayoutName || 'Verified Payout Holder'}. Net expected: ₦${expectedPayout.toLocaleString()}`);
+      setWithdrawSuccessMsg(`Request settled! Beneficiary: ${activeOwner}. Net expected: ₦${expectedPayout.toLocaleString()}`);
       showToast(`Payout of ₦${withdrawAmt.toLocaleString()} dispatched successfully.`);
       setEnteredWithdrawPIN('');
       setTimeout(() => {
@@ -481,7 +577,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Subscribe / Invest in wealth yield plans
+  // Subscribe / Invest in yield plans
   const handleSubscribeInvestmentPlan = async (planId: string, cost: number) => {
     if (!userData || userData.balance < cost) {
       showToast(`Insufficient balance. You need at least ₦${cost.toLocaleString()} to activate this pool.`);
@@ -493,25 +589,25 @@ const App: React.FC = () => {
 
     try {
       await subscribeToPlan(planId);
-      showToast(`Successfully allocated capital! Yield accrual online.`);
+      showToast(`Successfully joined plan! Daily yield starts immediately.`);
     } catch (err: any) {
-      alert(err.message || "Allocation failed. Try again.");
+      showToast(err.message || "Subscription failed. Try again.");
     }
   };
 
-  // Run Yield Claims / Calibration Pipeline
-  const executeYieldCalibration = async (plan: any) => {
+  // Claim Daily Earnings
+  const claimDailyEarnings = async (plan: any) => {
     const todayStr = new Date().toISOString().slice(0, 10);
     if (plan.lastClaimedDate === todayStr) {
-      showToast("This yield cycle has already been accrued for today.");
+      showToast("This plan yield has already been claimed for today.");
       return;
     }
 
     try {
       await accrueYield(plan.id);
-      showToast(`Accrued! Earned +₦${plan.dailyProfit.toLocaleString()} daily yield.`);
+      showToast(`Earned +₦${plan.dailyProfit.toLocaleString()} daily profit!`);
     } catch (err: any) {
-      alert(err.message || "Failed to finalize yield claim on server.");
+      showToast(err.message || "Failed to claim daily profit. Try again.");
     }
   };
 
@@ -522,7 +618,7 @@ const App: React.FC = () => {
       await refreshTeamData();
       showToast(`Simulated active partner registered successfully in the database.`);
     } catch (err: any) {
-      alert(err.message || "Failed to simulate registration.");
+      showToast(err.message || "Failed to simulate registration.");
     }
   };
 
@@ -537,14 +633,14 @@ const App: React.FC = () => {
       setActiveProfileOverlay(null);
       showToast('Personal details updated successfully!');
     } catch (err: any) {
-      alert(err.message || 'Details update failed');
+      showToast(err.message || 'Details update failed');
     }
   };
 
   const handleSaveBankDetails = async () => {
     if (bankSettingsTab === 'account') {
       if (bankSettingsAccount.length !== 10) {
-        alert('Linked bank account must be a 10-digit NUBAN number');
+        showToast('Linked bank account must be a 10-digit NUBAN number');
         return;
       }
       try {
@@ -557,18 +653,18 @@ const App: React.FC = () => {
           linkedCardCvv: ''
         });
         setActiveProfileOverlay(null);
-        showToast('Payout coordinates bound successfully!');
+        showToast('Bank details saved successfully!');
       } catch (err: any) {
-        alert(err.message || 'Details update failed');
+        showToast(err.message || 'Details update failed');
       }
     } else {
       // ATM Card setup
       if (linkedCardNumber.replace(/\s/g, '').length < 16) {
-        alert('Please enter a valid 16-digit ATM card number');
+        showToast('Please enter a valid 16-digit ATM card number');
         return;
       }
       if (!linkedCardExpiry || linkedCardCvv.length < 3) {
-        alert('Please enter complete expiry (MM/YY) and CVV codes');
+        showToast('Please enter complete expiry (MM/YY) and CVV codes');
         return;
       }
       try {
@@ -583,14 +679,14 @@ const App: React.FC = () => {
         setActiveProfileOverlay(null);
         showToast('Secure withdrawal bank card linked successfully!');
       } catch (err: any) {
-        alert(err.message || 'Details update failed');
+        showToast(err.message || 'Details update failed');
       }
     }
   };
 
   const handleSaveSecurity = async () => {
     if (!securityNewPass && !transactionPIN) {
-      alert('Please configure at least one credential update.');
+      showToast('Please configure at least one credential update.');
       return;
     }
     try {
@@ -606,161 +702,155 @@ const App: React.FC = () => {
       }
       setActiveProfileOverlay(null);
       setSecurityNewPass('');
-      showToast('Security coordinates and withdrawal PIN updated successfully!');
+      showToast('Security details and withdrawal PIN updated successfully!');
     } catch (err: any) {
-      alert(err.message || 'Security details update failed');
+      showToast(err.message || 'Security details update failed');
     }
   };
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
   const renderAuth = () => {
     return (
-      <div className="h-full px-8 pt-10 pb-12 bg-[#0C1017] overflow-y-auto flex flex-col justify-between min-h-screen">
-        
-        {/* Toggle options */}
-        <div className="flex justify-end gap-3 mb-4">
-          <button 
-            onClick={() => {
-              setAuthMode(authMode === 'login' ? 'register' : 'login');
-              setAuthError('');
-            }}
-            className="text-xs font-semibold text-[#8CEE47] bg-[#8CEE47]/10 px-4 py-2 rounded-full border border-[#8CEE47]/20 hover:bg-[#8CEE47]/20 transition-all font-mono"
-          >
-            {authMode === 'login' ? 'Create Account' : 'Sign in'}
-          </button>
+      <div className="h-full bg-[#f8f8f8] flex flex-col min-h-screen">
+        {/* Header Section */}
+        <div className="bg-gradient-to-b from-[#f9b01c] to-[#ffcc33] pt-6 pb-20 px-6 relative">
+          <div className="flex items-center gap-4 mb-12">
+            <button 
+              onClick={() => {
+                if (authMode === 'register') {
+                  setAuthMode('login');
+                }
+              }}
+              className="p-1"
+            >
+              <ArrowLeft size={24} className="text-black" />
+            </button>
+            <h1 className="flex-1 text-center text-lg font-bold text-black -ml-8">
+              {authMode === 'login' ? 'Login' : 'Register'}
+            </h1>
+          </div>
+
+          <div className="mb-0">
+            <h2 className="text-4xl font-extrabold text-black mb-2 tracking-tighter">BREX</h2>
+            <p className="text-black/80 text-sm font-medium">
+              {authMode === 'login' 
+                ? 'Give credential to sign in your account' 
+                : 'Provide information to register your account'}
+            </p>
+          </div>
+
+          {/* Decorative circles from screenshot */}
+          <div className="absolute right-[-20px] top-[20px] w-40 h-40 border-2 border-white/10 rounded-full" />
+          <div className="absolute right-[20px] top-[60px] w-20 h-20 border-2 border-white/20 rounded-full flex items-center justify-center">
+             <div className="w-1.5 h-1.5 bg-white rounded-full" />
+          </div>
+          <div className="absolute right-[100px] top-[140px] w-2.5 h-2.5 bg-white/40 rounded-full" />
         </div>
 
-        {authMode === 'login' ? (
-          /* LOGIN VIEW */
-          <div className="flex-1 flex flex-col justify-center my-auto max-w-sm mx-auto w-full">
-            <div className="flex flex-col items-center mb-8">
-              <div className="w-20 h-20 bg-[#8CEE47]/10 border border-[#8CEE47] rounded-full flex items-center justify-center shadow-xl shadow-[#8CEE47]/5 mb-4 animate-pulse">
-                <span className="text-3xl font-black text-[#8CEE47] italic font-mono">B</span>
-              </div>
-              <h2 className="text-2xl font-black text-white tracking-tight mb-1">Brex Wealth</h2>
-              <p className="text-[#64748B] text-[10px] font-black tracking-widest uppercase font-mono">SECURE FIXED-YIELD PATHWAYS</p>
-            </div>
-
-            <div className="flex flex-col gap-4 mt-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider font-mono">Registered email or phone</label>
+        {/* Form Section */}
+        <div className="flex-1 bg-white rounded-t-[40px] -mt-10 px-8 pt-10 pb-12 shadow-2xl z-10">
+          <div className="flex flex-col gap-6 max-w-sm mx-auto">
+            
+            {/* Phone Field */}
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold text-[#333] ml-1">Phone</label>
+              <div className="flex bg-[#f3f4f6] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#ff9c00]/30 transition-all">
+                {authMode === 'register' && (
+                  <div className="flex items-center gap-1 px-4 border-r border-gray-200 text-sm font-semibold text-gray-500">
+                    +234 <ChevronDown size={16} />
+                  </div>
+                )}
                 <input 
                   type="text"
-                  placeholder="Enter email or +234 number" 
+                  placeholder="Please enter your phone number" 
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="bg-[#131926] border border-[#1E293B] text-white px-5 py-3.5 rounded-2xl outline-none focus:border-[#8CEE47] transition-all text-sm font-semibold"
+                  className="bg-transparent flex-1 px-4 py-4 text-sm font-medium outline-none placeholder:text-gray-400"
                 />
               </div>
+            </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider font-mono font-bold">Password</label>
+            {/* Password Field */}
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold text-[#333] ml-1">Password</label>
+              <div className="flex bg-[#f3f4f6] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#ff9c00]/30 transition-all items-center pr-4">
                 <input 
-                  type="password"
-                  placeholder="Enter your security password" 
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Please enter your login password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-[#131926] border border-[#1E293B] text-white px-5 py-3.5 rounded-2xl outline-none focus:border-[#8CEE47] transition-all text-sm font-semibold"
+                  className="bg-transparent flex-1 px-4 py-4 text-sm font-medium outline-none placeholder:text-gray-400"
                 />
                 <button 
-                  onClick={async () => {
-                    const email = phoneNumber.includes('@') ? phoneNumber : '';
-                    if(!email) {
-                      setAuthError('Enter your email to reset password');
-                      return;
-                    }
-                    try {
-                      await resetPassword(email);
-                      showToast('Password reset email sent!');
-                    } catch(err: any) {
-                      setAuthError(err.message || 'Reset failed');
-                    }
-                  }}
-                  className="text-[10px] text-slate-500 font-mono text-left underline self-start pt-1 hover:text-[#8CEE47]"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  Forgot Password?
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-
-              {authError && <p className="text-red-400 text-xs font-bold text-center leading-relaxed font-semibold">{authError}</p>}
-
-              <button 
-                onClick={handleNativeLogin} 
-                className="w-full bg-[#8CEE47] hover:bg-[#7BE13A] py-4 rounded-2xl text-slate-900 font-extrabold text-sm shadow-xl transition-all duration-200 mt-2 cursor-pointer"
-              >
-                Log In Securely
-              </button>
-
-              <div 
-                onClick={() => {
-                  setPhoneNumber('ottigospel@gmail.com');
-                  setPassword('password123');
-                  setAuthError('');
-                }}
-                className="border border-dashed border-slate-700 hover:border-[#8CEE47]/40 p-2.5 rounded-xl text-center cursor-pointer text-slate-400 text-[10px] font-mono hover:bg-[#8CEE47]/5 transition-all"
-              >
-                ⚡ Presets: Admin Auto-fill
-              </div>
             </div>
-          </div>
-        ) : (
-          /* REGISTER VIEW */
-          <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
-            <div className="mb-6 text-center">
-              <h2 className="text-2xl font-black text-white tracking-tight mb-1">Create Savings Account</h2>
-              <p className="text-[#64748B] text-[10px] font-black uppercase tracking-wider font-mono">SECURE ACCOUNT SET UP</p>
-            </div>
-            
-            <div className="flex flex-col gap-3 mt-1">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider font-mono">Mobile Phone Number</label>
-                <div className="flex bg-[#131926] border border-[#1E293B] rounded-2xl overflow-hidden focus-within:border-[#8CEE47] transition-all">
-                  <span className="bg-[#1E293B] px-4 py-3 text-xs font-bold text-[#8CEE47] flex items-center justify-center border-r border-[#1E293B] font-mono">+234</span>
+
+            {authMode === 'register' && (
+              <>
+                {/* Confirm Password Field */}
+                <div className="flex flex-col gap-3">
+                  <label className="text-sm font-bold text-[#333] ml-1">Password</label>
                   <input 
-                     type="text"
-                     placeholder="9061234567" 
-                     value={phoneNumber.replace('+234', '').trim()}
-                     onChange={(e) => setPhoneNumber('+234 ' + e.target.value.trim())}
-                     className="bg-transparent text-white px-5 py-3 outline-none text-sm font-semibold flex-1"
+                    type="password"
+                    placeholder="Please enter your login password" 
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="auth-input"
                   />
                 </div>
+
+                {/* Invitation Field */}
+                <div className="flex flex-col gap-3">
+                  <label className="text-sm font-bold text-[#333] ml-1">Invitation</label>
+                  <input 
+                    type="text"
+                    placeholder="Invitation code" 
+                    value={invitationCode}
+                    onChange={(e) => setInvitationCode(e.target.value)}
+                    className="auth-input"
+                  />
+                </div>
+              </>
+            )}
+
+            {authMode === 'login' && (
+              <div className="flex items-center gap-2 mt-1">
+                <div 
+                  onClick={() => setRememberMe(!rememberMe)}
+                  className={`w-4 h-4 rounded-full border-2 cursor-pointer flex items-center justify-center transition-all ${rememberMe ? 'bg-[#ff9c00] border-[#ff9c00]' : 'border-gray-300'}`}
+                >
+                   {rememberMe && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                </div>
+                <span className="text-[11px] font-semibold text-gray-400">Remember username/password</span>
               </div>
+            )}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider font-mono">Email Address</label>
-                <input 
-                  type="email"
-                  placeholder="yourname@gmail.com" 
-                  value={userEmail}
-                  onChange={(e) => setUserEmail(e.target.value)}
-                  className="bg-[#131926] border border-[#1E293B] text-white px-5 py-3 rounded-2xl outline-none focus:border-[#8CEE47] transition-all text-sm font-semibold"
-                />
-              </div>
+            {authError && <p className="text-red-500 text-xs font-bold text-center animate-pulse">{authError}</p>}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider font-mono">Password</label>
-                <input 
-                  type="password"
-                  placeholder="Min 6 alphanumeric characters" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-[#131926] border border-[#1E293B] text-white px-5 py-3 rounded-2xl outline-none focus:border-[#8CEE47] transition-all text-sm font-semibold"
-                />
-              </div>
+            <button 
+              onClick={authMode === 'login' ? handleNativeLogin : handleNativeRegister} 
+              className="w-full bg-[#ff9c00] text-black font-bold py-4 rounded-full shadow-lg shadow-[#ff9c00]/20 active:scale-[0.98] transition-all mt-4"
+            >
+              {authMode === 'login' ? 'Login' : 'Register'}
+            </button>
 
-              {authError && <p className="text-red-400 text-xs font-bold text-center leading-relaxed font-semibold">{authError}</p>}
-
-              <button 
-                onClick={handleNativeRegister} 
-                className="w-full bg-[#8CEE47] hover:bg-[#7BE13A] py-3.5 rounded-2xl text-slate-900 font-extrabold text-sm shadow-xl transition-all cursor-pointer mt-1"
-              >
-                Sign Up & Activate Wallet
-              </button>
-            </div>
+            {authMode === 'login' ? (
+              <p className="text-center text-xs font-semibold text-gray-400 mt-4">
+                Don't have an account ?<button onClick={() => { setAuthMode('register'); setAuthError(''); }} className="text-[#ff9c00] ml-1">Register</button>
+              </p>
+            ) : (
+              <p className="text-center text-xs font-semibold text-gray-400 mt-4">
+                Already have an account ?<button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-[#ff9c00] ml-1">Login</button>
+              </p>
+            )}
           </div>
-        )}
-
-        <div className="mt-8 text-center text-[10px] text-[#64748B] font-mono uppercase tracking-widest">
-          BREX CRYPTO-HASH SECURED CODES 🛡️
         </div>
       </div>
     );
@@ -783,26 +873,26 @@ const App: React.FC = () => {
         {/* Top Header */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#8CEE47]/10 border border-[#8CEE47] rounded-full flex items-center justify-center font-black italic text-[#8CEE47] text-lg">
+            <div className="w-10 h-10 bg-[#ff9c00]/10 border border-[#ff9c00] rounded-full flex items-center justify-center font-black italic text-[#ff9c00] text-lg">
               B
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight text-white m-0">Brex Wealth</h2>
+              <h2 className="text-lg font-black tracking-tight text-black m-0">Brex</h2>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#8CEE47] animate-pulse" />
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono">Secure Account Active</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-[#ff9c00] animate-pulse" />
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest font-mono">Secure Account Active</span>
               </div>
             </div>
           </div>
-          <div onClick={() => navigate(Screen.Profile)} className="cursor-pointer active:scale-95 transition-transform ring-2 ring-[#8CEE47]/20 rounded-full p-0.5 bg-[#131926]">
+          <div onClick={() => navigate(Screen.Profile)} className="cursor-pointer active:scale-95 transition-transform ring-2 ring-[#ff9c00]/20 rounded-full p-0.5 bg-white">
             <Memoji state={userData.memojiState} size="sm" />
           </div>
         </div>
 
         {/* Dynamic Social Proof marquee banner */}
-        <div className="bg-[#131926]/40 backdrop-blur-sm border border-[#1E293B]/70 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 overflow-hidden shadow-inner -mt-1 select-none col-span-full">
-          <span className="flex-shrink-0 flex items-center justify-center bg-emerald-500/10 text-[#8CEE47] border border-emerald-500/20 text-[8px] font-black uppercase tracking-wider font-mono rounded px-1.5 py-0.5 animate-pulse">Live Settlements</span>
-          <p className="text-slate-300 font-mono text-[9px] font-bold truncate tracking-tight transition-all duration-300">
+        <div className="bg-white border border-gray-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 overflow-hidden shadow-sm -mt-1 select-none col-span-full">
+          <span className="flex-shrink-0 flex items-center justify-center bg-gray-100 text-[#ff9c00] border border-gray-200 text-[8px] font-black uppercase tracking-wider font-mono rounded px-1.5 py-0.5 animate-pulse">Live Settlements</span>
+          <p className="text-gray-600 font-mono text-[9px] font-bold truncate tracking-tight transition-all duration-300">
             {SOCIAL_PROOF_DEEDS[socialIdx]}
           </p>
         </div>
@@ -823,13 +913,13 @@ const App: React.FC = () => {
 
 
 
-        {/* Ledger Balance block */}
-        <div className="bg-[#131926] border border-[#1E293B] rounded-[32px] p-6 relative overflow-hidden">
-          <p className="text-[#64748B] text-[10px] font-bold tracking-widest uppercase mb-1 font-mono">Available Savings Balance</p>
+        {/* Balance block */}
+        <div className="bg-gradient-to-br from-[#ff9c00] to-[#ffcc33] rounded-[32px] p-6 relative overflow-hidden shadow-xl shadow-[#ff9c00]/20">
+          <p className="text-black/60 text-[10px] font-bold tracking-widest uppercase mb-1 font-mono">Available Balance</p>
           <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-3xl font-black text-white font-mono">₦{userData.balance.toLocaleString()}</span>
-            <div className="flex items-center gap-0.5 text-[9px] bg-green-500/15 text-[#8CEE47] px-2 py-0.5 rounded-full font-bold">
-              <TrendingUp size={10} /> +14.5% APY Daily Accrual
+            <span className="text-3xl font-black text-black font-mono">₦{userData.balance.toLocaleString()}</span>
+            <div className="flex items-center gap-0.5 text-[9px] bg-white/30 text-black px-2 py-0.5 rounded-full font-bold">
+              <TrendingUp size={10} /> +14.5% Daily Interest
             </div>
           </div>
           
@@ -840,7 +930,7 @@ const App: React.FC = () => {
                 setRechargeStep('input');
                 navigate(Screen.Fund);
               }}
-              className="bg-[#8CEE47] text-slate-900 font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-[#7BE13A] transition-all cursor-pointer outline-none"
+              className="bg-black text-white font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-900 transition-all cursor-pointer outline-none shadow-lg "
             >
               <Coins size={14} /> Instant Deposit
             </button>
@@ -849,7 +939,7 @@ const App: React.FC = () => {
                 setFundTab('withdrawal');
                 navigate(Screen.Fund);
               }}
-              className="bg-[#1E293B] hover:bg-slate-800 text-white border border-slate-700 font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer outline-none"
+              className="bg-white/20 hover:bg-white/30 text-black border border-black/10 font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer outline-none"
             >
               <Wallet size={14} /> Instant Payout
             </button>
@@ -862,14 +952,14 @@ const App: React.FC = () => {
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="balanceGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8CEE47" stopOpacity={0.25}/>
-                  <stop offset="95%" stopColor="#8CEE47" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#ff9c00" stopOpacity={0.25}/>
+                  <stop offset="95%" stopColor="#ff9c00" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <Tooltip 
                 contentStyle={{ borderRadius: '16px', backgroundColor: '#131926', border: '1px solid #1E293B', color: 'white', fontSize: '10px', fontWeight: 'bold' }} 
               />
-              <Area type="monotone" dataKey="value" stroke="#8CEE47" strokeWidth={3} fillOpacity={1} fill="url(#balanceGrad)" />
+              <Area type="monotone" dataKey="value" stroke="#ff9c00" strokeWidth={3} fillOpacity={1} fill="url(#balanceGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -879,47 +969,47 @@ const App: React.FC = () => {
           onClick={() => navigate(Screen.AIAdvisor)}
           className="p-4 bg-gradient-to-r from-slate-900 to-[#131926] border border-[#1E293B] rounded-3xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all group relative overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-[#8CEE47]/5 rounded-full blur-xl" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-[#ff9c00]/10 rounded-full blur-xl" />
           <div className="flex items-center gap-3 relative z-10 font-semibold">
-              <div className="w-10 h-10 bg-[#8CEE47]/10 border border-[#8CEE47]/20 rounded-xl flex items-center justify-center text-xl shadow-md">🤖</div>
+              <div className="w-10 h-10 bg-[#ff9c00]/10 border border-[#ff9c00]/20 rounded-xl flex items-center justify-center text-xl shadow-md">🤖</div>
               <div>
-                  <p className="text-white font-black text-xs">AI Wealth Advisor</p>
-                  <p className="text-slate-400 text-[10px] font-medium italic">"Explain current interest rates vs corporate debt papers."</p>
+                  <p className="text-white font-black text-xs">AI Advisor</p>
+                  <p className="text-slate-400 text-[10px] font-medium italic">"How can I maximize my daily savings profit?"</p>
               </div>
           </div>
-          <div className="w-7 h-7 bg-white/5 rounded-full flex items-center justify-center text-white relative z-10 group-hover:bg-[#8CEE47] group-hover:text-slate-900 transition-all">
+          <div className="w-7 h-7 bg-black/5 rounded-full flex items-center justify-center text-black relative z-10 group-hover:bg-[#ff9c00] group-hover:text-black transition-all">
             <ArrowUpRight size={14} />
           </div>
         </div>
 
         {/* Performance metrics gains */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-            <div className="flex items-center gap-2 mb-1.5 text-[#8CEE47]">
+          <div className="bg-white border border-gray-200 p-4.5 rounded-[24px]">
+            <div className="flex items-center gap-2 mb-1.5 text-[#ff9c00]">
               <Zap size={13} />
-              <p className="text-[9px] font-black uppercase tracking-widest text-[#64748B] font-mono">Accumulated Gains</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 font-mono">Total Earnings</p>
             </div>
-            <p className="text-[17px] font-black text-[#8CEE47] font-mono">₦{userData.monthlyGains.toLocaleString()}</p>
+            <p className="text-[17px] font-black text-[#ff9c00] font-mono">₦{userData.monthlyGains.toLocaleString()}</p>
           </div>
-          <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-            <div className="flex items-center gap-2 mb-1.5 text-white">
-              <ShieldCheck size={13} className="text-slate-400" />
-              <p className="text-[9px] font-black uppercase tracking-widest text-[#64748B] font-mono">Verification Tier</p>
+          <div className="bg-white border border-gray-200 p-4.5 rounded-[24px]">
+            <div className="flex items-center gap-2 mb-1.5 text-black">
+              <ShieldCheck size={13} className="text-gray-400" />
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 font-mono">Account Status</p>
             </div>
-            <p className="text-sm font-black text-white tracking-tight mt-0.5">
+            <p className="text-sm font-black text-black tracking-tight mt-0.5">
               {userData.balance > 0 ? 'Active Account' : `New Account`}
             </p>
           </div>
         </div>
 
-        {/* Wealth Advisor Insight */}
-        <div className="bg-[#131926] border border-[#1E293B] rounded-[24px] p-5 font-semibold text-xs leading-relaxed">
-          <div className="flex items-center gap-2 mb-2 text-white">
-            <ShieldCheck size={16} className="text-[#8CEE47]" />
-            <h4 className="text-white font-extrabold text-[13px] tracking-tight">Brex Trust & Security</h4>
+        {/* Advisor Insight */}
+        <div className="bg-white border border-gray-200 rounded-[24px] p-5 font-semibold text-xs leading-relaxed">
+          <div className="flex items-center gap-2 mb-2 text-black">
+            <ShieldCheck size={16} className="text-[#ff9c00]" />
+            <h4 className="text-black font-extrabold text-[13px] tracking-tight">Trust & Security</h4>
           </div>
-          <p className="text-slate-400 font-medium">
-            Your accounts and savings allocations are fully encrypted and backed by low-risk collateralized Treasury instruments. Interest is accrued and updated daily in real-time under high-security guidelines.
+          <p className="text-gray-500 font-medium">
+            Your accounts and savings are fully secured. Earnings are calculated and added daily in real-time.
           </p>
         </div>
       </div>
@@ -933,17 +1023,17 @@ const App: React.FC = () => {
         {/* Title */}
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h2 className="text-2xl font-black text-white tracking-tight">Market Yields</h2>
-            <p className="text-[#64748B] text-xs font-bold leading-none mt-1">High-yield Treasury savings options</p>
+            <h2 className="text-2xl font-black text-white tracking-tight">Market Plans</h2>
+            <p className="text-[#64748B] text-xs font-bold leading-none mt-1">View available savings plans</p>
           </div>
           <div className="bg-[#8CEE47]/10 text-[#8CEE47] p-1.5 rounded-xl border border-[#8CEE47]/20 flex items-center justify-center text-[10px] font-black font-mono px-3">
-            SECURE DEPOSITS
+            ACTIVE DEPOSITS
           </div>
         </div>
 
         {/* Explain info */}
         <div className="bg-[#131926] p-4 rounded-2xl border border-[#1E293B] text-xs text-slate-400 font-semibold leading-relaxed">
-          💡 <span className="text-white font-bold">Allocation rule:</span> Activated savings products allow running <span className="text-[#8CEE47]">one daily yield accrual calibration</span> to claim pro-rated returns directly into your principal balance.
+          💡 <span className="text-white font-bold">Plan Rule:</span> Active savings plans let you claim your earnings daily. You can claim once per day to add your profit directly to your balance.
         </div>
 
         {/* Interactive VIP Tier Progression Slider */}
@@ -1017,11 +1107,11 @@ const App: React.FC = () => {
                 {/* Grid performance info */}
                 <div className="grid grid-cols-3 gap-2 bg-[#0C1017]/80 rounded-2xl p-2.5 text-center mb-4 border border-[#1E293B]/60 justify-around text-xs font-semibold">
                   <div>
-                    <span className="block text-[8px] text-slate-500 font-bold font-mono uppercase">Active Allocation</span>
+                    <span className="block text-[8px] text-slate-500 font-bold font-mono uppercase">My Deposit</span>
                     <span className="text-[#8CEE47] font-extrabold font-mono">₦{plan.balance.toLocaleString()}</span>
                   </div>
                   <div>
-                    <span className="block text-[8px] text-slate-500 font-bold font-mono uppercase">Interest Yesterday</span>
+                    <span className="block text-[8px] text-slate-500 font-bold font-mono uppercase">Daily Profit</span>
                     <span className="text-white font-extrabold font-mono">₦{plan.earnYesterday.toLocaleString()}</span>
                   </div>
                   <div>
@@ -1034,16 +1124,16 @@ const App: React.FC = () => {
                 <div className="flex gap-2">
                   <button 
                     onClick={() => {
-                        alert(`This low-risk savings instrument yields an equivalent estimated interest rate of ${(plan.dailyProfit * 365 / plan.cost * 100).toFixed(1)}% per annum, accruing daily.`);
+                        showToast(`Plan profit: ₦${plan.dailyProfit.toLocaleString()} daily. Duration: ${plan.workingDays} working days.`);
                     }}
                     className="flex-1 bg-[#1E293B] hover:bg-[#2A354C] text-slate-300 text-[9px] font-black uppercase tracking-wider py-2.5 rounded-xl border border-slate-700 transition-all cursor-pointer outline-none"
                   >
-                    Savings details
+                    Plan Details
                   </button>
                   
                   {hasJoined ? (
                     <button 
-                      onClick={() => executeYieldCalibration(plan)}
+                      onClick={() => claimDailyEarnings(plan)}
                       disabled={isCompleted}
                       className={`flex-[2] text-[9px] font-black uppercase tracking-wider py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 outline-none ${
                         isCompleted 
@@ -1063,7 +1153,7 @@ const App: React.FC = () => {
                       onClick={() => handleSubscribeInvestmentPlan(plan.id, plan.cost)}
                       className="flex-[2] text-[9px] font-black uppercase tracking-wider py-2.5 rounded-xl transition-all bg-[#FF6B35] hover:bg-[#E05A2A] text-white shadow-lg shadow-[#FF6B35]/15 cursor-pointer outline-none"
                     >
-                      ALLOCATE NOW
+                      SUBSCRIBE NOW
                     </button>
                   )}
                 </div>
@@ -1175,6 +1265,9 @@ const App: React.FC = () => {
   const renderFund = () => {
     if (!userData) return null;
 
+    const { canWithdraw, isSunday } = checkWithdrawalAvailability();
+    const hasSavedPayout = !!(userData.linkedBankCode || userData.linkedCardNumber);
+
     return (
       <div className="px-5 pt-8 pb-10 flex flex-col gap-5 bg-[#0C1017] min-h-screen">
         
@@ -1206,225 +1299,49 @@ const App: React.FC = () => {
           <button 
             onClick={() => setFundTab('history')}
             className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer outline-none ${
-              fundTab === 'history' 
-                ? 'bg-[#8CEE47] text-slate-900 shadow-md font-black' 
-                : 'bg-transparent text-slate-400 hover:text-white'
-            }`}
+               fundTab === 'history' 
+                 ? 'bg-[#8CEE47] text-slate-900 shadow-md font-black' 
+                 : 'bg-transparent text-slate-400 hover:text-white'
+             }`}
           >
-            Ledger
+            History
           </button>
         </div>
 
         {fundTab === 'recharge' ? (
-          /* DEPOSIT FLOW */
-            <div className="flex flex-col gap-5 animate-in fade-in duration-300">
-              
-              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4.5 rounded-2xl text-xs flex items-start gap-2.5">
-                <AlertCircle size={16} className="shrink-0 mt-0.5 animate-bounce" />
-                <p className="leading-relaxed">
-                  Transfer exactly <span className="text-white font-extrabold font-mono text-xs">₦{rechargeAmt.toLocaleString() || '0'}</span> to the designated central vault bank below, or configure a virtual account.
-                </p>
-              </div>
-
-              {/* Design bank layout details */}
-              <div className="bg-[#131926] border border-[#1E293B] p-5 rounded-[28px] space-y-4">
-                <div className="space-y-3.5">
-                  <div className="flex justify-between items-center text-xs pb-3 border-b border-[#1E293B]">
-                    <span className="text-slate-500 uppercase font-bold font-mono text-[9px]">DEPOSIT GATEWAY</span>
-                    <span className="text-[#8CEE47] font-black font-mono text-sm">Monnify Virtual</span>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 text-[10px] font-mono">RECIPIENT BANK:</span>
-                    <span className="text-white text-xs font-bold">Wema Bank / ALAT</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 text-[10px] font-mono">ACCOUNT NAME:</span>
-                    <span className="text-white text-xs font-bold font-mono">BREX LIQUIDITY VAULT</span>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 text-[10px] font-mono font-bold">ACCOUNT NUMBER:</span>
-                    <div className="flex items-center gap-2">
-                       <span className="text-white text-xs font-extrabold font-mono text-[#8CEE47]">7077599057</span>
-                       <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText('7077599057');
-                          showToast('Savings account number copied!');
-                        }}
-                        className="text-slate-500 hover:text-white transition-colors"
-                      >
-                        <Copy size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Manual amount entry and presets */}
-              <div className="flex flex-col gap-2 font-semibold">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Deposit amount</label>
-                <div className="flex items-center gap-1 text-2xl font-black text-white bg-[#131926] border border-[#1E293B] rounded-[24px] px-5 py-4 focus-within:border-[#8CEE47]">
-                  <span className="text-[#8CEE47] font-extrabold pr-1">₦</span>
-                  <input 
-                    type="number" 
-                    value={rechargeAmt || ''}
-                    onChange={(e) => setRechargeAmt(Number(e.target.value))}
-                    className="bg-transparent text-white w-full outline-none font-black text-xl font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Amount presets matching standard NGN ranges */}
-              <div className="grid grid-cols-4 gap-2">
-                {[1000, 3000, 10000, 15000, 30000, 50000, 90000, 150000, 250000, 500000, 1000000, 2000000].map((val) => (
-                  <button
-                    key={val}
-                    onClick={() => setRechargeAmt(val)}
-                    className={`py-2 px-1 rounded-lg text-[10px] font-black tracking-tight transition-all cursor-pointer font-mono outline-none ${
-                      rechargeAmt === val 
-                        ? 'bg-[#8CEE47] text-slate-900 font-bold scale-[1.02]' 
-                        : 'bg-[#131926] text-slate-300 border border-[#1E293B]'
-                    }`}
-                  >
-                    {val.toLocaleString()}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-col gap-2 font-semibold mt-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center justify-between">
-                   Manual Receipt Upload <span className="text-[9px] text-[#8CEE47]">Required</span>
-                </label>
-                <div className="relative border-2 border-dashed border-[#1E293B] hover:border-[#8CEE47]/50 rounded-2xl bg-[#131926] p-4 text-center cursor-pointer transition-all">
-                   <input type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => {
-                      if(e.target.files && e.target.files.length > 0) {
-                         showToast('Receipt file attached: ' + e.target.files[0].name);
-                      }
-                   }} />
-                   <div className="text-slate-400 font-mono text-[10px]">
-                      <svg className="mx-auto h-8 w-8 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
-                      Click or drop transfer receipt (PNG/JPG)
-                   </div>
-                </div>
-              </div>
-
-              <button
-                onClick={async () => {
-                   if (rechargeAmt < 1000) { showToast('Amount too low'); return; }
-                   showToast('Processing receipt via system... Please wait');
-                   // Simulate submission time
-                   setTimeout(async () => {
-                      setRechargeStep('input');
-                      showToast('Deposit successfully reviewed and queued for credit!');
-                      await recharge(rechargeAmt);
-                      setRechargeAmt(0);
-                   }, 2000);
-                }}
-                disabled={rechargeAmt <= 0}
-                className="w-full bg-[#8CEE47] hover:bg-[#7BE13A] py-4 rounded-xl text-slate-900 font-extrabold text-sm tracking-wide uppercase transition-all mt-2 cursor-pointer disabled:opacity-50 outline-none"
-              >
-                Submit Deposit Request
-              </button>
-            </div>
-        ) : fundTab === 'withdrawal' ? (
-          /* WITHDRAWAL FLOW */
+          /* WEBHOOK-DRIVEN DEPOSIT FLOW */
           <div className="flex flex-col gap-5 animate-in fade-in duration-300">
             
-            {userData.linkedCardNumber && (
-              <div 
-                onClick={() => {
-                  setPayeeAccount(userData.linkedCardNumber);
-                  setWithdrawBank('Secure ATM Card *' + userData.linkedCardNumber.slice(-4));
-                  setVerifiedPayoutName(userData.name || 'Verified Card Holder');
-                  showToast('Auto-filled payout coordinates to linked ATM Card! 💳');
-                }}
-                className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl cursor-pointer hover:bg-emerald-500/15 transition-all text-xs text-[#8CEE47] font-semibold flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <span>💳</span>
-                  <div>
-                    <p className="font-extrabold text-[#8CEE47]">Fast-Cashout: Linked ATM Card</p>
-                    <p className="text-[9px] text-slate-400 font-mono mt-0.5">Pay out to **** {userData.linkedCardNumber.slice(-4)}</p>
-                  </div>
-                </div>
-                <span className="text-[8px] bg-[#8CEE47]/15 text-[#8CEE47] font-bold py-1 px-2 rounded font-mono uppercase tracking-wider">Use Card</span>
-              </div>
-            )}
-
-            {/* Beneficiary recipient bank */}
-            <div className="flex flex-col gap-2 font-semibold">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Recipient Bank</label>
-              <select 
-                value={withdrawBank}
-                onChange={(e) => setWithdrawBank(e.target.value)}
-                className="bg-[#131926] border border-[#1E293B] text-white px-4 py-3.5 rounded-xl outline-none focus:border-[#8CEE47] text-sm font-semibold transition-all cursor-pointer font-mono"
-              >
-                <option value="OPay">OPay Wallet (Standard)</option>
-                <option value="Moniepoint">Moniepoint Microfinance</option>
-                <option value="PalmPay">PalmPay Financials</option>
-                <option value="Kuda Bank">Kuda Technologies</option>
-                <option value="GTBank">Guaranty Trust Bank (GTBank)</option>
-                <option value="Zenith Bank">Zenith Bank PLC</option>
-                <option value="Access Bank">Access Bank PLC</option>
-                <option value="UBA">United Bank for Africa (UBA)</option>
-                <option value="Wema Bank">Wema Bank / ALAT</option>
-              </select>
+            <div className="bg-[#8CEE47]/10 border border-[#8CEE47]/20 text-[#8CEE47] p-4.5 rounded-2xl text-[11px] flex items-start gap-2.5">
+              <Zap size={16} className="shrink-0 mt-0.5 text-[#8CEE47] animate-pulse" />
+              <p className="leading-relaxed font-semibold">
+                Please enter a deposit amount. Your funds are securely processed and added to your available balance.
+              </p>
             </div>
 
             <div className="flex flex-col gap-2 font-semibold">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">10-Digit NUBAN Account</label>
-              <input 
-                type="text" 
-                maxLength={10}
-                value={payeeAccount}
-                onChange={(e) => setPayeeAccount(e.target.value.replace(/\D/g, ''))}
-                placeholder="70XXXXXXXX / 81XXXXXXXX"
-                className="bg-[#131926] border border-[#1E293B] text-white px-4.5 py-3.5 rounded-xl outline-none focus:border-[#8CEE47] transition-all text-sm font-semibold font-mono"
-              />
-              
-              {isVerifyingPayout && (
-                <div className="text-[10px] text-[#8CEE47] font-bold font-mono py-1 animate-pulse flex items-center gap-1">
-                  <RefreshCw size={10} className="animate-spin" /> Resolving payee name from NIBSS codes...
-                </div>
-              )}
-              {verifiedPayoutName && (
-                <div className="bg-[#8CEE47]/10 border border-[#8CEE47]/10 p-2.5 rounded-xl text-xs text-[#8CEE47] font-bold font-mono">
-                  Verified Beneficiary Holder: {verifiedPayoutName} ✅
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between items-center text-xs font-semibold bg-[#131926] p-4 rounded-xl border border-[#1E293B] font-mono">
-              <span className="text-[#64748B] font-bold uppercase">Withdrawal pool balance</span>
-              <span className="text-[#8CEE47] font-extrabold">₦{userData.balance.toLocaleString()} NGN</span>
-            </div>
-
-            <div className="flex flex-col gap-2 font-semibold">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Withdrawal cash amount</label>
-              <div className="flex items-center gap-1 text-2xl font-black text-white bg-[#131926] border border-[#1E293B] rounded-xl px-4 py-3 focus-within:border-[#8CEE47]">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Select or Enter Deposit Amount</label>
+              <div className="flex items-center gap-1 text-2xl font-black text-white bg-[#131926] border border-[#1E293B] rounded-[24px] px-5 py-4 focus-within:border-[#8CEE47]">
                 <span className="text-[#8CEE47] font-extrabold pr-1">₦</span>
                 <input 
                   type="number" 
-                  value={withdrawAmt || ''}
-                  onChange={(e) => setWithdrawAmt(Number(e.target.value))}
-                  className="bg-transparent text-white w-full outline-none font-black text-lg"
+                  value={rechargeAmt || ''}
+                  onChange={(e) => setRechargeAmt(Number(e.target.value))}
+                  placeholder="Minimum 1,000 NGN"
+                  className="bg-transparent text-white w-full outline-none font-black text-xl font-mono"
                 />
               </div>
             </div>
 
             {/* Selector presets */}
             <div className="grid grid-cols-4 gap-2">
-              {[1000, 5000, 10000, 30000, 50000, 100000, 250000, 500000].map((val) => (
+              {[2000, 10000, 30000, 50000, 100000, 250000, 500000, 1000000].map((val) => (
                 <button
                   key={val}
-                  onClick={() => setWithdrawAmt(val)}
-                  className={`py-2 rounded-lg text-[10px] font-black tracking-tight transition-all cursor-pointer font-mono outline-none ${
-                    withdrawAmt === val 
-                      ? 'bg-[#8CEE47] text-slate-900 font-black scale-[1.02]' 
+                  onClick={() => setRechargeAmt(val)}
+                  className={`py-2 px-1 rounded-lg text-[10px] font-black tracking-tight transition-all cursor-pointer font-mono outline-none ${
+                    rechargeAmt === val 
+                      ? 'bg-[#8CEE47] text-slate-900 font-bold scale-[1.02]' 
                       : 'bg-[#131926] text-slate-300 border border-[#1E293B]'
                   }`}
                 >
@@ -1433,69 +1350,345 @@ const App: React.FC = () => {
               ))}
             </div>
 
-            {/* Levy charges description */}
-            <div className="space-y-2 bg-[#131926] p-4.5 rounded-xl border border-[#1E293B] text-xs font-semibold">
-              <div className="flex justify-between font-mono text-[10px] text-slate-500">
-                <span>Request amount:</span>
-                <span className="text-slate-200">₦{withdrawAmt.toLocaleString()} NGN</span>
-              </div>
-              <div className="flex justify-between font-mono text-[10px] text-slate-500">
-                <span>Standard transaction fee:</span>
-                <span className="text-[#8CEE47]">2.0%</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-[#1E293B] text-sm">
-                <span className="text-slate-400">Net Expected Settled Amount:</span>
-                <span className="text-[#8CEE47] font-black font-mono">₦{(withdrawAmt * 0.98).toLocaleString()} NGN</span>
-              </div>
-            </div>
-
-            {withdrawSuccessMsg && (
-              <div className="bg-[#8CEE47]/10 border border-[#8CEE47]/20 text-[#8CEE47] p-4 font-bold leading-relaxed font-mono rounded-2xl text-xs">
-                {withdrawSuccessMsg}
-              </div>
-            )}
-
-            {withdrawErrorMsg && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
-                <AlertCircle size={16} />
-                <span>{withdrawErrorMsg}</span>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2 font-semibold">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono text-amber-400 flex items-center gap-1">
-                <ShieldCheck size={12} /> Transaction Security PIN
-              </label>
-              <input 
-                type="password" 
-                maxLength={4}
-                placeholder="****" 
-                className="bg-[#131926] border border-amber-400/30 text-amber-400 placeholder:text-amber-400/30 px-4 py-3 rounded-xl outline-none text-center tracking-[1em] font-extrabold text-2xl transition-all font-mono focus:border-amber-400 focus:bg-amber-400/5 mb-2"
-              />
-            </div>
-
             <button
-              onClick={handleWithdrawSubmit}
-              disabled={withdrawAmt <= 0 || !payeeAccount || isVerifyingPayout}
-              className="w-full bg-[#8CEE47] hover:bg-[#7BE13A] py-4 rounded-xl text-slate-900 font-extrabold text-sm tracking-wide uppercase transition-all cursor-pointer disabled:opacity-50 outline-none"
+              onClick={triggerPaystackCheckout}
+              disabled={rechargeAmt < 1000}
+              className="w-full bg-[#8CEE47] hover:bg-[#7BE13A] py-4 rounded-xl text-slate-900 font-extrabold text-sm tracking-wide uppercase transition-all mt-2 cursor-pointer disabled:opacity-50 outline-none flex items-center justify-center gap-2"
             >
-              Verify & Settle Withdrawal
+              <CreditCard size={16} /> Pay Securely via Paystack
             </button>
+
+            {/* PAYSTACK MODAL OVERLAY SIMULATOR */}
+            {paystackShowSimulator && (
+              <div className="fixed inset-0 z-[999] bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-200">
+                <div className="bg-[#111622] border border-[#1E293B] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                  {/* Paystack header */}
+                  <div className="bg-[#0e2c24] p-5 border-b border-[#053127] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-[#3ac6a8]/20 flex items-center justify-center logo-icon text-white font-mono font-black italic text-xs">P</div>
+                      <div>
+                        <h4 className="text-white text-xs font-black tracking-widest uppercase">Paystack Secure Checkout</h4>
+                        <p className="text-[10px] text-[#3ac6a8] font-mono leading-none mt-0.5">Test Gateway Instance</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setPaystackShowSimulator(false)}
+                      className="text-slate-400 hover:text-white text-sm font-bold tracking-wider cursor-pointer outline-none w-6 h-6 rounded-full hover:bg-white/10 flex items-center justify-center"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Body info */}
+                  <div className="p-6 space-y-5 flex-1 overflow-y-auto">
+                    <div className="text-center bg-[#131926] p-4.5 rounded-2xl border border-[#1E293B] font-mono">
+                      <p className="text-[#64748B] text-[10px] font-bold uppercase tracking-wider mb-1">Paying to merchant</p>
+                      <p className="text-slate-300 text-xs font-extrabold font-sans">BREX SECURE NETWORK LTD</p>
+                      <p className="text-2xl font-black text-[#3ac6a8] mt-2">₦{rechargeAmt.toLocaleString()} NGN</p>
+                      <p className="text-[10.5px] text-[#64748B] mt-1 text-center font-bold">Ref: {paystackReference}</p>
+                    </div>
+
+                    <div className="space-y-3 font-semibold text-xs text-slate-300">
+                      <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider font-mono">Payment Channel Methods</p>
+                      
+                      <div className="bg-[#1E293B]/40 p-3.5 rounded-xl border border-[#1E293B] flex items-center justify-between cursor-pointer hover:bg-[#1E293B]/70 transition-all">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base select-none">💳</span>
+                          <span className="text-white text-xs font-bold font-sans">Standard Credit / Debit card</span>
+                        </div>
+                        <span className="text-[8px] bg-emerald-500/10 text-[#8CEE47] uppercase px-1 rounded-sm font-mono tracking-wide font-black">Active</span>
+                      </div>
+
+                      <div className="bg-[#1E293B]/10 p-3 rounded-xl border border-dashed border-[#1E293B] flex items-center justify-between text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base select-none">🏦</span>
+                          <span className="text-xs font-semibold">Bank Transfer / USSD Codes</span>
+                        </div>
+                        <span className="text-[8px] uppercase tracking-wide font-mono font-bold">Alternative</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10 text-[10.5px] text-slate-400 leading-relaxed font-semibold">
+                      🔒 Secured by industry-standard cryptography. Completing payment instantly dispatches a <code className="text-[#8CEE47] bg-[#8CEE47]/10 px-1 py-0.5 rounded font-mono text-[9px] font-bold">charge.success</code> webhook directly to our Node backend servers.
+                    </div>
+                  </div>
+
+                  {/* Submit checkout */}
+                  <div className="p-5 bg-[#131926] border-t border-[#1E293B] flex flex-col gap-2.5">
+                    <button
+                      onClick={handlePaystackWebhookAuthorize}
+                      disabled={paystackCheckingPayment}
+                      className="w-full bg-[#0bc483] hover:bg-[#07ad73] text-white py-3.5 rounded-xl font-extrabold text-xs tracking-wider uppercase transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:scale-[1.01] cursor-pointer"
+                    >
+                      {paystackCheckingPayment ? (
+                        <>
+                          <RefreshCw size={13} className="animate-spin text-white" /> Dispatching hook...
+                        </>
+                      ) : (
+                        `Authorize Live Webhook Deposit`
+                      )}
+                    </button>
+                    <p className="text-[9px] text-[#64748B] tracking-wider text-center font-mono uppercase">Merchant ID: PS_SECURE_9901</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        ) : fundTab === 'withdrawal' ? (
+          /* WITHDRAWAL FLOW */
+          <div className="flex flex-col gap-5 animate-in fade-in duration-300">
+            
+            {/* Hour window notice banner (WAT = Nigerian UTC+1) */}
+            <div className={`p-4.5 rounded-2xl text-xs flex items-start gap-2.5 font-semibold ${
+              canWithdraw 
+                ? 'bg-emerald-500/10 border border-emerald-500/20 text-[#8CEE47]' 
+                : 'bg-red-500/10 border border-red-500/20 text-red-400'
+            }`}>
+              {canWithdraw ? (
+                <>
+                  <Clock size={16} className="shrink-0 mt-0.5 text-[#8CEE47] animate-pulse" />
+                  <p className="leading-relaxed">
+                    Withdrawal Window is Open! Withdrawals are processed daily between <span className="text-white font-extrabold">9:00 AM</span> and <span className="text-white font-extrabold">2:00 PM WAT</span>, excluding Sundays.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Clock size={16} className="shrink-0 mt-0.5 text-red-400 animate-bounce" />
+                  <div className="space-y-1">
+                    <p className="font-extrabold uppercase tracking-wide text-red-400 text-[11px]">Withdrawals processing window is currently closed</p>
+                    <p className="leading-relaxed text-slate-400 font-medium font-sans">
+                      Withdrawals are processed from <span className="text-white font-extrabold">9:00 AM to 2:00 PM WAT daily</span> (Monday to Saturday). Withdrawals are closed on Sundays.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {!hasSavedPayout ? (
+              /* SECURE FIRST-TIME BINDING CARD FLOW */
+              <div className="bg-[#111622] border border-amber-500/30 p-5 rounded-[28px] space-y-4 animate-in zoom-in-95 font-semibold">
+                <div className="flex items-center gap-2 pb-2.5 border-b border-[#1E293B]">
+                  <span className="text-xl">💳</span>
+                  <div>
+                    <h3 className="text-white text-sm font-extrabold">Link Payout Bank Account</h3>
+                    <p className="text-[10.5px] text-slate-400 font-medium leading-none mt-0.5">Add your bank details for daily withdrawals</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3.5 pt-1.5 focus-within:border-[#8CEE47]">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono">Preferred Bank Service</label>
+                    <select 
+                      value={withdrawBank}
+                      onChange={(e) => setWithdrawBank(e.target.value)}
+                      className="bg-[#131926] border border-[#1E293B] text-white px-4 py-3.5 rounded-xl outline-none focus:border-[#8CEE47] text-xs font-semibold cursor-pointer font-mono"
+                    >
+                      <option value="OPay">OPay Wallet (Standard)</option>
+                      <option value="Moniepoint">Moniepoint Microfinance</option>
+                      <option value="PalmPay">PalmPay Financials</option>
+                      <option value="Kuda Bank">Kuda Technologies</option>
+                      <option value="GTBank">Guaranty Trust Bank (GTBank)</option>
+                      <option value="Zenith Bank">Zenith Bank PLC</option>
+                      <option value="Access Bank">Access Bank PLC</option>
+                      <option value="UBA">United Bank for Africa (UBA)</option>
+                      <option value="Wema Bank">Wema Bank / ALAT</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono">10-Digit NUBAN Account Number</label>
+                    <input 
+                      type="text" 
+                      maxLength={10}
+                      value={payeeAccount}
+                      onChange={(e) => setPayeeAccount(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Enter 10-digit account number"
+                      className="bg-[#131926] border border-[#1E293B] text-white px-4 py-3.5 rounded-xl outline-none focus:border-[#8CEE47] transition-all text-xs font-semibold font-mono"
+                    />
+                    
+                    {isVerifyingPayout && (
+                      <div className="text-[9px] text-[#8CEE47] font-bold font-mono animate-pulse flex items-center gap-1">
+                        <RefreshCw size={10} className="animate-spin" /> Fetching legal beneficiary name...
+                      </div>
+                    )}
+                    {verifiedPayoutName && (
+                      <div className="bg-[#8CEE47]/10 p-2.5 rounded-xl text-[10px] text-[#8CEE47] font-bold font-mono">
+                         Payee: {verifiedPayoutName} ✅
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (payeeAccount.trim().length !== 10) {
+                        showToast("Account number must be exactly 10 digits");
+                        return;
+                      }
+                      try {
+                        const payoutName = verifiedPayoutName || userData.name || "Verified Holder";
+                        await updateBank({
+                          linkedBankName: withdrawBank,
+                          linkedBankCode: payeeAccount,
+                          linkedBankOwner: payoutName.toUpperCase()
+                        });
+                        showToast("Your payout bank account has been saved! 💳");
+                      } catch (err: any) {
+                        showToast("Error saving bank details: " + err.message);
+                      }
+                    }}
+                    disabled={payeeAccount.trim().length !== 10 || isVerifyingPayout}
+                    className="w-full bg-[#8CEE47] hover:bg-[#7BE13A] py-3.5 rounded-xl text-slate-900 font-black text-xs uppercase tracking-wide transition-all cursor-pointer disabled:opacity-40"
+                  >
+                    🔒 Save Bank Account
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* STREAMLINED EASY WITHDRAWAL SUBMISSION FLOW */
+              <div className="space-y-4 animate-in duration-300">
+                
+                {/* Linked Bank Card UI layout */}
+                <div className="bg-gradient-to-br from-[#1b2512] to-[#0e160a] border border-[#2b3a1a] p-5 rounded-3xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#8CEE47]/5 rounded-full blur-2xl -mr-8 -mt-8" />
+                  
+                  <div className="flex justify-between items-start font-semibold">
+                    <div>
+                      <span className="text-[8px] bg-[#8CEE47]/20 text-[#8CEE47] font-black uppercase tracking-widest px-2.5 py-1 rounded-md font-mono">Payout Destination</span>
+                      <h4 className="text-white text-base font-extrabold mt-3 font-mono">{userData.linkedBankName}</h4>
+                      <p className="text-xs text-slate-300 font-extrabold font-mono mt-0.5">**** **** {userData.linkedBankCode ? userData.linkedBankCode.slice(-4) : 'XXXX'}</p>
+                    </div>
+                    
+                    <button 
+                      onClick={async () => {
+                        if (confirm("Are you sure you want to unlink and update your payout bank account details?")) {
+                          await updateBank({
+                            linkedBankName: '',
+                            linkedBankCode: '',
+                            linkedBankOwner: ''
+                          });
+                          setPayeeAccount('');
+                          setVerifiedPayoutName('');
+                          showToast("Payout settings reset.");
+                        }
+                      }}
+                      className="text-[9px] text-[#8CEE47]/70 hover:text-[#8CEE47] underline bg-white/5 px-2.5 py-1 rounded-md transition-all font-mono"
+                    >
+                      Reset Bank
+                    </button>
+                  </div>
+                  
+                  <div className="flex justify-between items-center text-xs mt-6 font-mono pt-3 border-t border-[#8CEE47]/10">
+                    <span className="text-slate-400 font-bold uppercase text-[9px]">HOLDER:</span>
+                    <span className="text-[#8CEE47] font-black tracking-wide">{userData.linkedBankOwner || userData.name}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-xs font-semibold bg-[#131926] p-4 rounded-xl border border-[#1E293B] font-mono">
+                  <span className="text-[#64748B] font-bold uppercase text-[9px]">Available balance</span>
+                  <span className="text-[#8CEE47] font-extrabold">₦{userData.balance.toLocaleString()} NGN</span>
+                </div>
+
+                {/* Amount selection input */}
+                <div className="flex flex-col gap-2 font-semibold">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Withdrawal Amount</label>
+                  <div className="flex items-center gap-1 text-2xl font-black text-white bg-[#131926] border border-[#1E293B] rounded-[24px] px-5 py-4 focus-within:border-[#8CEE47]">
+                    <span className="text-[#8CEE47] font-extrabold pr-1">₦</span>
+                    <input 
+                      type="number" 
+                      value={withdrawAmt || ''}
+                      onChange={(e) => setWithdrawAmt(Number(e.target.value))}
+                      className="bg-transparent text-white w-full outline-none font-black text-lg"
+                    />
+                  </div>
+                </div>
+
+                {/* Selector presets */}
+                <div className="grid grid-cols-4 gap-2">
+                  {[1000, 5000, 10000, 30000, 50000, 100000, 250000, 500000].map((val) => (
+                    <button
+                      key={val}
+                      onClick={() => setWithdrawAmt(val)}
+                      className={`py-2 rounded-lg text-[10px] font-black tracking-tight transition-all cursor-pointer font-mono outline-none ${
+                        withdrawAmt === val 
+                          ? 'bg-[#8CEE47] text-slate-900 font-black scale-[1.02]' 
+                          : 'bg-[#131926] text-slate-300 border border-[#1E293B]'
+                      }`}
+                    >
+                      {val.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Levy charges description */}
+                <div className="space-y-2 bg-[#131926] p-4.5 rounded-xl border border-[#1E293B] text-xs font-semibold">
+                  <div className="flex justify-between font-mono text-[10px] text-slate-500">
+                    <span>Request amount:</span>
+                    <span className="text-slate-200">₦{withdrawAmt.toLocaleString()} NGN</span>
+                  </div>
+                  <div className="flex justify-between font-mono text-[10px] text-slate-500">
+                    <span>Processing service fee:</span>
+                    <span className="text-[#8CEE47]">2.0% Processing Fee</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-[#1E293B] text-sm">
+                    <span className="text-slate-400">You Will Receive:</span>
+                    <span className="text-[#8CEE47] font-black font-mono">₦{(withdrawAmt * 0.98).toLocaleString()} NGN</span>
+                  </div>
+                </div>
+
+                {/* Secure Pin input */}
+                <div className="flex flex-col gap-2 font-semibold">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono text-amber-400 flex items-center gap-1">
+                    <ShieldCheck size={12} /> Transaction Security PIN
+                  </label>
+                  <input 
+                    type="password" 
+                    maxLength={4}
+                    placeholder="****" 
+                    value={enteredWithdrawPIN}
+                    onChange={(e) => setEnteredWithdrawPIN(e.target.value.replace(/\D/g, ''))}
+                    className="bg-[#131926] border border-amber-400/30 text-amber-400 placeholder:text-amber-400/30 px-4 py-3 rounded-xl outline-none text-center tracking-[1em] font-extrabold text-2xl transition-all font-mono focus:border-amber-400 focus:bg-amber-400/5 mb-1"
+                  />
+                </div>
+
+                {withdrawSuccessMsg && (
+                  <div className="bg-[#8CEE47]/10 border border-[#8CEE47]/20 text-[#8CEE47] p-4 font-bold leading-relaxed font-mono rounded-2xl text-xs">
+                    {withdrawSuccessMsg}
+                  </div>
+                )}
+
+                {withdrawErrorMsg && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
+                    <AlertCircle size={16} />
+                    <span>{withdrawErrorMsg}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleWithdrawSubmit}
+                  disabled={withdrawAmt <= 0 || !canWithdraw}
+                  className="w-full bg-[#8CEE47] hover:bg-[#7BE13A] py-4 rounded-xl text-slate-900 font-extrabold text-sm tracking-wide uppercase transition-all cursor-pointer disabled:opacity-45 outline-none flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck size={16} /> Submit Withdrawal Request
+                </button>
+              </div>
+            )}
+
           </div>
         ) : (
           /* HISTORY LEDGER FLOW */
           <div className="flex flex-col gap-4 animate-in fade-in duration-300">
             <div className="bg-[#131926] p-4.5 rounded-[24px] border border-[#1E293B]">
-              <h3 className="text-sm font-black text-white mb-1">📜 Settlement Records</h3>
-              <p className="text-slate-400 text-xs font-semibold leading-relaxed">
-                All logs represent real double-entry records synchronized directly from the persistent SQLite/json database.
+              <h3 className="text-sm font-black text-white mb-1">📜 Transaction History</h3>
+              <p className="text-slate-400 text-xs font-medium leading-relaxed">
+                All transactions are displayed here in real-time.
               </p>
             </div>
 
             <div className="flex flex-col gap-3">
               {!userData.transactions || userData.transactions.length === 0 ? (
                 <div className="py-16 text-center text-slate-500 font-bold text-xs border border-[#1E293B] rounded-[24px] bg-[#131926]/50">
-                  No records stored on this server node.
+                  No registered transactional history on this account node.
                 </div>
               ) : (
                 userData.transactions.map((t: any) => {
@@ -1570,26 +1763,26 @@ const App: React.FC = () => {
         {/* Menu choices */}
         <div className="bg-[#131926] rounded-[28px] border border-[#1E293B] overflow-hidden mb-6 select-none font-semibold">
           {[
-            { id: 'personal', icon: '👤', label: 'Personal Information', sub: 'Visuals memoji, Phone registers', show: true, action: () => {
+            { id: 'personal', icon: '👤', label: 'Personal Information', sub: 'Update username and phone details', show: true, action: () => {
               setActiveProfileOverlay('personal');
             }},
-            { id: 'security', icon: '🔓', label: 'Security Passcodes', sub: 'Reset alphanumeric authentication key', show: true, action: () => {
+            { id: 'security', icon: '🔓', label: 'Security Password', sub: 'Update account password & withdrawal PIN', show: true, action: () => {
               setSecurityNewPass('');
               setActiveProfileOverlay('security');
             }},
-            { id: 'bank', icon: '🏦', label: 'Payout Default Channel', sub: 'NUBAN bank Account preset configurations', show: true, action: () => {
+            { id: 'bank', icon: '🏦', label: 'Link Bank Account', sub: 'Add your bank details for withdrawals', show: true, action: () => {
               setActiveProfileOverlay('bank');
             }},
-            { id: 'referral', icon: '🎁', label: 'Referral Invitation Code', sub: 'Check referral link & rewards', show: true, action: () => {
+            { id: 'referral', icon: '🎁', label: 'Referral Invitation Code', sub: 'View referral invitation code', show: true, action: () => {
               setActiveProfileOverlay('referral');
             }},
-            { id: 'referral_tree', icon: '🌳', label: 'Referral Network Tree Map', sub: 'Interactive diagrammatic tree model', show: true, action: () => {
+            { id: 'referral_tree', icon: '🌳', label: 'My Referral Team', sub: 'View your team and referral count', show: true, action: () => {
               setActiveProfileOverlay('referral_tree');
             }},
-            { id: 'support', icon: '🎫', label: 'Submit Dispute Grievance', sub: 'Direct link to system administrators', show: true, action: () => {
+            { id: 'support', icon: '🎫', label: 'Submit Support Ticket', sub: 'Contact system administrators', show: true, action: () => {
               setActiveProfileOverlay('support');
             }},
-            { id: 'admin', icon: '🛠️', label: 'System Admin Control Panel', sub: 'Approve KYC, Inject ledger asset tests', show: isSpecificAdmin, action: () => navigate(Screen.Admin) }
+            { id: 'admin', icon: '🛠️', label: 'Admin Control Panel', sub: 'Approve transactions & manage users', show: isSpecificAdmin, action: () => navigate(Screen.Admin) }
           ].filter(item => item.show).map((item, i) => (
             <div 
               key={i} 
@@ -1625,7 +1818,7 @@ const App: React.FC = () => {
             <ArrowLeft size={18} className="text-white" />
           </button>
           <div className="flex-1 font-semibold">
-            <h3 className="text-sm font-black text-white">AI Wealth Advisor</h3>
+            <h3 className="text-sm font-black text-white">AI Brex Advisor</h3>
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider font-mono">SECURE INTERACTION WITH AI ADVISORY PLANNER</p>
           </div>
         </div>
@@ -1635,7 +1828,7 @@ const App: React.FC = () => {
           {chatMessages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 gap-3 min-h-[350px]">
               <span className="text-5xl">🤖</span>
-              <p className="text-sm font-black text-white">How can I assist your wealth building today?</p>
+              <p className="text-sm font-black text-white">How can I assist your Brex journey today?</p>
               <p className="text-xs text-slate-500 max-w-xs font-semibold">Ask about Treasury yield spreads, ideal lock options, and payout limits.</p>
               <div className="flex flex-wrap gap-2 justify-center mt-2 max-w-xs">
                 {[
@@ -1744,7 +1937,7 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-white text-lg font-black tracking-tight">{yieldPlanActive?.name} Accruing...</h3>
-                <p className="text-[#64748B] text-[9px] uppercase tracking-wider font-mono">Live ledger yield synchronization</p>
+                <p className="text-[#64748B] text-[9px] uppercase tracking-wider font-mono">Real-time dynamic yield updates</p>
               </div>
             </div>
 
@@ -1776,12 +1969,12 @@ const App: React.FC = () => {
             
             <div className="flex justify-between items-center pb-2 border-b border-[#1E293B]/70 m-0">
               <h3 className="text-white text-base font-black uppercase tracking-wider font-mono">
-                {activeProfileOverlay === 'personal' && '👤 Personal Info Details'}
-                {activeProfileOverlay === 'bank' && '🏦 Link Default Bank preset'}
-                {activeProfileOverlay === 'security' && '🔒 Change security password'}
-                {activeProfileOverlay === 'referral' && '🎁 Recruiting Referrals code'}
-                {activeProfileOverlay === 'referral_tree' && '🌳 Referral Linkage Tree Map'}
-                {activeProfileOverlay === 'support' && '🎫 Submit Dispute Grievance'}
+                {activeProfileOverlay === 'personal' && '👤 Personal Information'}
+                {activeProfileOverlay === 'bank' && '🏦 Link Bank Account'}
+                {activeProfileOverlay === 'security' && '🔒 Change Password'}
+                {activeProfileOverlay === 'referral' && '🎁 Referral Code'}
+                {activeProfileOverlay === 'referral_tree' && '🌳 My Referral Team'}
+                {activeProfileOverlay === 'support' && '🎫 Submit support ticket'}
               </h3>
               <button 
                 onClick={() => setActiveProfileOverlay(null)}
@@ -1829,7 +2022,7 @@ const App: React.FC = () => {
                   onClick={handleSavePersonalInfo} 
                   className="w-full bg-[#8CEE47] py-3 text-slate-900 rounded-xl font-bold uppercase transition-all tracking-wider font-mono mt-2 text-xs cursor-pointer outline-none shadow-md"
                 >
-                  Save Personal calibrations
+                  Save Personal Details
                 </button>
               </div>
             )}
@@ -1860,7 +2053,7 @@ const App: React.FC = () => {
                         value={bankSettingsName}
                         onChange={(e) => {
                           setBankSettingsName(e.target.value);
-                          setBankSettingsOwner(editName + ' CALIBRATED');
+                          setBankSettingsOwner(editName);
                         }}
                         className="bg-[#0C1017] border border-[#1E293B] px-4 py-3 rounded-xl text-white text-xs outline-none focus:border-[#8CEE47] font-mono"
                       >
@@ -2014,7 +2207,7 @@ const App: React.FC = () => {
                         }}
                         className="text-slate-400 hover:text-white transition-colors"
                       >
-                        <Copy size={14} />
+                        <Copy size={16} />
                       </button>
                     </div>
                   </div>
@@ -2030,18 +2223,17 @@ const App: React.FC = () => {
                         }}
                         className="text-slate-400 hover:text-white transition-colors ml-1"
                       >
-                        <Copy size={14} />
+                        <Copy size={16} />
                       </button>
                     </div>
                   </div>
                 </div>
 
                 <div className="text-[11px] leading-relaxed text-slate-400 font-semibold">
-                  🎁 Invite friends to Brex and claim <span className="text-[#8CEE47] font-bold">₦2,500 active referral reward</span> once your invited friends register and fund their first standard deposit pool!
+                  🎁 Invite friends to Brex and claim <span className="text-[#ff9c00] font-bold">₦2,500 active referral reward</span> once your invited friends register and fund their first standard deposit pool!
                 </div>
               </div>
             )}
-
             {activeProfileOverlay === 'referral_tree' && (
               <div className="space-y-4 font-semibold text-xs">
                 <p className="text-white text-xs font-black uppercase tracking-wider font-mono">🌳 Interactive Network Pedigree Mappings</p>
@@ -2128,21 +2320,21 @@ const App: React.FC = () => {
                   }
                 }} className="space-y-3.5 mt-2">
                   <div className="flex flex-col gap-1">
-                    <span className="text-[#64748B] font-mono text-[9px] uppercase">Dispute Topic Category</span>
+                    <span className="text-[#64748B] font-mono text-[9px] uppercase">Support Category</span>
                     <select name="category" className="bg-[#0C1017] border border-[#1E293B] px-4 py-3 rounded-xl text-white text-xs outline-none focus:border-[#8CEE47] font-mono">
-                      <option value="Deposit pending check">Deposit delay verification</option>
-                      <option value="Withdrawal pending check">Withdrawal settlement follow up</option>
-                      <option value="Referral award missing">Referral missing reward bonus</option>
-                      <option value="VIP yield calibration helper">VIP Level yield calculation helper</option>
+                      <option value="Deposit pending check">Deposit delay</option>
+                      <option value="Withdrawal pending check">Withdrawal follow up</option>
+                      <option value="Referral award missing">Referral reward missing</option>
+                      <option value="VIP plan calculations">VIP plan calculations</option>
                     </select>
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <span className="text-[#64748B] font-mono text-[9px] uppercase">Grievance query details</span>
+                    <span className="text-[#64748B] font-mono text-[9px] uppercase">Ticket Description</span>
                     <textarea 
                       name="message" 
                       rows={3}
-                      placeholder="Type details of your transfer receipt, bank codes, or missing commissions here..."
+                      placeholder="Type details of your deposit, withdrawal, or referral issue here..."
                       className="bg-[#0C1017] border border-[#1E293B] px-4 py-3 rounded-xl text-white text-xs outline-none focus:border-[#8CEE47] resize-none leading-relaxed font-semibold animate-none"
                     />
                   </div>
@@ -2151,7 +2343,7 @@ const App: React.FC = () => {
                     type="submit"
                     className="w-full bg-[#8CEE47] py-3 text-slate-900 rounded-xl font-bold uppercase transition-all tracking-wider font-mono mt-2 text-xs cursor-pointer outline-none block border-none"
                   >
-                    Transmit Grievance Message
+                    Submit Ticket
                   </button>
                 </form>
               </div>
