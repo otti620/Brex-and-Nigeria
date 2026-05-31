@@ -72,7 +72,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
   }
 
   return (
-    <div className="flex flex-col h-screen max-w-md mx-auto relative overflow-hidden bg-[#f8f8f8] shadow-2xl border-x border-gray-200 gpu text-[#1a1a1a]">
+    <div className="flex flex-col h-[100dvh] max-w-md mx-auto relative overflow-hidden bg-[#f8f8f8] shadow-2xl border-x border-gray-200 gpu text-[#1a1a1a]">
       
       {/* SEC Educational Banner */}
       <div className="bg-red-500 text-white text-[9px] font-bold text-center px-2 py-1.5 z-50 relative flex items-center justify-center gap-2">
@@ -83,12 +83,12 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
         <span className="truncate flex-1 text-left opacity-90 leading-tight block hidden sm:block">This is a simulated High-Yield (HYIP) environment for consumer education purposes only.</span>
       </div>
 
-      <main className="flex-1 overflow-y-auto hide-scrollbar pb-8 safe-pb bg-[#f8f8f8]">
+      <main className="flex-1 overflow-y-auto hide-scrollbar pb-24 safe-pb bg-[#f8f8f8]">
         {children}
       </main>
 
       {!hideNav && (
-        <div className="z-50 bg-white border-t border-gray-200 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto z-50 bg-white border-x border-t border-gray-200 pb-safe shadow-[0_-8px_16px_-4px_rgba(0,0,0,0.05)]">
           <nav className="flex items-center justify-around py-2 px-3">
             {navItems.map((item) => {
               const isActive = activeScreen === item.id;

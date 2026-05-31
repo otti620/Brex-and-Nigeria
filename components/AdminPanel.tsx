@@ -125,7 +125,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
         try {
             // 1. Load users
             const usersSnap = await getDocs(collection(db, 'users'));
-            const usersData = usersSnap.docs.map(doc => ({...doc.data(), id: doc.id}));
+            const usersData: any[] = usersSnap.docs.map(doc => ({...doc.data(), id: doc.id}));
             setUsers(usersData);
 
             // 2. Load all transactions
