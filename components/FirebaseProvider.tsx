@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserState, UserInvestment, TransactionRecord } from '../types';
-import { auth, db } from '../lib/firebase';
+import { auth, db, isConfigured, config } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, addDoc, onSnapshot, query, where, orderBy, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
 
@@ -67,7 +67,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     let unsubDoc: () => void;
     
-    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+    const unsub = isConfigured ? onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser && fbUser.email) {
         setUser({ uid: fbUser.uid, email: fbUser.email, name: fbUser.displayName || 'User' });
         
@@ -140,7 +140,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setUserData(null);
         setLoading(false);
       }
-    });
+    }) : () => { setLoading(false); };
 
     return () => {
       if (unsubDoc) unsubDoc();

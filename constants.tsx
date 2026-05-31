@@ -14,7 +14,7 @@ export const ONBOARDING_SLIDES = []; // Empty as requested to remove onboarding
 
 export const INTENTS = [
   { id: 'safe', label: 'Safe yields', desc: 'Preserve capital with low-risk T-Bills & Bonds.' },
-  { id: 'grow', label: 'Grow wealth', desc: 'Higher yields with Commercial Papers & Commodities.' },
+  { id: 'grow', label: 'Brex Grow', desc: 'Higher yields with Commercial Papers & Commodities.' },
   { id: 'dollar', label: 'Dollar protection', desc: 'Hedge against inflation with USDT savings.' },
   { id: 'biz', label: 'Institutional', desc: 'Professional tools for high-net-worth flow.' }
 ];

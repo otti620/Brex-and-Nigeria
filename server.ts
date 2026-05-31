@@ -14,16 +14,27 @@ async function startServer() {
 
   // Server-side Firebase integration for webhook processing
   const firebaseServerConfig = {
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-    appId: process.env.VITE_FIREBASE_APP_ID,
-    apiKey: process.env.VITE_FIREBASE_API_KEY,
-    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "seedstreet-app",
+    appId: process.env.VITE_FIREBASE_APP_ID || "1:425883713028:web:b1d79dd4ae414771fd0b79",
+    apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyBewBW-Z9P5HtcUTsLvmEn0aZtBjwvD68I",
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "seedstreet-app.firebaseapp.com",
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "seedstreet-app.appspot.com",
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "425883713028",
   };
 
-  const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
-  const serverDb = getFirestoreServer(serverFirebaseApp, "(default)");
+  const isFirebaseConfigured = !!(firebaseServerConfig.apiKey && firebaseServerConfig.projectId);
+  let serverDb: any = null;
+
+  if (isFirebaseConfigured) {
+    try {
+      const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
+      serverDb = getFirestoreServer(serverFirebaseApp, "(default)");
+    } catch (err) {
+      console.error("Firebase server initialization failed:", err);
+    }
+  } else {
+    console.warn("Firebase is not configured on the server. Webhooks will not sync to Firestore.");
+  }
 
   // Paystack Webhook Handler
   app.post("/api/webhook/paystack", async (req, res) => {
@@ -69,44 +80,46 @@ async function startServer() {
       }
 
       // 2. Double credit sync: Real-time Cloud Firestone DB (Main production)
-      try {
-        const usersCol = collection(serverDb, "users");
-        const q = query(usersCol, where("email", "==", email));
-        const snapshot = await getDocs(q);
+      if (serverDb) {
+        try {
+          const usersCol = collection(serverDb, "users");
+          const q = query(usersCol, where("email", "==", email));
+          const snapshot = await getDocs(q);
 
-        if (snapshot.empty) {
-          console.warn(`[Paystack Webhook] No real-time Firestore user found matched to ${email}`);
-        } else {
-          const userDoc = snapshot.docs[0];
-          const userId = userDoc.id;
-          const userData = userDoc.data();
+          if (snapshot.empty) {
+            console.warn(`[Paystack Webhook] No real-time Firestore user found matched to ${email}`);
+          } else {
+            const userDoc = snapshot.docs[0];
+            const userId = userDoc.id;
+            const userData = userDoc.data();
 
-          const prevBalance = userData.balance || 0;
-          const prevGains = userData.monthlyGains || 0;
+            const prevBalance = userData.balance || 0;
+            const prevGains = userData.monthlyGains || 0;
 
-          const batch = writeBatch(serverDb);
-          batch.update(doc(serverDb, 'users', userId), {
-            balance: prevBalance + amountNGN,
-            monthlyGains: prevGains + Math.floor(amountNGN * 0.05)
-          });
+            const batch = writeBatch(serverDb);
+            batch.update(doc(serverDb, 'users', userId), {
+              balance: prevBalance + amountNGN,
+              monthlyGains: prevGains + Math.floor(amountNGN * 0.05)
+            });
 
-          // Insert verified transaction
-          const txnId = `txn_paystack_${Date.now()}`;
-          batch.set(doc(serverDb, `users/${userId}/transactions/${txnId}`), {
-            id: txnId,
-            userId: userId,
-            amount: amountNGN,
-            type: "recharge",
-            status: "success",
-            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            details: `Verified Paystack Network Credit (Ref: ${reference})`
-          });
+            // Insert verified transaction
+            const txnId = `txn_paystack_${Date.now()}`;
+            batch.set(doc(serverDb, `users/${userId}/transactions/${txnId}`), {
+              id: txnId,
+              userId: userId,
+              amount: amountNGN,
+              type: "recharge",
+              status: "success",
+              date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+              details: `Verified Paystack Network Credit (Ref: ${reference})`
+            });
 
-          await batch.commit();
-          console.log(`[Paystack Webhook] Firestore production records successfully incremented! User: ${userId}`);
+            await batch.commit();
+            console.log(`[Paystack Webhook] Firestore production records successfully incremented! User: ${userId}`);
+          }
+        } catch (firestoreErr) {
+          console.error("[Paystack Webhook] Production Firestore update failed: ", firestoreErr);
         }
-      } catch (firestoreErr) {
-        console.error("[Paystack Webhook] Production Firestore update failed: ", firestoreErr);
       }
 
       return res.status(200).json({ status: "success", message: "Accounts synchronized" });
@@ -795,7 +808,7 @@ async function startServer() {
       });
 
       const result = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-1.5-flash',
         contents: `User is a Gen Z investor in Nigeria interested in traditional asset classes like Naira Treasury Bills, bonds, and dollar-hedged pathways. Their current intent category is ${selectedIntent}. They ask: "${message}". Give concise, friendly investment advice using a modern, objective, and premium financial brand tone. Do not refer to "QuantVerse" or VIP trading levels since those are disabled. Focus purely on realistic Naira yields, inflation preservation, and commercial paper rates in Nigeria.`,
       });
       

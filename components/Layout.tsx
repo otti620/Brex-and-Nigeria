@@ -72,7 +72,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
   }
 
   return (
-    <div className="flex flex-col h-screen max-w-md mx-auto relative overflow-hidden bg-[#0C1017] shadow-2xl border-x border-[#1E293B]/20 gpu text-white">
+    <div className="flex flex-col h-screen max-w-md mx-auto relative overflow-hidden bg-[#f8f8f8] shadow-2xl border-x border-gray-200 gpu text-[#1a1a1a]">
       
       {/* SEC Educational Banner */}
       <div className="bg-red-500 text-white text-[9px] font-bold text-center px-2 py-1.5 z-50 relative flex items-center justify-center gap-2">
@@ -80,15 +80,15 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
         <span className="uppercase tracking-widest bg-red-700/50 px-1 py-0.5 rounded leading-none">SEC Educational Tool</span>
-        <span className="truncate flex-1 text-left opacity-90 leading-tight block hidden sm:block">This is a simulated High-Yield Investment Program (HYIP) environment for consumer education purposes only.</span>
+        <span className="truncate flex-1 text-left opacity-90 leading-tight block hidden sm:block">This is a simulated High-Yield (HYIP) environment for consumer education purposes only.</span>
       </div>
 
-      <main className="flex-1 overflow-y-auto hide-scrollbar pb-24 safe-pb bg-[#0C1017]">
+      <main className="flex-1 overflow-y-auto hide-scrollbar pb-24 safe-pb bg-[#f8f8f8]">
         {children}
       </main>
 
       {!hideNav && (
-        <div className="absolute bottom-0 left-0 right-0 z-50 bg-[#131926] border-t border-[#1E293B]/60 pb-safe">
+        <div className="absolute bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 pb-safe">
           <nav className="flex items-center justify-around py-2 px-3">
             {navItems.map((item) => {
               const isActive = activeScreen === item.id;

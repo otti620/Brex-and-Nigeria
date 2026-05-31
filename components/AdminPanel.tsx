@@ -490,15 +490,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
     if (loading) {
         return (
-            <div className="p-8 h-full bg-[#0C1017] text-white flex flex-col justify-center items-center text-center gap-4 min-h-[500px]">
-                <RefreshCw size={40} className="text-[#8CEE47] animate-spin" />
-                <p className="font-extrabold text-[#8CEE47] text-xs uppercase tracking-widest font-mono">Accessing High-Security Core Ledger APIs...</p>
+            <div className="p-8 h-full bg-[#f8f8f8] text-black flex flex-col justify-center items-center text-center gap-4 min-h-[500px]">
+                <RefreshCw size={40} className="text-[#ff9c00] animate-spin" />
+                <p className="font-extrabold text-[#ff9c00] text-xs uppercase tracking-widest font-mono">Accessing High-Security Core Ledger APIs...</p>
             </div>
         );
     }
 
     return (
-        <div className="p-5 h-full overflow-y-auto pb-24 bg-[#0C1017] text-white my-auto flex-1 md:px-8">
+        <div className="p-5 h-full overflow-y-auto pb-24 bg-[#f8f8f8] text-black my-auto flex-1 md:px-8">
             
             {/* Header section */}
             <div className="flex flex-col gap-2 mb-6 md:flex-row md:items-center">
@@ -506,33 +506,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                     {onBack && (
                         <button 
                             onClick={onBack}
-                            className="w-10 h-10 rounded-xl bg-[#131926] border border-[#1E293B] flex items-center justify-center text-white active:scale-95 transition-all outline-none cursor-pointer"
+                            className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-black active:scale-95 transition-all outline-none cursor-pointer shadow-sm"
                         >
                             <ArrowLeft size={16} />
                         </button>
                     )}
                     <div>
-                        <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-                            Admin Dashboard <span className="bg-[#8CEE47]/20 text-[#8CEE47] border border-[#8CEE47]/30 text-[9px] px-2 py-0.5 rounded-full uppercase font-black font-mono">Secured</span>
+                        <h2 className="text-xl font-black text-black tracking-tight flex items-center gap-2">
+                            Admin Dashboard <span className="bg-[#ff9c00]/20 text-[#ff9c00] border border-[#ff9c00]/30 text-[9px] px-2 py-0.5 rounded-full uppercase font-black font-mono">Secured</span>
                         </h2>
-                        <p className="text-[#64748B] text-[10px] uppercase tracking-wider font-extrabold mt-0.5">PLATFORM TELEMETRY CONTROLS ACTIVE</p>
+                        <p className="text-gray-500 text-[10px] uppercase tracking-wider font-extrabold mt-0.5">PLATFORM TELEMETRY CONTROLS ACTIVE</p>
                     </div>
                 </div>
                 
                 <div className="flex items-center gap-2 ml-auto">
                     <button 
                         onClick={loadAdminRegistry}
-                        className="w-10 h-10 rounded-xl bg-[#131926] flex items-center justify-center hover:bg-[#1E293B] transition-all border border-[#1E293B] cursor-pointer"
+                        className="w-10 h-10 rounded-xl bg-white flex items-center justify-center hover:bg-gray-50 transition-all border border-gray-200 cursor-pointer shadow-sm"
                         title="Reload Databases"
                     >
-                        <RefreshCw size={14} className="text-[#8CEE47]" />
+                        <RefreshCw size={14} className="text-[#ff9c00]" />
                     </button>
                 </div>
             </div>
 
             {/* Notification and alert banner */}
             {operationMsg && (
-                <div className="bg-[#8CEE47]/10 border border-[#8CEE47]/20 text-[#8CEE47] rounded-2xl p-4 text-xs font-semibold mb-6 flex items-center justify-between">
+                <div className="bg-[#ff9c00]/10 border border-[#ff9c00]/20 text-[#ff9c00] rounded-2xl p-4 text-xs font-semibold mb-6 flex items-center justify-between">
                     <span>{operationMsg}</span>
                     <button onClick={() => setOperationMsg('')} className="text-[10px] uppercase font-black font-mono">Dismiss</button>
                 </div>
@@ -545,7 +545,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             )}
 
             {/* Visual Glassmorphic Grid Sidebar and Tab buttons */}
-            <div className="grid grid-cols-3 gap-1 bg-[#131926] rounded-2xl p-1 mb-6 border border-[#1E293B] md:grid-cols-9 md:text-[10px]">
+            <div className="grid grid-cols-3 gap-1 bg-white rounded-2xl p-1 mb-6 border border-gray-200 shadow-sm md:grid-cols-9 md:text-[10px]">
                 {[
                     { id: 'dashboard', label: 'Overview', icon: Activity },
                     { id: 'users', label: 'Users', icon: Users },
@@ -568,8 +568,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                             }}
                             className={`flex flex-col items-center justify-center gap-1 text-[9px] font-black uppercase py-2 rounded-xl transition-all cursor-pointer ${
                                 activeTab === item.id 
-                                ? 'bg-[#1E293B] text-[#8CEE47] border border-[#2E3C51]' 
-                                : 'text-slate-500 hover:text-slate-300'
+                                ? 'bg-gray-100 text-[#ff9c00] border border-gray-200' 
+                                : 'text-gray-400 hover:text-gray-600'
                             }`}
                         >
                             <Icon size={12} />
@@ -580,34 +580,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             </div>
 
             {/* TAB CONTAINER */}
-            <Card className="bg-[#131926]/40 backdrop-blur-md border-[#1E293B] p-5 rounded-[32px] shadow-2xl">
+            <Card className="bg-white border-gray-200 p-5 rounded-[32px] shadow-sm">
                 
                 {/* 1. OVERVIEW & TELEMETRY */}
                 {activeTab === 'dashboard' && (
                     <div className="flex flex-col gap-6">
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-slate-500 mb-1">TOTAL USERS</p>
-                                <p className="text-2xl font-black text-white font-mono">{stats.totalUsers}</p>
+                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-[#1a1a1a]/60 mb-1">TOTAL USERS</p>
+                                <p className="text-2xl font-black text-black font-mono">{stats.totalUsers}</p>
                             </div>
-                            <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-[#8CEE47] mb-1 font-bold">TOTAL USER BALANCE</p>
-                                <p className="text-2xl font-black text-[#8CEE47] font-mono">₦{stats.totalBalance.toLocaleString()}</p>
+                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-[#ff9c00] mb-1 font-bold">TOTAL USER BALANCE</p>
+                                <p className="text-2xl font-black text-[#ff9c00] font-mono">₦{stats.totalBalance.toLocaleString()}</p>
                             </div>
-                            <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-[#8CEE47] mb-1">CUMULATIVE DEPOSITS</p>
-                                <p className="text-2xl font-black text-emerald-400 font-mono">₦{stats.depositsSum.toLocaleString()}</p>
+                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-emerald-600 mb-1">CUMULATIVE DEPOSITS</p>
+                                <p className="text-2xl font-black text-emerald-500 font-mono">₦{stats.depositsSum.toLocaleString()}</p>
                             </div>
-                            <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-red-400 mb-1">TOTAL PAYOUTS</p>
+                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-red-500 mb-1">TOTAL PAYOUTS</p>
                                 <p className="text-2xl font-black text-amber-500 font-mono">₦{stats.payoutsSum.toLocaleString()}</p>
                             </div>
                         </div>
 
                         {/* Interactive Recharts visualizer */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-                                <p className="text-xs font-black uppercase text-white mb-4">Financial Flow Trajectory (Deposits vs Payouts)</p>
+                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
+                                <p className="text-xs font-black uppercase text-black mb-4">Financial Flow Trajectory (Deposits vs Payouts)</p>
                                 <div className="h-64">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={chartSeries}>
@@ -622,8 +622,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                 </div>
                             </div>
 
-                            <div className="bg-[#131926] border border-[#1E293B] p-4.5 rounded-[24px]">
-                                <p className="text-xs font-black uppercase text-white mb-4">Daily Registration & Activity Growth</p>
+                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
+                                <p className="text-xs font-black uppercase text-black mb-4">Daily Registration & Activity Growth</p>
                                 <div className="h-64">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={chartSeries}>
@@ -664,51 +664,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 {activeTab === 'users' && (
                     <div className="flex flex-col gap-4">
                         {/* Search & Filter */}
-                        <div className="flex bg-[#131926] border border-[#1E293B] rounded-2xl items-center px-4 py-2.5">
-                            <Search size={16} className="text-slate-500 shrink-0 mr-2.5" />
+                        <div className="flex bg-gray-50 border border-gray-100 rounded-2xl items-center px-4 py-2.5">
+                            <Search size={16} className="text-gray-400 shrink-0 mr-2.5" />
                             <input 
                                 type="text"
                                 placeholder="Search by name, email, phone number..."
                                 value={userSearchQuery}
                                 onChange={(e) => setUserSearchQuery(e.target.value)}
-                                className="bg-transparent border-none text-white text-xs outline-none w-full font-bold"
+                                className="bg-transparent border-none text-black text-xs outline-none w-full font-bold"
                             />
                             {userSearchQuery && (
-                                <button onClick={() => setUserSearchQuery('')} className="text-slate-500 text-[10px] uppercase font-black">Clear</button>
+                                <button onClick={() => setUserSearchQuery('')} className="text-gray-400 text-[10px] uppercase font-black">Clear</button>
                             )}
                         </div>
 
                         <div className="space-y-3 mt-2">
                             {filteredUsers.length === 0 ? (
-                                <p className="text-xs text-slate-500 font-mono italic text-center py-8">No registered users matched your query.</p>
+                                <p className="text-xs text-gray-400 font-mono italic text-center py-8">No registered users matched your query.</p>
                             ) : (
                                 filteredUsers.map(u => {
                                     const isSelf = u.email === userData?.email;
                                     const isSubAdmin = u.email?.toLowerCase() === 'ottigospel@gmail.com';
                                     return (
-                                        <div key={u.id} className="bg-[#131926] border border-[#1E293B] p-4 rounded-[28px] flex flex-col gap-3 relative overflow-hidden transition-all hover:border-[#8CEE47]/30">
+                                        <div key={u.id} className="bg-white border border-gray-100 p-4 rounded-[28px] flex flex-col gap-3 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-sm">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-slate-800 rounded-2xl flex items-center justify-center text-sm font-black text-[#8CEE47]">
+                                                    <div className="w-10 h-10 bg-gray-100 rounded-2xl flex items-center justify-center text-sm font-black text-[#ff9c00]">
                                                         {u.name?.[0]?.toUpperCase() || 'U'}
                                                     </div>
                                                     <div>
                                                         <div className="flex items-center gap-2">
-                                                            <p className="font-extrabold text-sm text-white">{u.name}</p>
-                                                            {isSubAdmin && <span className="bg-[#8CEE47]/25 text-[#8CEE47] border border-[#8CEE47]/40 text-[7px] font-black px-1.5 py-0.5 rounded font-mono">OWNER ADMIN</span>}
+                                                            <p className="font-extrabold text-sm text-black">{u.name}</p>
+                                                            {isSubAdmin && <span className="bg-[#ff9c00]/25 text-[#ff9c00] border border-[#ff9c00]/40 text-[7px] font-black px-1.5 py-0.5 rounded font-mono">OWNER ADMIN</span>}
                                                             {u.isSuspended && <span className="bg-red-500/20 text-red-500 border border-red-500/30 text-[8px] font-black px-1.5 py-0.5 rounded font-mono">SUSPENDED</span>}
                                                         </div>
-                                                        <p className="text-[10px] text-slate-500 font-mono font-bold mt-0.5">{u.email} | {u.phoneNumber || 'No phone'}</p>
+                                                        <p className="text-[10px] text-gray-500 font-mono font-bold mt-0.5">{u.email} | {u.phoneNumber || 'No phone'}</p>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="text-[9px] text-slate-500 font-bold uppercase font-mono">PORTFOLIO VALUE</p>
-                                                    <p className="text-sm font-black text-white font-mono">₦{(u.balance || 0).toLocaleString()}</p>
+                                                    <p className="text-[9px] text-gray-500 font-bold uppercase font-mono">PORTFOLIO VALUE</p>
+                                                    <p className="text-sm font-black text-black font-mono">₦{(u.balance || 0).toLocaleString()}</p>
                                                 </div>
                                             </div>
 
                                             {/* Subactions block */}
-                                            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#1E293B]/40">
+                                            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
                                                 {/* Suspension */}
                                                 {!isSelf && (
                                                     <button
@@ -717,10 +717,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                             await addSystemLog(`Toggled suspension state of user ${u.id}`, 'audit');
                                                             await loadAdminRegistry();
                                                         }}
-                                                        className={`text-[10px] py-1.5 px-3 rounded-lg font-black uppercase flex items-center gap-1 cursor-pointer ${
+                                                        className={`text-[10px] py-1.5 px-3 rounded-lg font-black uppercase flex items-center gap-1 cursor-pointer shadow-sm border transition-all ${
                                                             u.isSuspended 
-                                                            ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' 
-                                                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                                            ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' 
+                                                            : 'bg-red-500/10 text-red-500 border-red-500/20'
                                                         }`}
                                                     >
                                                         {u.isSuspended ? <Unlock size={11} /> : <Lock size={11} />}
@@ -729,13 +729,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                 )}
 
                                                 {/* KYC Level adjustment */}
-                                                <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-[#1E293B]">
-                                                    <span className="text-[8px] uppercase font-black font-mono text-slate-400 px-2">KYC {u.kycLevel || 0}</span>
+                                                <div className="flex items-center bg-gray-50 rounded-lg p-0.5 border border-gray-200">
+                                                    <span className="text-[8px] uppercase font-black font-mono text-gray-400 px-2">KYC {u.kycLevel || 0}</span>
                                                     {[1, 2, 3].map(lvl => (
                                                         <button
                                                             key={lvl}
                                                             onClick={() => updateKycStatus(u.id, lvl)}
-                                                            className={`text-[9px] px-2 py-1 rounded font-black font-mono cursor-pointer ${u.kycLevel === lvl ? 'bg-[#8CEE47] text-slate-900' : 'text-slate-400'}`}
+                                                            className={`text-[9px] px-2 py-1 rounded font-black font-mono cursor-pointer transition-all ${u.kycLevel === lvl ? 'bg-[#ff9c00] text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                                                         >
                                                             L{lvl}
                                                         </button>
@@ -748,7 +748,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                         setAdjustingUserId(u.id);
                                                         setAdjustAmt(0);
                                                     }}
-                                                    className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 text-[10px] px-3 py-1.5 rounded-lg font-black uppercase ml-auto cursor-pointer"
+                                                    className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-600 text-[10px] px-3 py-1.5 rounded-lg font-black uppercase ml-auto cursor-pointer shadow-sm transition-all"
                                                 >
                                                     Modify Balance
                                                 </button>
@@ -756,22 +756,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
                                             {/* Expand Balance Adjust Input Panel */}
                                             {adjustingUserId === u.id && (
-                                                <div className="bg-slate-900/60 border border-[#1E293B] rounded-2xl p-4.5 mt-2 flex flex-col gap-3">
+                                                <div className="bg-gray-100 border border-gray-200 rounded-2xl p-4.5 mt-2 flex flex-col gap-3">
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <p className="text-xs font-black text-white uppercase">Adjust {u.name}'s Ledger Balance</p>
-                                                        <button onClick={() => setAdjustingUserId(null)} className="text-[9px] uppercase font-bold text-slate-400">Cancel</button>
+                                                        <p className="text-xs font-black text-black uppercase">Adjust {u.name}'s Ledger Balance</p>
+                                                        <button onClick={() => setAdjustingUserId(null)} className="text-[9px] uppercase font-bold text-gray-400">Cancel</button>
                                                     </div>
                                                     
                                                     <div className="flex gap-2">
                                                         <button 
                                                             onClick={() => setAdjustType('credit')}
-                                                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase font-black border transition-all ${adjustType === 'credit' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-transparent border-slate-700 text-slate-400'}`}
+                                                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase font-black border transition-all ${adjustType === 'credit' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600' : 'bg-transparent border-gray-300 text-gray-400'}`}
                                                         >
                                                             Credit (Add)
                                                         </button>
                                                         <button 
                                                             onClick={() => setAdjustType('debit')}
-                                                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase font-black border transition-all ${adjustType === 'debit' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' : 'bg-transparent border-slate-700 text-slate-400'}`}
+                                                            className={`flex-1 py-1.5 rounded-lg text-[9px] uppercase font-black border transition-all ${adjustType === 'debit' ? 'bg-rose-500/10 border-rose-500/30 text-rose-600' : 'bg-transparent border-gray-300 text-gray-400'}`}
                                                         >
                                                             Debit (Subtract)
                                                         </button>
@@ -779,29 +779,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div className="flex flex-col gap-1">
-                                                            <label className="text-[9px] font-bold text-slate-500">AMOUNT (₦)</label>
+                                                            <label className="text-[9px] font-bold text-gray-500">AMOUNT (₦)</label>
                                                             <input 
                                                                 type="number"
                                                                 value={adjustAmt || ''}
                                                                 onChange={(e) => setAdjustAmt(Number(e.target.value))}
-                                                                className="bg-[#131926] border border-[#1E293B] px-3.5 py-2 rounded-xl text-white font-mono text-xs outline-none"
+                                                                className="bg-white border border-gray-200 px-3.5 py-2 rounded-xl text-black font-mono text-xs outline-none"
                                                                 placeholder="e.g. 5000"
                                                             />
                                                         </div>
                                                         <div className="flex flex-col gap-1">
-                                                            <label className="text-[9px] font-bold text-slate-500">REASON</label>
+                                                            <label className="text-[9px] font-bold text-gray-500">REASON</label>
                                                             <input 
                                                                 type="text"
                                                                 value={adjustReason}
                                                                 onChange={(e) => setAdjustReason(e.target.value)}
-                                                                className="bg-[#131926] border border-[#1E293B] px-3.5 py-2 rounded-xl text-white text-xs outline-none"
+                                                                className="bg-white border border-gray-200 px-3.5 py-2 rounded-xl text-black text-xs outline-none"
                                                             />
                                                         </div>
                                                     </div>
 
                                                     <button 
                                                         onClick={handleBalanceAdjustment}
-                                                        className="bg-[#8CEE47] hover:bg-[#7BE13A] text-slate-900 py-2 rounded-xl text-xs font-black uppercase mt-1 cursor-pointer"
+                                                        className="bg-[#ff9c00] hover:bg-[#e68d00] text-black py-2 rounded-xl text-xs font-black uppercase mt-1 cursor-pointer"
                                                     >
                                                         Apply Ledger Correction
                                                     </button>
