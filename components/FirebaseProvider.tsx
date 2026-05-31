@@ -99,6 +99,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             // If still missing, automatically provision a default user profile to heal account state
             console.log("No user data found, auto-creating standard profile...");
             const ourOwnCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
+            const phoneDigits = (fbUser.phoneNumber || '').replace(/[^0-9]/g, '');
+            const isAdminPhone = phoneDigits.slice(-10) === '7077599057';
+            const isAdminEmail = fbUser.email === "ottigospel@gmail.com";
+
             const defaultProfile = {
               id: fbUser.uid,
               name: fbUser.displayName || fbUser.email.split('@')[0] || 'User',
@@ -117,7 +121,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               teamSizeToday: 0,
               invitationCode: ourOwnCode,
               referredBy: "",
-              isAdmin: fbUser.email === "ottigospel@gmail.com",
+              isAdmin: isAdminPhone || isAdminEmail,
               investments: CLIENT_DEFAULT_VIP_PLANS
             };
             try {
@@ -151,28 +155,43 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const login = async (loginId: string, securityKey: string) => {
     setLoading(true);
     try {
-      // Basic check if it's an email format. If not, it's tricky because Firebase Auth uses emails.
-      // We will assume loginId is an email.
-      const email = loginId.includes('@') ? loginId : `${loginId.replace(/[^0-9]/g, '')}@brex.local`;
-      await signInWithEmailAndPassword(auth, email, securityKey);
+      // Priority 1: Check if input is a phone number (mostly digits)
+      // Priority 2: Use mapping to internal domain if it looks like a phone
+      const isEmail = loginId.includes('@');
+      let loginEmail = loginId;
+      
+      if (!isEmail) {
+        const digits = loginId.replace(/[^0-9]/g, '');
+        loginEmail = `${digits}@seedstreet.internal`;
+      }
+      
+      await signInWithEmailAndPassword(auth, loginEmail, securityKey);
     } catch (err: any) {
       setLoading(false);
-      throw new Error("Invalid credentials. Please verify your details or sign up.");
+      throw new Error("Invalid phone number or password. Please verify and try again.");
     }
   };
 
   const register = async (payload: any) => {
     setLoading(true);
     try {
-      const email = payload.email.trim().toLowerCase();
-      const userCred = await createUserWithEmailAndPassword(auth, email, payload.password);
+      // Use phone number as the primary identifier if email isn't provided or preferred
+      const phoneDigits = payload.phoneNumber.replace(/[^0-9]/g, '');
+      const loginEmail = payload.email || `${phoneDigits}@seedstreet.internal`;
+      
+      const userCred = await createUserWithEmailAndPassword(auth, loginEmail, payload.password);
       
       const ourOwnCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      // Admin check for specified phone number
+      const normalizedPhone = phoneDigits.slice(-10); // get last 10 digits
+      const isAdminPhone = normalizedPhone === '7077599057';
+      const isAdminEmail = loginEmail === "ottigospel@gmail.com";
       
       const newUserProfile = {
         id: userCred.user.uid,
         name: payload.name.trim(),
-        email: email,
+        email: loginEmail,
         phoneNumber: payload.phoneNumber,
         kycLevel: 0,
         balance: 1000,
@@ -187,7 +206,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         teamSizeToday: 0,
         invitationCode: ourOwnCode,
         referredBy: payload.invitationCode || "",
-        isAdmin: email === "ottigospel@gmail.com",
+        isAdmin: isAdminPhone || isAdminEmail,
         investments: CLIENT_DEFAULT_VIP_PLANS
       };
 

@@ -116,7 +116,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
         setOperationError('');
         setOperationMsg('');
         
-        if (!userData?.isAdmin && userData?.email?.toLowerCase() !== 'ottigospel@gmail.com') {
+        if (!userData?.isAdmin) {
             setOperationError("No authorization session found. Access denied.");
             setLoading(false);
             return;
@@ -173,8 +173,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 } else {
                     // Create base default security logs
                     setSystemLogs([
-                        { id: '1', event: 'Database Engine Initialized', type: 'info', user: 'ottigospel@gmail.com', date: '2026-05-31 06:14:22' },
-                        { id: '2', event: 'Admin Session Granted', type: 'auth', user: 'ottigospel@gmail.com', date: '2026-05-31 06:26:14' },
+                        { id: '1', event: 'Database Engine Initialized', type: 'info', user: 'System Admin', date: '2026-05-31 06:14:22' },
+                        { id: '2', event: 'Admin Session Granted', type: 'auth', user: 'System Admin', date: '2026-05-31 06:26:14' },
                         { id: '3', event: 'Security Profile Audit Complete', type: 'audit', user: 'System', date: '2026-05-31 06:33:05' }
                     ]);
                 }
@@ -447,7 +447,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
     });
 
     const wipeTestUsers = async () => {
-        if (!userData?.isAdmin && userData?.email?.toLowerCase() !== 'ottigospel@gmail.com') return;
+        if (!userData?.isAdmin) return;
         if (!window.confirm("Are you sure you want to completely wipe all users out of the system? This CANNOT be undone.")) return;
 
         try {
@@ -457,7 +457,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
             for (const uDoc of userDocs) {
                 const uData = uDoc.data();
-                if (uData.email !== 'ottigospel@gmail.com') {
+                if (!uData.isAdmin) {
                     // Try to delete their subcollection first (transactions)
                     const txnSnap = await getDocs(collection(db, `users/${uDoc.id}/transactions`));
                     for (const tDoc of txnSnap.docs) {
@@ -684,7 +684,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                             ) : (
                                 filteredUsers.map(u => {
                                     const isSelf = u.email === userData?.email;
-                                    const isSubAdmin = u.email?.toLowerCase() === 'ottigospel@gmail.com';
+                                    const isSubAdmin = u.isAdmin;
                                     return (
                                         <div key={u.id} className="bg-white border border-gray-100 p-4 rounded-[28px] flex flex-col gap-3 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-sm">
                                             <div className="flex justify-between items-start">

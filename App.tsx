@@ -90,7 +90,7 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const isSpecificAdmin = userData?.email?.toLowerCase() === 'ottigospel@gmail.com';
+  const isSpecificAdmin = userData?.isAdmin;
   
   // Custom alerts/toast system
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -106,9 +106,8 @@ const App: React.FC = () => {
   
   // Auth states
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [phoneNumber, setPhoneNumber] = useState('+234 ');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [userName, setUserName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [invitationCode, setInvitationCode] = useState('');
@@ -360,7 +359,7 @@ const App: React.FC = () => {
       if (user) {
         if (userData) {
           if (currentScreen === Screen.Auth) {
-            if (userData?.email?.toLowerCase() === 'ottigospel@gmail.com') {
+            if (userData?.isAdmin) {
               setCurrentScreen(Screen.Admin);
             } else {
               setCurrentScreen(Screen.Dashboard);
@@ -427,23 +426,22 @@ const App: React.FC = () => {
   const handleNativeRegister = async () => {
     const enteredPhone = phoneNumber.trim();
     if (enteredPhone.length < 8) {
-      setAuthError('Please enter a valid mobile number (+234)');
-      return;
-    }
-    if (!userEmail.trim() || !userEmail.includes('@')) {
-      setAuthError('Please enter a valid email address');
+      setAuthError('Please enter a valid mobile number');
       return;
     }
     if (password.length < 6) {
-      setAuthError('Password must be 6-16 Alphanumeric characters');
+      setAuthError('Password must be at least 6 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setAuthError('Passwords do not match');
       return;
     }
 
     try {
       setAuthError('');
       const payload = {
-        name: 'Brex Member',
-        email: enteredPhone + '@brex.com', // fallback since screen removed email
+        name: userName.trim() || 'Brex Member',
         phoneNumber: enteredPhone,
         password: password,
         invitationCode: invitationCode || '16662861',
@@ -754,18 +752,29 @@ const App: React.FC = () => {
         <div className="flex-1 bg-white rounded-t-[40px] -mt-10 px-8 pt-10 pb-12 shadow-2xl z-10">
           <div className="flex flex-col gap-6 max-w-sm mx-auto">
             
+            {/* User Name Field (Register Mode) */}
+            {authMode === 'register' && (
+              <div className="flex flex-col gap-3">
+                <label className="text-sm font-bold text-[#333] ml-1">Full Name</label>
+                <div className="flex bg-[#f3f4f6] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#ff9c00]/30 transition-all">
+                  <input 
+                    type="text"
+                    placeholder="Enter your full name" 
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    className="bg-transparent flex-1 px-4 py-4 text-sm font-medium outline-none placeholder:text-gray-400"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Phone Field */}
             <div className="flex flex-col gap-3">
-              <label className="text-sm font-bold text-[#333] ml-1">Phone</label>
+              <label className="text-sm font-bold text-[#333] ml-1">Phone Number</label>
               <div className="flex bg-[#f3f4f6] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#ff9c00]/30 transition-all">
-                {authMode === 'register' && (
-                  <div className="flex items-center gap-1 px-4 border-r border-gray-200 text-sm font-semibold text-gray-500">
-                    +234 <ChevronDown size={16} />
-                  </div>
-                )}
                 <input 
-                  type="text"
-                  placeholder="Please enter your phone number" 
+                  type="tel"
+                  placeholder={authMode === 'login' ? "Phone number" : "e.g. 07077599057"} 
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   className="bg-transparent flex-1 px-4 py-4 text-sm font-medium outline-none placeholder:text-gray-400"
@@ -779,7 +788,7 @@ const App: React.FC = () => {
               <div className="flex bg-[#f3f4f6] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#ff9c00]/30 transition-all items-center pr-4">
                 <input 
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Please enter your login password" 
+                  placeholder="Enter your password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="bg-transparent flex-1 px-4 py-4 text-sm font-medium outline-none placeholder:text-gray-400"
@@ -797,26 +806,30 @@ const App: React.FC = () => {
               <>
                 {/* Confirm Password Field */}
                 <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-[#333] ml-1">Password</label>
-                  <input 
-                    type="password"
-                    placeholder="Please enter your login password" 
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="auth-input"
-                  />
+                  <label className="text-sm font-bold text-[#333] ml-1">Confirm Password</label>
+                  <div className="flex bg-[#f3f4f6] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#ff9c00]/30 transition-all">
+                    <input 
+                      type="password"
+                      placeholder="Repeat your password" 
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="bg-transparent flex-1 px-4 py-4 text-sm font-medium outline-none placeholder:text-gray-400"
+                    />
+                  </div>
                 </div>
 
                 {/* Invitation Field */}
                 <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-[#333] ml-1">Invitation</label>
-                  <input 
-                    type="text"
-                    placeholder="Invitation code" 
-                    value={invitationCode}
-                    onChange={(e) => setInvitationCode(e.target.value)}
-                    className="auth-input"
-                  />
+                  <label className="text-sm font-bold text-[#333] ml-1">Invitation Code (Optional)</label>
+                  <div className="flex bg-[#f3f4f6] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#ff9c00]/30 transition-all">
+                    <input 
+                      type="text"
+                      placeholder="Invitation code" 
+                      value={invitationCode}
+                      onChange={(e) => setInvitationCode(e.target.value)}
+                      className="bg-transparent flex-1 px-4 py-4 text-sm font-medium outline-none placeholder:text-gray-400"
+                    />
+                  </div>
                 </div>
               </>
             )}
