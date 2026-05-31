@@ -83,12 +83,12 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
         <span className="truncate flex-1 text-left opacity-90 leading-tight block hidden sm:block">This is a simulated High-Yield (HYIP) environment for consumer education purposes only.</span>
       </div>
 
-      <main className="flex-1 overflow-y-auto hide-scrollbar pb-24 safe-pb bg-[#f8f8f8]">
+      <main className="flex-1 overflow-y-auto hide-scrollbar pb-8 safe-pb bg-[#f8f8f8]">
         {children}
       </main>
 
       {!hideNav && (
-        <div className="absolute bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 pb-safe">
+        <div className="z-50 bg-white border-t border-gray-200 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
           <nav className="flex items-center justify-around py-2 px-3">
             {navItems.map((item) => {
               const isActive = activeScreen === item.id;
