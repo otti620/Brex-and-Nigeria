@@ -1644,6 +1644,14 @@ const App: React.FC = () => {
                       </div>
                     )}
                   </div>
+
+                  <button
+                    onClick={triggerPaystackCheckout}
+                    className="mt-4 w-full bg-rose-600 hover:bg-rose-700 active:scale-[0.98] py-3 rounded-xl text-white font-black text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-md shadow-rose-600/20 cursor-pointer outline-none"
+                    id="retry-payment-btn"
+                  >
+                    <RefreshCw size={12} /> Retry Checkout
+                  </button>
                 </div>
               </div>
             )}

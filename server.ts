@@ -1249,8 +1249,22 @@ function startServer() {
   return app;
 }
 
-const app = startServer();
-export default function handler(req: any, res: any) {
-  app(req, res);
+let appInstance: any = null;
+
+function getAppInstance() {
+  if (!appInstance) {
+    appInstance = startServer();
+  }
+  return appInstance;
 }
+
+export default function handler(req: any, res: any) {
+  try {
+    getAppInstance()(req, res);
+  } catch (err: any) {
+    console.error("[Vercel Handler Crash]", err);
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
+  }
+}
+
 
