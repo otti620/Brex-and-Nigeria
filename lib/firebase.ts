@@ -14,7 +14,7 @@ const config = {
 
 const dbId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "(default)";
 
-const isConfigured = config.apiKey && config.projectId && config.appId;
+const isConfigured = !!(config.apiKey && config.projectId && config.appId);
 
 let app: any;
 let auth: any;
@@ -25,6 +25,19 @@ if (isConfigured) {
     app = initializeApp(config);
     auth = getAuth(app);
     db = getFirestore(app, dbId);
+    
+    // Connection validation as per firebase-integration skill
+    const testConnection = async () => {
+      try {
+        const { doc, getDocFromServer } = await import('firebase/firestore');
+        await getDocFromServer(doc(db, '_health_check', 'ping'));
+      } catch (error: any) {
+        if (error.message?.includes('offline') || error.code === 'unavailable') {
+          console.error("Firestore is offline or unreachable. Please verify Internet and Firebase Project setup.");
+        }
+      }
+    };
+    testConnection();
   } catch (error) {
     console.error("Firebase initialization failed:", error);
   }

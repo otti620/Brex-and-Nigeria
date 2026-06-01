@@ -47,7 +47,17 @@ service cloud.firestore {
 
     // User Profile matching
     match /users/{userId} {
-      allow read, write: if isOwner(userId) || isSystemAdmin();
+      function isReferral() {
+        return isSignedIn() && (
+          resource.data.referredBy == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.invitationCode ||
+          resource.data.referrerUid == request.auth.uid
+        );
+      }
+
+      allow read: if isOwner(userId) || isSystemAdmin() || isReferral();
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isOwner(userId) || isSystemAdmin();
+      allow delete: if isSystemAdmin();
     }
 
     // User Transactions matching (supports collection group queries needed for the admin console)

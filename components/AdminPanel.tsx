@@ -34,6 +34,7 @@ import {
   collectionGroup, 
   query, 
   where,
+  orderBy,
   addDoc,
   setDoc,
   increment,
@@ -59,7 +60,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser }) => {
-    const { userData, approveTransaction, rejectTransaction } = useFirebase();
+    const { userData, approveTransaction, rejectTransaction, globalPlans } = useFirebase();
     const [users, setUsers] = useState<any[]>([]);
     const [pendingTxns, setPendingTxns] = useState<any[]>([]);
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
@@ -100,6 +101,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
     const [contactLine, setContactLine] = useState('+234 810 000 0000');
     const [opayAccount, setOpayAccount] = useState('8100000000');
     const [kudaAccount, setKudaAccount] = useState('2032442211');
+    const [paystackKey, setPaystackKey] = useState('');
 
     const [stats, setStats] = useState({
         totalUsers: 0,
@@ -159,7 +161,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             });
 
             // 4. Load Broadcasts
-            const bSnap = await getDocs(collection(db, 'broadcasts'));
+            const bRef = collection(db, 'broadcasts');
+            const bQuery = query(bRef, orderBy('date', 'desc'));
+            const bSnap = await getDocs(bQuery);
             setBroadcasts(bSnap.docs.map(d => ({ ...d.data(), id: d.id })));
 
             // 5. Load Support Tickets
@@ -183,13 +187,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 console.log(e);
             }
 
-            // Load VIP configuration plans from first user's investments map or default
-            if (usersData.length > 0) {
-                const firstUser = usersData.find((u: any) => u.investments && u.investments.length > 0);
-                if (firstUser) {
-                    setPlans(firstUser.investments);
-                }
-            }
+            // Load VIP configuration plans from global config
+            setPlans(globalPlans);
 
             // CMS details loading (from default or Firestore config if present)
             const cmsSnap = await getDoc(doc(db, 'config', 'platform_cms'));
@@ -198,6 +197,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 setContactLine(d.contactLine || '+234 810 000 0000');
                 setOpayAccount(d.opayAccount || '8100000000');
                 setKudaAccount(d.kudaAccount || '2032442211');
+            }
+
+            // Payment Configs
+            const paymentSnap = await getDoc(doc(db, 'config', 'payments_config'));
+            if (paymentSnap.exists()) {
+                setPaystackKey(paymentSnap.data().paystackSecretKey || '');
             }
 
         } catch (err: any) {
@@ -354,21 +359,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 dailyProfit: editPlanYield
             };
 
-            // Update user list packages
-            for (const u of users) {
-                const uRef = doc(db, 'users', u.id);
-                // We're updating standard template on all profiles
-                const userPlans = u.investments ? [...u.investments] : [];
-                const pIndex = userPlans.findIndex((p: any) => p.id === updatedPlans[index].id);
-                if (pIndex !== -1) {
-                    userPlans[pIndex].cost = editPlanPrice;
-                    userPlans[pIndex].dailyProfit = editPlanYield;
-                    await updateDoc(uRef, { investments: userPlans });
-                }
-            }
+            // Update GLOBAL config once - this reflects for all users
+            await setDoc(doc(db, 'config', 'global_vip_plans'), { plans: updatedPlans });
 
             setEditingPlanIndex(null);
-            setOperationMsg(`Configured ${updatedPlans[index].name} successfully!`);
+            setOperationMsg(`Configured ${updatedPlans[index].name} successfully! All users will see these updates immediately.`);
             await loadAdminRegistry();
         } catch(e: any) {
             setOperationError(e.message || "Plan update failed.");
@@ -429,7 +424,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 contactLine,
                 opayAccount,
                 kudaAccount
-            });
+            }, { merge: true });
+
+            await setDoc(doc(db, 'config', 'payments_config'), {
+                paystackSecretKey: paystackKey
+            }, { merge: true });
+
             setOperationMsg("Platform configurations updated successfully!");
             await loadAdminRegistry();
         } catch(err: any) {
@@ -1168,6 +1168,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                         value={kudaAccount} 
                                         onChange={(e) => setKudaAccount(e.target.value)}
                                         className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white" 
+                                    />
+                                </div>
+
+                                <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-800">
+                                    <label className="text-[9px] font-bold text-purple-400 font-mono flex gap-2">PAYSTACK LIVE SECRET KEY</label>
+                                    <input 
+                                        type="password" 
+                                        value={paystackKey} 
+                                        onChange={(e) => setPaystackKey(e.target.value)}
+                                        placeholder="sk_live_xxxxxxxxx"
+                                        className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white focus:border-purple-500" 
                                     />
                                 </div>
 

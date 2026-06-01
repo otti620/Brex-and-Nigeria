@@ -41,14 +41,14 @@ import {
 } from 'lucide-react';
 
 const CLIENT_DEFAULT_VIP_PLANS = [
-  { id: 'vip-1', name: 'Alpha Core', period: '365 Days', workingDays: 0, cost: 3000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '💎', dailyProfit: 150 },
-  { id: 'vip-2', name: 'Beta Growth', period: '365 Days', workingDays: 0, cost: 15000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '💫', dailyProfit: 900 },
-  { id: 'vip-3', name: 'Gamma Prime', period: '365 Days', workingDays: 0, cost: 50000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '🚀', dailyProfit: 3500 },
-  { id: 'vip-4', name: 'Delta Elite', period: '365 Days', workingDays: 0, cost: 150000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '👑', dailyProfit: 12000 },
-  { id: 'vip-5', name: 'Epsilon Apex', period: '365 Days', workingDays: 0, cost: 300000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '🔱', dailyProfit: 27000 },
-  { id: 'vip-6', name: 'Sigma Zenith', period: '365 Days', workingDays: 0, cost: 500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: '🌌', dailyProfit: 50000 },
-  { id: 'vip-7', name: 'Omega Imperial', period: '365 Days', workingDays: 0, cost: 1000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '🔥', dailyProfit: 110000 },
-  { id: 'vip-8', name: 'Legacy Diamond', period: '365 Days', workingDays: 0, cost: 2500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '⚡', dailyProfit: 300000 }
+  { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 150 },
+  { id: 'vip-2', name: 'Wealth Builder', period: '365 Days', workingDays: 0, cost: 15000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '📈', dailyProfit: 900 },
+  { id: 'vip-3', name: 'Revenue Stream', period: '365 Days', workingDays: 0, cost: 50000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '💧', dailyProfit: 3500 },
+  { id: 'vip-4', name: 'Asset Reserve', period: '365 Days', workingDays: 0, cost: 150000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '🏦', dailyProfit: 12000 },
+  { id: 'vip-5', name: 'Capital Fortress', period: '365 Days', workingDays: 0, cost: 300000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '🏰', dailyProfit: 27000 },
+  { id: 'vip-6', name: 'Executive Portfolio', period: '365 Days', workingDays: 0, cost: 500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: '💼', dailyProfit: 50000 },
+  { id: 'vip-7', name: 'Royal Sovereign', period: '365 Days', workingDays: 0, cost: 1000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '👑', dailyProfit: 110000 },
+  { id: 'vip-8', name: 'Diamond Infinity', period: '365 Days', workingDays: 0, cost: 2500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '💎', dailyProfit: 300000 }
 ];
 
 const SOCIAL_PROOF_DEEDS = [
@@ -58,7 +58,15 @@ const SOCIAL_PROOF_DEEDS = [
   "🇳🇬 Chioma E. subscribed to Gamma Prime • 8 mins ago",
   "🇳🇬 Gidado M. withdrew ₦8,300 successfully • 11 mins ago",
   "🇳🇬 Aminat S. deposited ₦22,000 • 15 mins ago",
-  "🇳🇬 Festus K. withdrew ₦240,500 successfully • 17 mins ago"
+  "🇳🇬 Festus K. withdrew ₦240,500 successfully • 17 mins ago",
+  "🇳🇬 Emeka U. just earned ₦15,200 referral bonus • 1 min ago",
+  "🇳🇬 Bisi A. withdrew ₦35,000 via OPay • 4 mins ago",
+  "🇳🇬 Ibrahim L. upgraded to Sigma Zenith • 6 mins ago",
+  "🇳🇬 Ngozi J. successfully withdrew ₦12,800 • 9 mins ago",
+  "🇳🇬 Hassan W. deposited ₦100,000 • 12 mins ago",
+  "🇳🇬 Tunde R. withdrew ₦55,600 successfully • 14 mins ago",
+  "🇳🇬 Zainab M. subscribed to Alpha Core • 18 mins ago",
+  "🇳🇬 Olumide S. withdrew ₦12,200 successfully • 20 mins ago"
 ];
 
 const App: React.FC = () => {
@@ -129,11 +137,6 @@ const App: React.FC = () => {
   // Fund screen states
   const [fundTab, setFundTab] = useState<'recharge' | 'withdrawal'>('recharge');
   
-  // Custom Webhook-driven Paystack Checkout simulation states
-  const [paystackShowSimulator, setPaystackShowSimulator] = useState(false);
-  const [paystackCheckingPayment, setPaystackCheckingPayment] = useState(false);
-  const [paystackReference, setPaystackReference] = useState('');
-
   // Check daily processing window: 9 AM - 2 PM WAT Monday-Saturday (Excluding Sunday)
   const checkWithdrawalAvailability = () => {
     const now = new Date();
@@ -156,56 +159,36 @@ const App: React.FC = () => {
     };
   };
 
-  const triggerPaystackCheckout = () => {
+  const triggerPaystackCheckout = async () => {
     if (rechargeAmt < 1000) {
       showToast("Minimum deposit is ₦1,000 NGN");
       return;
     }
-    const ref = `ref_ps_${Date.now()}_` + Math.floor(100+Math.random()*900);
-    setPaystackReference(ref);
-    setPaystackShowSimulator(true);
-  };
-
-  const handlePaystackWebhookAuthorize = async () => {
-    if (!userData) return;
-    setPaystackCheckingPayment(true);
-    showToast("Opening Paystack payment gateway...");
     
-    // Construct real-world Paystack charge.success webhook payload
-    const payload = {
-      event: "charge.success",
-      data: {
-        amount: rechargeAmt * 100, // kobo conversion
-        reference: paystackReference,
-        status: "success",
-        customer: {
-          email: userData.email || userData.phoneNumber.replace(/\s+/g, '') + "@seedstreet.com"
-        }
-      }
-    };
-
     try {
-      const response = await fetch("/api/webhook/paystack", {
+      showToast("Initiating secure payment...");
+      const response = await fetch("/api/payments/paystack/initialize", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: userData?.email || `${userData?.phoneNumber?.replace(/\s+/g, '')}@seedstreet.internal`,
+          amount: rechargeAmt,
+          metadata: {
+            userId: userData?.id,
+            userName: userData?.name
+          }
+        })
       });
       
-      const res = await response.json();
-      if (response.ok && res.status === "success") {
-        showToast("Success! Webhook received & account balance synchronized! 📥");
-        setPaystackShowSimulator(false);
-        setPaystackCheckingPayment(false);
-        setRechargeAmt(0);
+      const data = await response.json();
+      if (data.authorization_url) {
+        // Clear local state and redirect to Paystack
+        window.location.href = data.authorization_url;
       } else {
-        throw new Error(res.error || "Webhook endpoint returned error response");
+        showToast(data.error || "Failed to initialize payment gateway");
       }
-    } catch (err: any) {
-      console.error("Paystack simulation err: ", err);
-      showToast("Sync failed: Webhook failed to register. " + err.message);
-      setPaystackCheckingPayment(false);
+    } catch (e) {
+      showToast("Payment service is currently unreachable. Check your internet.");
     }
   };
 
@@ -339,33 +322,62 @@ const App: React.FC = () => {
     }
   }, [userData]);
 
-  // Load broadcasts for the dashboard banner
+  // Load team data when referral tree is active
+  useEffect(() => {
+    if (activeProfileOverlay === 'referral_tree' && userData) {
+      let isMounted = true;
+      const fetchTeam = async () => {
+        const data = await loadTeamData();
+        if (isMounted && data && data.members) {
+          setTeamMembers(data.members);
+        }
+      };
+      
+      fetchTeam();
+      const interval = setInterval(fetchTeam, 15000); // 15s polling for team tree
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    }
+  }, [activeProfileOverlay, userData?.uid]);
+
+  // Load broadcasts for the dashboard banner (Real-time)
   useEffect(() => {
     if (userData) {
       const fetchAnnouncements = async () => {
         try {
-          const { collection, getDocs } = await import('firebase/firestore');
+          const { collection, onSnapshot, query, orderBy } = await import('firebase/firestore');
           const { db } = await import('./lib/firebase');
-          const snap = await getDocs(collection(db, 'broadcasts'));
-          const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-          setBroadcasts(data);
+          const broadcastsRef = collection(db, 'broadcasts');
+          const q = query(broadcastsRef, orderBy('date', 'desc'));
           
-          // Auto-show notice modal if there are broadcasts and we haven't shown it this session
-          if (data.length > 0 && !hasShownNoticeThisSession) {
-            setShowNoticeModal(true);
-            setHasShownNoticeThisSession(true);
-          } else if (!hasShownTelegramThisSession) {
-            // If no notices, show telegram prompt instead
-            setShowTelegramModal(true);
-            setHasShownTelegramThisSession(true);
-          }
+          const unsub = onSnapshot(q, (snap) => {
+            const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            setBroadcasts(data);
+            
+            // Auto-show notice modal if there are broadcasts and we haven't shown it this session
+            if (data.length > 0 && !hasShownNoticeThisSession) {
+              setShowNoticeModal(true);
+              setHasShownNoticeThisSession(true);
+            } else if (!hasShownTelegramThisSession && data.length === 0) {
+              // If no notices, show telegram prompt instead
+              setShowTelegramModal(true);
+              setHasShownTelegramThisSession(true);
+            }
+          });
+          
+          return unsub;
         } catch(e) {
           console.log("No broadcasts stream loaded", e);
         }
       };
-      fetchAnnouncements();
+      const unsubPromise = fetchAnnouncements();
+      return () => {
+        unsubPromise.then(unsub => unsub && unsub());
+      };
     }
-  }, [userData]);
+  }, [userData?.uid]);
 
   // Direct redirection to dashboard on sessions found
   useEffect(() => {
@@ -911,9 +923,11 @@ const App: React.FC = () => {
         </div>
 
         {/* Dynamic Social Proof marquee banner */}
-        <div className="bg-white border border-gray-100 rounded-2xl px-4 py-3 flex items-center gap-2.5 overflow-hidden shadow-sm -mt-1 select-none">
-          <span className="flex-shrink-0 flex items-center justify-center bg-gray-50 text-blue-600 border border-gray-100 text-[8px] font-black uppercase tracking-wider font-mono rounded px-1.5 py-0.5">Latest Withdrawals</span>
-          <p className="text-gray-500 font-mono text-[9px] font-bold truncate tracking-tight">
+        <div className="bg-white border border-blue-100 rounded-[28px] px-6 py-5 flex items-center gap-4 overflow-hidden shadow-md -mt-1 select-none animate-in fade-in slide-in-from-top-4 duration-700">
+          <div className="flex-shrink-0 flex items-center justify-center bg-blue-600 text-white border border-blue-500 text-[10px] font-black uppercase tracking-wider font-mono rounded-full px-4 py-1.5 shadow-lg shadow-blue-600/20">
+            Live Feed
+          </div>
+          <p className="text-slate-900 font-mono text-[12px] font-black truncate tracking-tighter">
             {SOCIAL_PROOF_DEEDS[socialIdx]}
           </p>
         </div>
@@ -1029,6 +1043,53 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        {/* Recent Payouts Feed - Enlarged as requested */}
+        <div className="bg-white border border-slate-200 rounded-[32px] p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-5">
+            <h4 className="text-slate-900 font-black text-[13px] tracking-tight flex items-center gap-2 uppercase">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+              Latest Withdrawals
+            </h4>
+            <span className="text-[9px] font-black text-slate-400 font-mono tracking-widest uppercase">Verified Transactive</span>
+          </div>
+          
+          <div className="flex flex-col gap-4">
+            {[1, 2, 3, 4].map((i) => {
+              const names = ['Adeyemo K.', 'Tunde A.', 'Ibrahim J.', 'Ngozi O.', 'Bello S.', 'Umaru F.', 'Chioma W.'];
+              const banks = ['OPay Digital', 'PalmPay MFB', 'Moniepoint', 'Zenith Bank', 'Kuda Tech', 'FirstBank'];
+              const amounts = [12500, 24000, 8900, 15000, 42000, 10500, 6800, 31000];
+              const nameIdx = (socialIdx + i) % names.length;
+              const bankIdx = (socialIdx + i) % banks.length;
+              const amtIdx = (socialIdx + i) % amounts.length;
+              
+              return (
+                <div key={i} className="flex items-center justify-between group animate-in fade-in slide-in-from-right-4" style={{ animationDelay: `${i * 100}ms` }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-xs font-black text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
+                      {names[nameIdx].slice(0, 1)}
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black text-slate-900 tracking-tight">{names[nameIdx]}</p>
+                      <p className="text-[8px] text-slate-500 font-bold uppercase font-mono">{banks[bankIdx]}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[12px] font-black text-emerald-600 font-mono tracking-tighter">+₦{amounts[amtIdx].toLocaleString()}</p>
+                    <p className="text-[7px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Success ✅</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <button 
+            disabled
+            className="w-full mt-6 bg-slate-50 border border-slate-100 py-3 rounded-2xl text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed"
+          >
+            <RefreshCw size={12} className="animate-spin-slow opacity-30" /> View Live Registry
+          </button>
+        </div>
+
         {/* Advisor Insight */}
         <div className="bg-white border border-gray-200 rounded-[24px] p-5 font-semibold text-xs leading-relaxed">
           <div className="flex items-center gap-2 mb-2 text-black">
@@ -1134,22 +1195,21 @@ const App: React.FC = () => {
                     <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider font-mono mt-0.5">Cycle: {plan.period}</p>
                   </div>
                   <div className="text-right">
-                    <div className="bg-rose-600 text-white px-3 py-1 rounded-lg text-[10px] font-black font-mono mb-2 inline-block shadow-sm">
+                    <p className="text-[9px] font-black text-slate-400 uppercase font-mono mb-1">Project Cost</p>
+                    <div className="bg-rose-600 text-white px-4 py-1.5 rounded-xl text-[12px] font-black font-mono shadow-lg shadow-rose-600/20 active:scale-105 transition-transform">
                        ₦{plan.cost.toLocaleString()}
                     </div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase font-mono">Daily Profit</p>
-                    <p className="text-sm font-black text-blue-600 font-mono">₦{plan.dailyProfit.toLocaleString()}</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-center">
-                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5 font-mono">Yearly Revenue</p>
-                    <p className="text-sm font-black text-rose-600 font-mono">₦{(plan.dailyProfit * 365).toLocaleString()}</p>
+                  <div className="bg-emerald-50/50 border border-emerald-100 px-4 py-3 rounded-2xl text-center">
+                    <p className="text-[8px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5 font-mono">Total Annual Revenue</p>
+                    <p className="text-[15px] font-black text-emerald-700 font-mono tracking-tighter">₦{(plan.dailyProfit * 365).toLocaleString()}</p>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl text-center">
-                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5 font-mono">Profit Cycle</p>
-                    <p className="text-sm font-black text-emerald-600 font-mono">365 Days</p>
+                  <div className="bg-blue-50/50 border border-blue-100 px-4 py-3 rounded-2xl text-center">
+                    <p className="text-[8px] text-blue-600 font-bold uppercase tracking-widest mb-0.5 font-mono">Daily Yield</p>
+                    <p className="text-[15px] font-black text-blue-700 font-mono tracking-tighter">₦{plan.dailyProfit.toLocaleString()}</p>
                   </div>
                 </div>
                 
@@ -1312,7 +1372,8 @@ const App: React.FC = () => {
 
     const { canWithdraw } = checkWithdrawalAvailability();
     // Use linkedBankCode directly and ensure it's a valid string to show withdrawal amount form
-    const hasSavedPayout = userData.linkedBankCode && userData.linkedBankCode.trim() !== "";
+    // Check linkedBankCode for presence to switch from binding to withdrawal form
+    const hasSavedPayout = !!(userData?.linkedBankCode && String(userData.linkedBankCode).length >= 10);
 
     return (
       <div className="px-5 pt-8 pb-12 flex flex-col gap-6 bg-[#f8f8f8] min-h-screen">
@@ -1411,40 +1472,6 @@ const App: React.FC = () => {
             >
               <CreditCard size={20} /> Secure Recharge
             </button>
-            
-            {/* PAYSTACK SIMULATOR (HIDDEN BY DEFAULT) */}
-            {paystackShowSimulator && (
-              <div className="fixed inset-0 z-[999] bg-black/60 flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in duration-200">
-                <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
-                  <div className="bg-emerald-950 p-6 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white font-black">P</div>
-                      <div>
-                        <h4 className="text-white text-xs font-black tracking-widest uppercase">Paystack Secure</h4>
-                        <p className="text-[10px] text-emerald-400 font-mono">Test Gateway Instance</p>
-                      </div>
-                    </div>
-                    <button onClick={() => setPaystackShowSimulator(false)} className="text-white bg-white/10 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-white/20">✕</button>
-                  </div>
-                  <div className="p-8 space-y-6">
-                    <div className="text-center bg-slate-50 p-6 rounded-3xl border border-slate-100 italic font-mono">
-                      <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Confirming Payment</p>
-                      <p className="text-2xl font-black text-slate-900 italic">₦{rechargeAmt.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-blue-50 p-4 rounded-2xl text-[10px] text-blue-800 font-black leading-relaxed font-mono">
-                      🔒 Secured simulation. Authorizing will trigger a charge.success record.
-                    </div>
-                    <button 
-                      onClick={handlePaystackWebhookAuthorize}
-                      disabled={paystackCheckingPayment}
-                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4.5 rounded-[20px] font-black uppercase text-xs tracking-widest transition-all"
-                    >
-                      {paystackCheckingPayment ? "Syncing..." : "Authorize Deposit"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         ) : fundTab === 'withdrawal' ? (
           /* WITHDRAWAL FLOW */
@@ -2191,7 +2218,7 @@ const App: React.FC = () => {
                           const val = e.target.value.replace(/\D/g, '');
                           setBankSettingsAccount(val);
                           if (val.length === 10) {
-                            setBankSettingsOwner(editName ? editName.toUpperCase() + ' BINDING' : 'Oluwaseun Jonathan Binding');
+                            setBankSettingsOwner(editName ? editName.toUpperCase() + ' BINDING' : 'RECIPIENT BINDING');
                           }
                         }}
                         placeholder="7077599057"
@@ -2335,53 +2362,53 @@ const App: React.FC = () => {
               </div>
             )}
             {activeProfileOverlay === 'referral_tree' && (
-              <div className="space-y-4 font-semibold text-xs">
-                <p className="text-white text-xs font-black uppercase tracking-wider font-mono">My Referrals Map</p>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center px-1">
+                  <p className="text-white text-xs font-black uppercase tracking-wider font-mono">My Referral Team</p>
+                  <span className="bg-[#8CEE47]/10 text-[#8CEE47] text-[9px] font-black px-2 py-0.5 rounded flex items-center gap-1.5 border border-[#8CEE47]/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#8CEE47] animate-pulse" />
+                    {teamMembers.length} Active
+                  </span>
+                </div>
                 
-                {/* Visual SVG diagram drawing of user and sub-referrals */}
-                <div className="bg-[#0C1017] p-5 rounded-2xl border border-[#1E293B] relative overflow-hidden flex flex-col items-center justify-center min-h-[190px]">
-                  
-                  {/* Map Nodes SVG layout */}
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-40 animate-pulse" xmlns="http://www.w3.org/2000/svg">
-                    <line x1="50%" y1="20%" x2="20%" y2="75%" stroke="#8CEE47" strokeWidth="2" strokeDasharray="4 4" />
-                    <line x1="50%" y1="20%" x2="50%" y2="75%" stroke="#8CEE47" strokeWidth="3" />
-                    <line x1="50%" y1="20%" x2="80%" y2="75%" stroke="#8CEE47" strokeWidth="2" strokeDasharray="4 4" />
-                  </svg>
-
-                  {/* Account user */}
-                  <div className="relative z-10 w-12 h-12 bg-slate-900 border-2 border-[#8CEE47] rounded-full flex items-center justify-center text-white font-mono font-black shadow-lg shadow-[#8CEE47]/15">
-                    YOU
-                  </div>
-                  <span className="text-[9px] text-[#8CEE47] font-mono mt-1 font-black">Me</span>
-
-                  {/* Radiating referred children */}
-                  <div className="flex justify-between w-full mt-10 relative z-10 px-2 gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="w-10 h-10 bg-[#131926] border border-[#1E293B] rounded-full flex items-center justify-center text-slate-300 text-[10px] font-bold">
-                        Ayo*
+                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+                  {teamMembers.length === 0 ? (
+                    <div className="bg-[#131926] p-10 rounded-[32px] border border-[#1E293B] text-center flex flex-col items-center gap-4">
+                      <div className="w-14 h-14 bg-[#0C1017] rounded-full flex items-center justify-center text-2xl grayscale opacity-40 shadow-inner">👥</div>
+                      <div>
+                        <p className="text-white text-xs font-black uppercase tracking-tighter">No Genealogy Records</p>
+                        <p className="text-slate-500 text-[10px] font-bold mt-1 max-w-[180px] mx-auto leading-relaxed">Refer your partners to start building your wealth architecture.</p>
                       </div>
-                      <span className="text-[8px] text-slate-500 font-mono mt-1 font-bold">Active</span>
                     </div>
-
-                    <div className="flex flex-col items-center">
-                      <div className="w-10 h-10 bg-[#131926] border-2 border-[#8CEE47] rounded-full flex items-center justify-center text-[#8CEE47] text-[10px] font-black font-mono">
-                        Kun*
+                  ) : (
+                    teamMembers.map((m: any, idx: number) => (
+                      <div key={idx} className="bg-[#131926] p-4 rounded-[28px] border border-[#1E293B] flex items-center justify-between border-l-4 border-l-blue-600 transition-all hover:bg-[#1E293B]/50">
+                        <div className="flex items-center gap-3.5">
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black ${m.lvl === 1 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' : 'bg-slate-800 text-slate-500'}`}>
+                            L{m.lvl}
+                          </div>
+                          <div>
+                            <p className="text-white text-xs font-black tracking-tight">{m.phone}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase font-mono mt-0.5">{m.date}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-[10px] font-black uppercase tracking-wide ${m.recharge > 2000 ? 'text-[#8CEE47]' : 'text-slate-600'}`}>
+                             {m.recharge > 2000 ? 'Verified' : 'Pending'}
+                          </p>
+                          <p className="text-[12px] font-black text-white font-mono mt-0.5 tracking-tighter">₦{m.recharge.toLocaleString()}</p>
+                        </div>
                       </div>
-                      <span className="text-[8px] text-[#8CEE47] font-mono mt-1 font-black">Level 1 (Premium)</span>
-                    </div>
-
-                    <div className="flex flex-col items-center">
-                      <div className="w-10 h-10 bg-[#131926] border border-[#1E293B] rounded-full flex items-center justify-center text-slate-300 text-[10px] font-bold">
-                        Zay*
-                      </div>
-                      <span className="text-[8px] text-slate-500 font-mono mt-1 font-bold">Active</span>
-                    </div>
-                  </div>
+                    ))
+                  )}
                 </div>
 
-                <p className="text-[10px] leading-relaxed text-slate-400 font-medium">
-                  • Each node reflects a live Level-1 client associated through your invitation hash <span className="text-white font-bold">{userData.invitationCode}</span>.
-                </p>
+                <div className="bg-[#131926] p-4 rounded-[28px] border border-[#1E293B] flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-400">💡</div>
+                  <p className="text-[10px] leading-relaxed text-slate-400 font-semibold flex-1">
+                    Invite partners using your code <span className="text-white font-bold">{userData.invitationCode}</span> to grow your genealogy and claim rewards!
+                  </p>
+                </div>
               </div>
             )}
 

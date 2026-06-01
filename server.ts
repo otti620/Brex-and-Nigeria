@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./server-db";
@@ -25,6 +26,24 @@ async function startServer() {
   const isFirebaseConfigured = !!(firebaseServerConfig.apiKey && firebaseServerConfig.projectId);
   let serverDb: any = null;
 
+  let PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
+
+  // Helper to get Paystack Key (from env or Firestore fallback)
+  const getPaystackKey = async () => {
+    if (PAYSTACK_SECRET_KEY) return PAYSTACK_SECRET_KEY;
+    if (serverDb) {
+      try {
+        const docSnap = await getDocs(query(collection(serverDb, 'config')));
+        for (const d of docSnap.docs) {
+          if (d.id === 'payments_config' && d.data().paystackSecretKey) {
+            return d.data().paystackSecretKey;
+          }
+        }
+      } catch(e) {}
+    }
+    return "";
+  };
+
   if (isFirebaseConfigured) {
     try {
       const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
@@ -36,98 +55,137 @@ async function startServer() {
     console.warn("Firebase is not configured on the server. Webhooks will not sync to Firestore.");
   }
 
-  // Paystack Webhook Handler
+  // Paystack transaction initialization
+  app.post("/api/payments/paystack/initialize", async (req, res) => {
+    try {
+      const { email, amount, metadata } = req.body;
+      const paystackKey = await getPaystackKey();
+      
+      if (!paystackKey) {
+        return res.status(500).json({ error: "Paystack is not configured on the server. Please set the key in the Admin Panel or environment variables." });
+      }
+
+      // amount is in NGN, Paystack expects kobo
+      const amountInKobo = Math.round(Number(amount) * 100);
+
+      const response = await fetch("https://api.paystack.co/transaction/initialize", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${paystackKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          amount: amountInKobo,
+          metadata,
+          callback_url: `${req.protocol}://${req.get("host")}/?payment=success`,
+        }),
+      });
+
+      const data: any = await response.json();
+      if (!data.status) {
+        return res.status(400).json({ error: data.message || "Paystack initialization failed" });
+      }
+
+      res.json(data.data);
+    } catch (err: any) {
+      console.error("[Paystack Init Error]", err);
+      res.status(500).json({ error: "Failed to initialize payment" });
+    }
+  });
+
+  // Paystack Webhook Handler (Secure)
   app.post("/api/webhook/paystack", async (req, res) => {
-    console.log("[Paystack Webhook] Received payload: ", JSON.stringify(req.body));
+    const paystackKey = await getPaystackKey();
+    if (!paystackKey) {
+      console.error("[Paystack Webhook] Paystack Secret Key is missing.");
+      return res.status(500).send("Server not configured");
+    }
+
+    const signature = req.headers["x-paystack-signature"];
+    if (!signature) {
+      return res.status(400).send("No signature found");
+    }
+
+    // Verify signature
+    const hash = crypto
+      .createHmac("sha512", paystackKey)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+
+    if (hash !== signature) {
+      return res.status(400).send("Invalid signature");
+    }
+
+    console.log("[Paystack Webhook] Verified payload received");
+    
     try {
       const event = req.body;
-      if (!event || event.event !== "charge.success") {
-        return res.json({ status: "ignored", message: "Not a successful charge event" });
+      if (event.event !== "charge.success") {
+        return res.json({ status: "ignored" });
       }
 
       const { data } = event;
-      const amountInKobo = data.amount; // kobo (e.g. 500000 = 5000 NGN)
-      const amountNGN = Math.floor(amountInKobo / 100);
-      const email = data.customer && data.customer.email ? data.customer.email.toLowerCase().trim() : "";
-      const reference = data.reference || `ref_ps_${Date.now()}`;
+      const reference = data.reference;
+      
+      // Secondary Verification: Directly call Paystack to confirm status
+      const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+        headers: { Authorization: `Bearer ${paystackKey}` },
+      });
+      const verifyData: any = await verifyResponse.json();
 
-      if (!email || amountNGN <= 0) {
-        return res.status(400).json({ error: "Invalid webhook transaction details" });
+      if (!verifyData.status || verifyData.data.status !== "success") {
+        return res.status(400).json({ error: "Transaction verification failed at source" });
       }
 
-      console.log(`[Paystack Webhook] Executing credit of ₦${amountNGN} for user: ${email}`);
+      const verifiedAmountKobo = verifyData.data.amount;
+      const amountNGN = Math.floor(verifiedAmountKobo / 100);
+      const email = verifyData.data.customer.email.toLowerCase().trim();
 
-      // 1. Double credit sync: Local file database (if used in fallback mode)
-      try {
-        const dbLocal = loadDatabase();
-        const userLocalIdx = dbLocal.users.findIndex(u => u.email.toLowerCase() === email);
-        if (userLocalIdx !== -1) {
-          dbLocal.users[userLocalIdx].balance += amountNGN;
-          dbLocal.users[userLocalIdx].monthlyGains += Math.floor(amountNGN * 0.05);
-          dbLocal.users[userLocalIdx].transactions.unshift({
-            id: `paystack_txn_${Date.now()}`,
+      console.log(`[Paystack Webhook] Verified credit of ₦${amountNGN} for ${email}`);
+
+      // Sync to Firestore
+      if (serverDb) {
+        const usersCol = collection(serverDb, "users");
+        const q = query(usersCol, where("email", "==", email));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          const userDoc = snapshot.docs[0];
+          const userId = userDoc.id;
+          const userData = userDoc.data();
+
+          const batch = writeBatch(serverDb);
+          batch.update(doc(serverDb, 'users', userId), {
+            balance: (userData.balance || 0) + amountNGN,
+            monthlyGains: (userData.monthlyGains || 0) + Math.floor(amountNGN * 0.05)
+          });
+
+          // Insert transaction
+          const txnId = `txn_ps_${reference}`;
+          batch.set(doc(serverDb, `users/${userId}/transactions/${txnId}`), {
+            id: txnId,
+            userId: userId,
             amount: amountNGN,
             type: "recharge",
             status: "success",
             date: new Date().toISOString().slice(0, 19).replace('T', ' '),
             details: `Paystack Deposit (Ref: ${reference})`
           });
-          saveDatabase(dbLocal);
-          console.log(`[Paystack Webhook] Successfully credited local database record`);
-        }
-      } catch (localErr) {
-        console.error("[Paystack Webhook] Local database update failed: ", localErr);
-      }
 
-      // 2. Double credit sync: Real-time Cloud Firestone DB (Main production)
-      if (serverDb) {
-        try {
-          const usersCol = collection(serverDb, "users");
-          const q = query(usersCol, where("email", "==", email));
-          const snapshot = await getDocs(q);
-
-          if (snapshot.empty) {
-            console.warn(`[Paystack Webhook] No real-time Firestore user found matched to ${email}`);
-          } else {
-            const userDoc = snapshot.docs[0];
-            const userId = userDoc.id;
-            const userData = userDoc.data();
-
-            const prevBalance = userData.balance || 0;
-            const prevGains = userData.monthlyGains || 0;
-
-            const batch = writeBatch(serverDb);
-            batch.update(doc(serverDb, 'users', userId), {
-              balance: prevBalance + amountNGN,
-              monthlyGains: prevGains + Math.floor(amountNGN * 0.05)
-            });
-
-            // Insert verified transaction
-            const txnId = `txn_paystack_${Date.now()}`;
-            batch.set(doc(serverDb, `users/${userId}/transactions/${txnId}`), {
-              id: txnId,
-              userId: userId,
-              amount: amountNGN,
-              type: "recharge",
-              status: "success",
-              date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-              details: `Verified Paystack Network Credit (Ref: ${reference})`
-            });
-
-            await batch.commit();
-            console.log(`[Paystack Webhook] Firestore production records successfully incremented! User: ${userId}`);
-          }
-        } catch (firestoreErr) {
-          console.error("[Paystack Webhook] Production Firestore update failed: ", firestoreErr);
+          await batch.commit();
+          console.log(`[Paystack Webhook] Account ${userId} credited successfully`);
         }
       }
 
-      return res.status(200).json({ status: "success", message: "Accounts synchronized" });
-    } catch (err: any) {
-      console.error("[Paystack Webhook] Internal Handler Failure: ", err);
-      return res.status(500).json({ error: "Webhook handler failed" });
+      return res.status(200).json({ status: "success" });
+    } catch (err) {
+      console.error("[Paystack Webhook Store Error]", err);
+      return res.status(500).send("Webhook internal sync error");
     }
   });
+
+  // (Removed old mock webhook handler)
 
   // -------------------------
   // CUSTOM AUTH & ACCOUNT APIS
@@ -828,16 +886,29 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    // Only serve static files if not running in Vercel Serverless environment
+    if (!process.env.VERCEL) {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*all', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+  }
+
+  // Only listen directly if not in Vercel Serverless environment
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  return app;
 }
 
-startServer();
+const appPromise = startServer();
+export default async function handler(req: any, res: any) {
+  const app = await appPromise;
+  app(req, res);
+}
+
