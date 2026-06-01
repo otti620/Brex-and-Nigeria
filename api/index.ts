@@ -1,4 +1,4 @@
-import handler from "../server";
+import handler from "../dist/server.cjs";
 
 export default handler;
 
