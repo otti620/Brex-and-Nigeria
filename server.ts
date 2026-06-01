@@ -1,10 +1,9 @@
 import express from "express";
 import path from "path";
 import crypto from "crypto";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./server-db";
-import { initializeApp as initFirebaseServer } from "firebase/app";
+import { initializeApp as initFirebaseServer, getApps, getApp } from "firebase/app";
 import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch } from "firebase/firestore";
 import { getAuth as getAuthServer, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 
@@ -88,7 +87,14 @@ function startServer() {
 
   if (isFirebaseConfigured) {
     try {
-      const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
+      let serverFirebaseApp;
+      const existingApps = getApps();
+      const existing = existingApps.find(app => app.name === "server-instance");
+      if (existing) {
+        serverFirebaseApp = existing;
+      } else {
+        serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
+      }
       serverDb = getFirestoreServer(serverFirebaseApp, "(default)");
 
       // Automatically authenticate the container service as a system service account for authorized reads/writes
@@ -1204,15 +1210,19 @@ function startServer() {
     }
   });
 
-  // Vite middleware for development
+  // Vite middleware for development (dynamically imported to support production environments like Vercel)
   if (process.env.NODE_ENV !== "production") {
-    createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    }).then((vite) => {
-      app.use(vite.middlewares);
+    import("vite").then(({ createServer: createViteServer }) => {
+      createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      }).then((vite) => {
+        app.use(vite.middlewares);
+      }).catch((err) => {
+        console.error("Vite server creation failed:", err);
+      });
     }).catch((err) => {
-      console.error("Vite server creation failed:", err);
+      console.error("Vite dynamic import failed:", err);
     });
   } else {
     // Only serve static files if not running in Vercel Serverless environment
