@@ -204,6 +204,7 @@ const App: React.FC = () => {
           first_name: userData?.name?.split(' ')[0] || '',
           last_name: userData?.name?.split(' ').slice(1).join(' ') || '',
           metadata: {
+            userId: userData?.id,
             custom_fields: [
               { display_name: "User Name", variable_name: "user_name", value: userData?.name || "Unknown" },
               { display_name: "User ID", variable_name: "user_id", value: userData?.id || "Unknown" }

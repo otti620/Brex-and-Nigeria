@@ -140,7 +140,14 @@ async function startServer() {
       console.warn("[Paystack Verification] Firestore is not configured. Updating local mock DB.");
       // If serverDb is not set up, update local mock JSON DB backup
       const db = loadDatabase();
-      const idx = db.users.findIndex((u) => u.email?.toLowerCase().trim() === email);
+      const metadataUserId = verifyData.data.metadata?.userId || verifyData.data.metadata?.user_id;
+      let idx = -1;
+      if (metadataUserId) {
+        idx = db.users.findIndex((u) => u.id === metadataUserId);
+      }
+      if (idx === -1) {
+        idx = db.users.findIndex((u) => u.email?.toLowerCase().trim() === email);
+      }
       if (idx !== -1) {
         const userId = db.users[idx].id;
         const txnId = `txn_ps_${reference}`;
@@ -166,21 +173,42 @@ async function startServer() {
         console.log(`[Paystack Verification] Local account ${userId} credited successfully (₦${amountNGN})`);
         return { status: "success", amount: amountNGN, email, userId };
       }
-      throw new Error(`User with email ${email} not found in local JSON database backup`);
+      throw new Error(`User with email ${email} or metadata userId ${metadataUserId || 'N/A'} not found in local JSON database backup`);
     }
 
     // 2. Fetch User in Firestore
+    let userId: string = "";
+    let userData: any = null;
     const usersCol = collection(serverDb, "users");
-    const q = query(usersCol, where("email", "==", email));
-    const snapshot = await getDocs(q);
 
-    if (snapshot.empty) {
-      throw new Error(`User with email ${email} not found in Firestore database`);
+    const metadataUserId = verifyData.data.metadata?.userId || verifyData.data.metadata?.user_id;
+    if (metadataUserId) {
+      try {
+        const userDocRef = doc(serverDb, "users", metadataUserId);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          userId = userDocSnap.id;
+          userData = userDocSnap.data();
+          console.log(`[Paystack Verification] Found user via metadata userId: ${userId}`);
+        }
+      } catch (err) {
+        console.error("[Paystack Verification] Error looking up userId directly:", err);
+      }
     }
 
-    const userDoc = snapshot.docs[0];
-    const userId = userDoc.id;
-    const userData = userDoc.data();
+    if (!userData) {
+      const q = query(usersCol, where("email", "==", email));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        throw new Error(`User with email ${email} or metadata userId ${metadataUserId || 'N/A'} not found in Firestore database`);
+      }
+
+      const userDoc = snapshot.docs[0];
+      userId = userDoc.id;
+      userData = userDoc.data();
+      console.log(`[Paystack Verification] Found user via email fallback: ${userId}`);
+    }
 
     // 3. SECURE IDEMPOTENCY CHECK
     const txnId = `txn_ps_${reference}`;
@@ -217,7 +245,7 @@ async function startServer() {
         if (!referrerDocSnap.empty) {
           const referrerDoc = referrerDocSnap.docs[0];
           const referrerId = referrerDoc.id;
-          const referrerData = referrerDoc.data();
+          const referrerData = referrerDoc.data() as any;
           
           const bonusAmount = Math.floor(amountNGN * 0.10); // 10%
 
