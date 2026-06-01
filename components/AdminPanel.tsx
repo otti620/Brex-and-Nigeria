@@ -126,7 +126,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             // 1. Load users
             const usersSnap = await getDocs(collection(db, 'users'));
             const usersData: any[] = usersSnap.docs.map(doc => ({...doc.data(), id: doc.id}));
-            setUsers(usersData);
+            // Sort by balance descending
+            setUsers(usersData.sort((a, b) => (b.balance || 0) - (a.balance || 0)));
 
             // 2. Load all transactions
             const txnsSnap = await getDocs(query(collectionGroup(db, 'transactions')));
@@ -490,15 +491,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
     if (loading) {
         return (
-            <div className="p-8 h-full bg-[#f8f8f8] text-black flex flex-col justify-center items-center text-center gap-4 min-h-[500px]">
-                <RefreshCw size={40} className="text-[#ff9c00] animate-spin" />
-                <p className="font-extrabold text-[#ff9c00] text-xs uppercase tracking-widest font-mono">Accessing High-Security Core Ledger APIs...</p>
+            <div className="p-8 h-full bg-[#f8fafc] text-slate-900 flex flex-col justify-center items-center text-center gap-4 min-h-[500px]">
+                <RefreshCw size={40} className="text-indigo-600 animate-spin" />
+                <p className="font-extrabold text-indigo-600 text-xs uppercase tracking-widest font-mono">Accessing High-Security Core Ledger APIs...</p>
             </div>
         );
     }
 
     return (
-        <div className="p-5 h-full overflow-y-auto pb-24 bg-[#f8f8f8] text-black my-auto flex-1 md:px-8">
+        <div className="flex flex-col h-full bg-[#f8fafc]">
+            {/* SEC Educational Banner - Admin Only View as requested */}
+            <div className="bg-red-500 text-white text-[9px] font-bold text-center px-4 py-2 z-50 relative flex items-center justify-center gap-3">
+                <ShieldAlert size={14} className="shrink-0" />
+                <div className="flex flex-col sm:flex-row sm:gap-4 items-center">
+                    <span className="uppercase tracking-widest bg-red-700/50 px-1.5 py-0.5 rounded leading-none">SEC Administrative Controller</span>
+                    <span className="text-left text-[8.5px] opacity-90 leading-tight">This environment is for consumer education. Please handle user ledger funds with verified settlement only.</span>
+                </div>
+            </div>
+
+            <div className="p-5 overflow-y-auto pb-24 bg-[#f8fafc] text-slate-900 flex-1 md:px-8">
             
             {/* Header section */}
             <div className="flex flex-col gap-2 mb-6 md:flex-row md:items-center">
@@ -506,46 +517,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                     {onBack && (
                         <button 
                             onClick={onBack}
-                            className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-black active:scale-95 transition-all outline-none cursor-pointer shadow-sm"
+                            className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-900 active:scale-95 transition-all outline-none cursor-pointer shadow-sm"
                         >
                             <ArrowLeft size={16} />
                         </button>
                     )}
                     <div>
-                        <h2 className="text-xl font-black text-black tracking-tight flex items-center gap-2">
-                            Admin Dashboard <span className="bg-[#ff9c00]/20 text-[#ff9c00] border border-[#ff9c00]/30 text-[9px] px-2 py-0.5 rounded-full uppercase font-black font-mono">Secured</span>
+                        <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                            Admin Dashboard <span className="bg-indigo-600/10 text-indigo-600 border border-indigo-600/30 text-[9px] px-2 py-0.5 rounded-full uppercase font-black font-mono">Secured</span>
                         </h2>
-                        <p className="text-gray-500 text-[10px] uppercase tracking-wider font-extrabold mt-0.5">PLATFORM TELEMETRY CONTROLS ACTIVE</p>
+                        <p className="text-slate-500 text-[10px] uppercase tracking-wider font-extrabold mt-0.5">PLATFORM TELEMETRY CONTROLS ACTIVE</p>
                     </div>
                 </div>
                 
                 <div className="flex items-center gap-2 ml-auto">
                     <button 
                         onClick={loadAdminRegistry}
-                        className="w-10 h-10 rounded-xl bg-white flex items-center justify-center hover:bg-gray-50 transition-all border border-gray-200 cursor-pointer shadow-sm"
+                        className="w-10 h-10 rounded-xl bg-white flex items-center justify-center hover:bg-slate-50 transition-all border border-slate-200 cursor-pointer shadow-sm"
                         title="Reload Databases"
                     >
-                        <RefreshCw size={14} className="text-[#ff9c00]" />
+                        <RefreshCw size={14} className="text-indigo-600" />
                     </button>
                 </div>
             </div>
 
             {/* Notification and alert banner */}
             {operationMsg && (
-                <div className="bg-[#ff9c00]/10 border border-[#ff9c00]/20 text-[#ff9c00] rounded-2xl p-4 text-xs font-semibold mb-6 flex items-center justify-between">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-2xl p-4 text-xs font-semibold mb-6 flex items-center justify-between">
                     <span>{operationMsg}</span>
                     <button onClick={() => setOperationMsg('')} className="text-[10px] uppercase font-black font-mono">Dismiss</button>
                 </div>
             )}
             {operationError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl p-4 text-xs font-semibold mb-6 flex items-center justify-between">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl p-4 text-xs font-semibold mb-6 flex items-center justify-between">
                     <span>{operationError}</span>
                     <button onClick={() => setOperationError('')} className="text-[10px] uppercase font-black font-mono">Dismiss</button>
                 </div>
             )}
 
             {/* Visual Glassmorphic Grid Sidebar and Tab buttons */}
-            <div className="grid grid-cols-3 gap-1 bg-white rounded-2xl p-1 mb-6 border border-gray-200 shadow-sm md:grid-cols-9 md:text-[10px]">
+            <div className="grid grid-cols-3 gap-1 bg-white rounded-2xl p-1 mb-6 border border-slate-200 shadow-sm md:grid-cols-9 md:text-[10px]">
                 {[
                     { id: 'dashboard', label: 'Overview', icon: Activity },
                     { id: 'users', label: 'Users', icon: Users },
@@ -568,8 +579,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                             }}
                             className={`flex flex-col items-center justify-center gap-1 text-[9px] font-black uppercase py-2 rounded-xl transition-all cursor-pointer ${
                                 activeTab === item.id 
-                                ? 'bg-gray-100 text-[#ff9c00] border border-gray-200' 
-                                : 'text-gray-400 hover:text-gray-600'
+                                ? 'bg-indigo-600 text-white shadow-lg' 
+                                : 'text-slate-400 hover:text-indigo-600'
                             }`}
                         >
                             <Icon size={12} />
@@ -580,41 +591,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             </div>
 
             {/* TAB CONTAINER */}
-            <Card className="bg-white border-gray-200 p-5 rounded-[32px] shadow-sm">
+            <Card className="bg-white border-slate-200 p-5 rounded-[32px] shadow-sm">
                 
                 {/* 1. OVERVIEW & TELEMETRY */}
                 {activeTab === 'dashboard' && (
                     <div className="flex flex-col gap-6">
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-[#1a1a1a]/60 mb-1">TOTAL USERS</p>
-                                <p className="text-2xl font-black text-black font-mono">{stats.totalUsers}</p>
+                            <div className="bg-slate-50 border border-slate-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-slate-500 mb-1">TOTAL USERS</p>
+                                <p className="text-2xl font-black text-slate-900 font-mono">{stats.totalUsers}</p>
                             </div>
-                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-[#ff9c00] mb-1 font-bold">TOTAL USER BALANCE</p>
-                                <p className="text-2xl font-black text-[#ff9c00] font-mono">₦{stats.totalBalance.toLocaleString()}</p>
+                            <div className="bg-indigo-50 border border-indigo-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-indigo-600 mb-1 font-bold">TOTAL USER BALANCE</p>
+                                <p className="text-2xl font-black text-indigo-600 font-mono">₦{stats.totalBalance.toLocaleString()}</p>
                             </div>
-                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-emerald-600 mb-1">CUMULATIVE DEPOSITS</p>
+                            <div className="bg-emerald-50 border border-emerald-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-emerald-600 mb-1 font-bold">CUMULATIVE DEPOSITS</p>
                                 <p className="text-2xl font-black text-emerald-500 font-mono">₦{stats.depositsSum.toLocaleString()}</p>
                             </div>
-                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
-                                <p className="text-[9px] font-mono uppercase tracking-widest text-red-500 mb-1">TOTAL PAYOUTS</p>
-                                <p className="text-2xl font-black text-amber-500 font-mono">₦{stats.payoutsSum.toLocaleString()}</p>
+                            <div className="bg-rose-50 border border-rose-100 p-4.5 rounded-[24px]">
+                                <p className="text-[9px] font-mono uppercase tracking-widest text-rose-500 mb-1 font-bold">TOTAL PAYOUTS</p>
+                                <p className="text-2xl font-black text-rose-500 font-mono">₦{stats.payoutsSum.toLocaleString()}</p>
                             </div>
                         </div>
 
                         {/* Interactive Recharts visualizer */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
-                                <p className="text-xs font-black uppercase text-black mb-4">Financial Flow Trajectory (Deposits vs Payouts)</p>
+                            <div className="bg-slate-50 border border-slate-100 p-4.5 rounded-[24px]">
+                                <p className="text-xs font-black uppercase text-slate-900 mb-4">Financial Flow Trajectory (Deposits vs Payouts)</p>
                                 <div className="h-64">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={chartSeries}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                             <XAxis dataKey="name" stroke="#64748B" fontSize={10} />
                                             <YAxis stroke="#64748B" fontSize={10} />
-                                            <Tooltip contentStyle={{ backgroundColor: '#131926', borderColor: '#1E293B', color: '#fff' }} />
+                                            <Tooltip contentStyle={{ backgroundColor: '#fff', borderColor: '#f1f5f9', color: '#000' }} />
                                             <Bar dataKey="Deposits" fill="#10B981" radius={[4, 4, 0, 0]} />
                                             <Bar dataKey="Payouts" fill="#F59E0B" radius={[4, 4, 0, 0]} />
                                         </BarChart>
@@ -622,22 +633,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                 </div>
                             </div>
 
-                            <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-[24px]">
-                                <p className="text-xs font-black uppercase text-black mb-4">Daily Registration & Activity Growth</p>
+                            <div className="bg-slate-50 border border-slate-100 p-4.5 rounded-[24px]">
+                                <p className="text-xs font-black uppercase text-slate-900 mb-4">Daily Registration & Activity Growth</p>
                                 <div className="h-64">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={chartSeries}>
                                             <defs>
                                                 <linearGradient id="activeGrad" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#8CEE47" stopOpacity={0.2}/>
-                                                    <stop offset="95%" stopColor="#8CEE47" stopOpacity={0}/>
+                                                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2}/>
+                                                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                             <XAxis dataKey="name" stroke="#64748B" fontSize={10} />
                                             <YAxis stroke="#64748B" fontSize={10} />
-                                            <Tooltip contentStyle={{ backgroundColor: '#131926', borderColor: '#1E293B', color: '#fff' }} />
-                                            <Area type="monotone" dataKey="Active" stroke="#8CEE47" strokeWidth={3} fillOpacity={1} fill="url(#activeGrad)" />
+                                            <Tooltip contentStyle={{ backgroundColor: '#fff', borderColor: '#f1f5f9', color: '#000' }} />
+                                            <Area type="monotone" dataKey="Active" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#activeGrad)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -645,9 +656,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                         </div>
 
                         {/* Quick Audit Actions */}
-                        <div className="bg-slate-900/40 p-4 border border-[#1E293B]/50 rounded-[24px] flex items-center justify-between">
+                        <div className="bg-slate-50 p-4 border border-slate-100 rounded-[24px] flex items-center justify-between">
                             <div>
-                                <p className="font-extrabold text-sm text-slate-300">Wipe Database Diagnostics</p>
+                                <p className="font-extrabold text-sm text-slate-900">Wipe Database Diagnostics</p>
                                 <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Destructive diagnostic control for developers only</p>
                             </div>
                             <button 
@@ -689,13 +700,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                         <div key={u.id} className="bg-white border border-gray-100 p-4 rounded-[28px] flex flex-col gap-3 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-sm">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-gray-100 rounded-2xl flex items-center justify-center text-sm font-black text-[#ff9c00]">
+                                                    <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-sm font-black text-indigo-600 uppercase">
                                                         {u.name?.[0]?.toUpperCase() || 'U'}
                                                     </div>
                                                     <div>
                                                         <div className="flex items-center gap-2">
                                                             <p className="font-extrabold text-sm text-black">{u.name}</p>
-                                                            {isSubAdmin && <span className="bg-[#ff9c00]/25 text-[#ff9c00] border border-[#ff9c00]/40 text-[7px] font-black px-1.5 py-0.5 rounded font-mono">OWNER ADMIN</span>}
+                                                            {isSubAdmin && <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded font-mono">OWNER ADMIN</span>}
                                                             {u.isSuspended && <span className="bg-red-500/20 text-red-500 border border-red-500/30 text-[8px] font-black px-1.5 py-0.5 rounded font-mono">SUSPENDED</span>}
                                                         </div>
                                                         <p className="text-[10px] text-gray-500 font-mono font-bold mt-0.5">{u.email} | {u.phoneNumber || 'No phone'}</p>
@@ -729,18 +740,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                 )}
 
                                                 {/* KYC Level adjustment */}
-                                                <div className="flex items-center bg-gray-50 rounded-lg p-0.5 border border-gray-200">
-                                                    <span className="text-[8px] uppercase font-black font-mono text-gray-400 px-2">KYC {u.kycLevel || 0}</span>
-                                                    {[1, 2, 3].map(lvl => (
-                                                        <button
-                                                            key={lvl}
-                                                            onClick={() => updateKycStatus(u.id, lvl)}
-                                                            className={`text-[9px] px-2 py-1 rounded font-black font-mono cursor-pointer transition-all ${u.kycLevel === lvl ? 'bg-[#ff9c00] text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                                                        >
-                                                            L{lvl}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                    <div className="flex bg-slate-50 border border-slate-100 rounded-lg p-0.5">
+                                                        <span className="text-[8px] uppercase font-black font-mono text-slate-400 px-2">KYC {u.kycLevel || 0}</span>
+                                                        {[1, 2, 3].map(lvl => (
+                                                            <button
+                                                                key={lvl}
+                                                                onClick={() => updateKycStatus(u.id, lvl)}
+                                                                className={`text-[9px] px-2 py-1 rounded font-black font-mono cursor-pointer transition-all ${u.kycLevel === lvl ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-indigo-600'}`}
+                                                            >
+                                                                L{lvl}
+                                                            </button>
+                                                        ))}
+                                                    </div>
 
                                                 {/* Launcher Balance Adjustment Tool */}
                                                 <button
@@ -801,7 +812,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
                                                     <button 
                                                         onClick={handleBalanceAdjustment}
-                                                        className="bg-[#ff9c00] hover:bg-[#e68d00] text-black py-2 rounded-xl text-xs font-black uppercase mt-1 cursor-pointer"
+                                                        className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-black uppercase mt-1 cursor-pointer transition-all shadow-md shadow-indigo-600/20"
                                                     >
                                                         Apply Ledger Correction
                                                     </button>
@@ -855,39 +866,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                 </div>
                                             </div>
 
-                                            {/* Detailed Bank Card details */}
-                                            <div className="bg-slate-900/60 p-3 rounded-xl border border-[#1E293B]/60 text-[10px] leading-relaxed select-text font-mono text-slate-400">
+                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-[11px] text-slate-800">
                                                 {isWithdrawal ? (
-                                                    <div>
-                                                        <p className="text-slate-500 font-bold uppercase text-[8px] tracking-wider mb-1">WITHDRAWAL METHOD</p>
-                                                        <p>Bank Channel: <span className="text-white font-extrabold">{txn.bank || 'Standard Card / OPay'}</span></p>
-                                                        <p>Account Value: <span className="text-white font-extrabold">{txn.code || 'None'}</span></p>
-                                                        <p>Holder Name: <span className="text-white font-extrabold">{txn.owner || associatedUser?.name}</span></p>
+                                                    <div className="space-y-1">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Bank Details</p>
+                                                        <p className="font-bold">{txn.bank || 'Standard Bank'}</p>
+                                                        <p className="font-black text-blue-600 font-mono tracking-widest text-[11px]">{txn.code || txn.accountCode || 'N/A'}</p>
+                                                        <p className="text-[10px] font-bold uppercase opacity-60">Holder: {txn.owner || associatedUser?.name}</p>
                                                     </div>
                                                 ) : (
-                                                    <div>
-                                                        <p className="text-slate-500 font-bold uppercase text-[8px] tracking-wider mb-1">DEPOSIT DEPOSIT DETAILS</p>
-                                                        <p>Paid To Channel: <span className="text-white font-extrabold">HPay Premium Transfer</span></p>
-                                                        <p>Receipt Sender Name: <span className="text-white font-extrabold">{txn.details || associatedUser?.name}</span></p>
+                                                    <div className="space-y-1">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Deposit Details</p>
+                                                        <p className="font-bold text-emerald-600">HPay Premium Transfer</p>
+                                                        <p className="text-[9px] opacity-60">{txn.id}</p>
                                                     </div>
                                                 )}
                                             </div>
 
-                                            {/* Review Action Hooks */}
-                                            <div className="grid grid-cols-2 gap-3 pt-2">
-                                                <button 
-                                                    onClick={() => handleRejectTransaction(txn)}
-                                                    className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/25 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 cursor-pointer"
-                                                >
-                                                    <XCircle size={12} /> Reject & Refund
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleApproveTransaction(txn)}
-                                                    className="bg-[#8CEE47]/10 hover:bg-[#8CEE47]/20 text-[#8CEE47] border border-[#8CEE47]/25 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 cursor-pointer"
-                                                >
-                                                    <CheckCircle size={12} /> Approve & Credit
-                                                </button>
-                                            </div>
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <button 
+                          onClick={() => handleRejectTransaction(txn)}
+                          className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/25 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <XCircle size={12} /> Reject & Refund
+                        </button>
+                        <button 
+                          onClick={() => handleApproveTransaction(txn)}
+                          className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-600/25 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <CheckCircle size={12} /> Approve & Credit
+                        </button>
+                      </div>
                                         </div>
                                     );
                                 })}
@@ -936,7 +945,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                     />
                                                 </div>
                                                 <div className="flex flex-col gap-1">
-                                                    <label className="text-[9px] text-[#8CEE47] font-bold">DAILY PROFIT (₦)</label>
+                                                    <label className="text-[9px] text-indigo-400 font-bold">DAILY PROFIT (₦)</label>
                                                     <input 
                                                         type="number"
                                                         value={editPlanYield}
@@ -947,7 +956,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                             </div>
                                             <div className="flex gap-2 mt-1">
                                                 <button onClick={() => setEditingPlanIndex(null)} className="flex-1 py-1.5 border border-slate-700 text-slate-400 text-[10px] uppercase font-black rounded-lg cursor-pointer">Cancel</button>
-                                                <button onClick={() => handleSavePlanEdit(idx)} className="flex-1 py-1.5 bg-[#8CEE47] text-slate-900 text-[10px] uppercase font-black rounded-lg cursor-pointer">Save Configurations</button>
+                                                <button onClick={() => handleSavePlanEdit(idx)} className="flex-1 py-1.5 bg-indigo-600 text-white text-[10px] uppercase font-black rounded-lg cursor-pointer shadow-md shadow-indigo-600/20">Save Configurations</button>
                                             </div>
                                         </div>
                                     ) : (
@@ -1207,7 +1216,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                             <div className="flex justify-between items-center text-xs">
                                                 <span className="text-white font-extrabold">{u.name} ({u.invitationCode})</span>
                                                 <span className="text-slate-500 text-[10px]">Referred By:</span>
-                                                <span className="text-[#8CEE47] font-black">{referrer ? referrer.name : 'Invalid/Deleted referral'} ({u.referredBy})</span>
+                                                <span className="text-indigo-600 font-black">{referrer ? referrer.name : 'Invalid/Deleted referral'} ({u.referredBy})</span>
                                             </div>
                                             <div className="text-[10px] text-slate-500 font-semibold font-mono flex justify-between">
                                                 <span>User Balance: ₦{(u.balance || 0).toLocaleString()}</span>
@@ -1238,7 +1247,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                         <span className={`w-2 h-2 rounded-full ${
                                             lg.type === 'auth' ? 'bg-purple-500' :
                                             lg.type === 'financial' ? 'bg-emerald-500' :
-                                            lg.type === 'audit' ? 'bg-[#8CEE47]' : 'bg-slate-500'
+                                            lg.type === 'audit' ? 'bg-indigo-600' : 'bg-slate-500'
                                         }`} />
                                         <span className="text-slate-400 font-black">[{lg.type.toUpperCase()}]</span>
                                         <span className="text-white font-medium">{lg.event}</span>
@@ -1252,6 +1261,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                     </div>
                 )}
             </Card>
+            </div>
         </div>
     );
 };

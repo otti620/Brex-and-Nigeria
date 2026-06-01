@@ -49,14 +49,14 @@ const FirebaseContext = createContext<FirebaseContextType>({
 export const useFirebase = () => useContext(FirebaseContext);
 
 const CLIENT_DEFAULT_VIP_PLANS = [
-  { id: 'vip-1', name: 'VIP Level 1', period: '90 Days', workingDays: 0, cost: 3000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '⭐', dailyProfit: 150 },
-  { id: 'vip-2', name: 'VIP Level 2', period: '90 Days', workingDays: 0, cost: 15000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '🌟', dailyProfit: 900 },
-  { id: 'vip-3', name: 'VIP Level 3', period: '90 Days', workingDays: 0, cost: 50000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '🏆', dailyProfit: 3500 },
-  { id: 'vip-4', name: 'VIP Level 4', period: '90 Days', workingDays: 0, cost: 150000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '👑', dailyProfit: 12000 },
-  { id: 'vip-5', name: 'VIP Level 5', period: '90 Days', workingDays: 0, cost: 300000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '💎', dailyProfit: 27000 },
-  { id: 'vip-6', name: 'VIP Level 6', period: '90 Days', workingDays: 0, cost: 500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: '🌀', dailyProfit: 50000 },
-  { id: 'vip-7', name: 'VIP Level 7', period: '90 Days', workingDays: 0, cost: 1000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '🔥', dailyProfit: 110000 },
-  { id: 'vip-8', name: 'VIP Level 8', period: '90 Days', workingDays: 0, cost: 2500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '⚡', dailyProfit: 300000 }
+  { id: 'vip-1', name: 'Alpha Core', period: '365 Days', workingDays: 0, cost: 3000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '💎', dailyProfit: 150 },
+  { id: 'vip-2', name: 'Beta Growth', period: '365 Days', workingDays: 0, cost: 15000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '💫', dailyProfit: 900 },
+  { id: 'vip-3', name: 'Gamma Prime', period: '365 Days', workingDays: 0, cost: 50000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '🚀', dailyProfit: 3500 },
+  { id: 'vip-4', name: 'Delta Elite', period: '365 Days', workingDays: 0, cost: 150000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '👑', dailyProfit: 12000 },
+  { id: 'vip-5', name: 'Epsilon Apex', period: '365 Days', workingDays: 0, cost: 300000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '🔱', dailyProfit: 27000 },
+  { id: 'vip-6', name: 'Sigma Zenith', period: '365 Days', workingDays: 0, cost: 500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: '🌌', dailyProfit: 50000 },
+  { id: 'vip-7', name: 'Omega Imperial', period: '365 Days', workingDays: 0, cost: 1000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '🔥', dailyProfit: 110000 },
+  { id: 'vip-8', name: 'Legacy Diamond', period: '365 Days', workingDays: 0, cost: 2500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '⚡', dailyProfit: 300000 }
 ];
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -280,46 +280,56 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateBank = async (fields: any) => {
     if (!user) return;
     try {
+      // fields standard: { linkedBankName, linkedBankCode, linkedBankOwner }
       await updateDoc(doc(db, 'users', user.uid), fields);
     } catch (err) {
-      throw new Error("Failed to link payout channels");
+      throw new Error("Failed to update settlement info");
     }
   };
 
   const updateSecurity = async (password: string) => {
-    // To change password, need reauthentication, too complex for this MVP.
-    throw new Error("Changing password requires reauthentication (Not implemented in preview)");
+    // Transaction PIN removal requested, so this is just a placeholder for pass updates
+    throw new Error("Security updates limited in preview mode");
   };
 
   const recharge = async (amount: number, senderName: string) => {
     if (!user || !userData) return;
     try {
-      const newBalance = userData.balance + amount;
-      const newGains = userData.monthlyGains + Math.floor(amount * 0.05);
-
       const batch = writeBatch(db);
       
       const userRef = doc(db, 'users', user.uid);
-      batch.update(userRef, {
-        balance: newBalance,
-        monthlyGains: newGains
-      });
+      // We don't advance balance until admin approves for real HYIP flow
       
       const txnId = `txn_${Date.now()}`;
       const txnRef = doc(db, `users/${user.uid}/transactions/${txnId}`);
       batch.set(txnRef, {
         id: txnId,
         userId: user.uid,
+        userName: userData.name,
+        userPhone: userData.phoneNumber,
         amount: amount,
         type: "recharge",
         status: "pending",
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: "Deposit Submitted for Review"
+        details: `Deposit from ${senderName}`
+      });
+
+      // Also add to global admin pending queue
+      const globalRef = doc(db, 'admin_recharges', txnId);
+      batch.set(globalRef, {
+        id: txnId,
+        userId: user.uid,
+        userName: userData.name,
+        userPhone: userData.phoneNumber,
+        amount: amount,
+        senderName: senderName,
+        status: "pending",
+        date: serverTimestamp()
       });
       
       await batch.commit();
     } catch (err) {
-      throw new Error("Recharge settlement error");
+      throw new Error("Recharge submission failed");
     }
   };
 
@@ -327,27 +337,27 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!user || !userData) return;
     if (userData.balance < amount) throw new Error("Insufficient balance");
     
-    // Un-withdrawable until deposit and buy product check
+    // Check if user has joined a plan (HYIP rule)
     const hasJoinedPlan = userData.investments && userData.investments.some((p: any) => p.joined);
     if (!hasJoinedPlan) {
-      throw new Error("You must deposit and invest in at least one product to unlock withdrawals.");
+      throw new Error("You must have an active investment to unlock withdrawals.");
     }
 
     try {
-      const newBalance = userData.balance - amount;
-
       const batch = writeBatch(db);
       
+      // Deduct balance immediately
       const userRef = doc(db, 'users', user.uid);
       batch.update(userRef, {
-        balance: newBalance
+        balance: increment(-amount)
       });
       
       const txnId = `txn_${Date.now()}`;
-      const txnRef = doc(db, `users/${user.uid}/transactions/${txnId}`);
-      batch.set(txnRef, {
+      const txnData = {
         id: txnId,
         userId: user.uid,
+        userName: userData.name,
+        userPhone: userData.phoneNumber,
         amount: amount,
         type: "withdraw",
         status: "pending",
@@ -355,12 +365,22 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         code: code,
         owner: owner,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: "Instant Payout Request Submitted"
+        details: "Pending Payout Processing"
+      };
+
+      const txnRef = doc(db, `users/${user.uid}/transactions/${txnId}`);
+      batch.set(txnRef, txnData);
+
+      // Add to global admin withdrawals queue
+      const globalRef = doc(db, 'admin_withdrawals', txnId);
+      batch.set(globalRef, {
+        ...txnData,
+        date: serverTimestamp()
       });
       
       await batch.commit();
     } catch (err) {
-      throw new Error("Withdrawal failed");
+      throw new Error("Withdrawal processing error");
     }
   };
 
@@ -458,47 +478,83 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!user || !userData) return { members: [], teamSize: 0, rechargeMembers: 0 };
     
     try {
-      const q = query(
-        collection(db, 'users'), 
-        where('referredBy', '==', userData.invitationCode)
-      );
-      const snapshot = await getDocs(q);
-      const level1Members: any[] = [];
-      let totalRecharge = 0;
+      // Level 1
+      const q1 = query(collection(db, 'users'), where('referredBy', '==', userData.invitationCode));
+      const snap1 = await getDocs(q1);
+      const members: any[] = [];
+      let rechargeMembers = 0;
       
-      snapshot.forEach(docSnap => {
+      const l1Codes: string[] = [];
+      snap1.forEach(docSnap => {
         const d = docSnap.data();
-        let phoneObfuscated = "Hidden";
-        if (d.phoneNumber && d.phoneNumber.length >= 7) {
-          const digits = d.phoneNumber.replace(/[^0-9]/g, '');
-          if (digits.length >= 7) {
-             phoneObfuscated = digits.slice(0,4) + "****" + digits.slice(-3);
-          }
-        }
+        l1Codes.push(d.invitationCode);
+        const hasRecharged = d.balance > 2000;
+        if (hasRecharged) rechargeMembers++;
         
-        let hasRecharged = false;
-        if (d.balance > 3000) {
-            hasRecharged = true;
-        }
-
-        level1Members.push({
-           phone: phoneObfuscated,
-           recharge: hasRecharged ? 1 : 0,
-           withdraw: 0,
-           date: 'Recent',
-           lvl: 1
+        members.push({
+          phone: d.phoneNumber ? `***${d.phoneNumber.slice(-4)}` : 'Hidden',
+          recharge: d.balance || 0,
+          withdraw: 0,
+          date: d.date || 'Recent',
+          lvl: 1
         });
-        
-        if (hasRecharged) totalRecharge++;
       });
+
+      // Level 2 (Referred by Level 1 members)
+      const l2Codes: string[] = [];
+      if (l1Codes.length > 0) {
+        const q2 = query(collection(db, 'users'), where('referredBy', 'in', l1Codes));
+        const snap2 = await getDocs(q2);
+        snap2.forEach(docSnap => {
+          const d = docSnap.data();
+          l2Codes.push(d.invitationCode);
+          const hasRecharged = d.balance > 2000;
+          if (hasRecharged) rechargeMembers++;
+          
+          members.push({
+            phone: d.phoneNumber ? `***${d.phoneNumber.slice(-4)}` : 'Hidden',
+            recharge: d.balance || 0,
+            withdraw: 0,
+            date: d.date || 'Recent',
+            lvl: 2
+          });
+        });
+      }
+
+      // Level 3 (Referred by Level 2 members)
+      if (l2Codes.length > 0) {
+        // Break into chunks of 10 if necessary, but assuming small for now
+        const chunks = [];
+        for (let i = 0; i < l2Codes.length; i += 10) {
+          chunks.push(l2Codes.slice(i, i + 10));
+        }
+        
+        for (const chunk of chunks) {
+          const q3 = query(collection(db, 'users'), where('referredBy', 'in', chunk));
+          const snap3 = await getDocs(q3);
+          snap3.forEach(docSnap => {
+            const d = docSnap.data();
+            const hasRecharged = d.balance > 2000;
+            if (hasRecharged) rechargeMembers++;
+            
+            members.push({
+              phone: d.phoneNumber ? `***${d.phoneNumber.slice(-4)}` : 'Hidden',
+              recharge: d.balance || 0,
+              withdraw: 0,
+              date: d.date || 'Recent',
+              lvl: 3
+            });
+          });
+        }
+      }
       
       return {
-        members: level1Members,
-        teamSize: level1Members.length,
-        rechargeMembers: totalRecharge
+        members,
+        teamSize: members.length,
+        rechargeMembers
       };
     } catch (err) {
-      console.log("Failed to load real team data", err);
+      console.log("Failed to load hierarchical team data", err);
       return { members: [], teamSize: 0, rechargeMembers: 0 };
     }
   };

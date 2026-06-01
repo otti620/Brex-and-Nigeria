@@ -10,9 +10,9 @@ export const Button: React.FC<{
   disabled?: boolean;
 }> = ({ children, onClick, variant = 'primary', className = '', disabled = false }) => {
   const variants = {
-    primary: `bg-[#ff9c00] text-black shadow-lg shadow-orange-500/20 active:scale-95`,
+    primary: `bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 active:scale-95`,
     secondary: `bg-black text-white shadow-lg shadow-zinc-500/20 active:scale-95`,
-    outline: `border-2 border-[#ff9c00] text-[#ff9c00] bg-transparent active:bg-orange-50`,
+    outline: `border-2 border-indigo-600 text-indigo-600 bg-transparent active:bg-indigo-50`,
     ghost: `text-[#1F2937] hover:bg-slate-100 active:bg-slate-200`,
   };
 
@@ -42,7 +42,7 @@ export const Input: React.FC<{
       placeholder={placeholder}
       value={value}
       onChange={onChange}
-      className="bg-white border border-gray-200 px-5 py-3.5 rounded-2xl outline-none focus:border-[#ff9c00] transition-colors font-medium text-sm text-black"
+      className="bg-white border border-gray-200 px-5 py-3.5 rounded-2xl outline-none focus:border-indigo-600 transition-colors font-medium text-sm text-black"
     />
   </div>
 );

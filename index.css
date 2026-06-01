@@ -1,86 +1,72 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
   
-  --color-brand-primary: #ff9c00;
-  --color-brand-secondary: #ffcc33;
-  --color-brand-bg: #f8f8f8;
-  --color-brand-input: #f3f4f6;
-  --color-brand-text: #1a1a1a;
+  /* Primary Indigo Brand Colors */
+  --color-primary: #4f46e5;
+  --color-primary-light: #818cf8;
+  --color-primary-dark: #3730a3;
+  --color-accent: #6366f1;
 }
 
-/* ========================================== */
-/* BREX ORANGE THEME SYSTEM WIDE STYLES */
-/* ========================================== */
-
-body {
-  background-color: #f8f8f8 !important;
-  color: #1a1a1a !important;
-  font-family: 'Plus Jakarta Sans', sans-serif;
+@layer base {
+  body {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif !important;
+    @apply tracking-tight font-extrabold text-slate-900;
+  }
 }
 
-h1, h2, h3, h4, th, .h2, .font-bold, .tracking-tight, .text-xl, .text-2xl, .text-3xl {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
-  color: #1a1a1a !important;
-  font-weight: 700 !important;
-}
-
-p, span, div, td, label, button, input {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-}
-
-/* High-priority override maps for all original template tags to match screenshots */
-
-/* Background Elements */
-.bg-\[\#0C1017\] {
-  background-color: #f8f8f8 !important;
-}
-
-.bg-slate-900, .bg-slate-950, .bg-[#0a0f18] {
-  background-color: #f8f8f8 !important;
-}
-
-/* Secondary Panels & Interactive surfaces */
-.bg-\[\#131926\] {
-  background-color: #ffffff !important;
-  border-color: #e5e7eb !important;
-}
-
-/* Accents mapping to Brex Orange */
-.text-\[\#8CEE47\] {
-  color: #ff9c00 !important;
-}
-
-/* High visibility tags, buttons and interactive controls (Orange background) */
-.bg-\[\#8CEE47\], .bg-emerald-500 {
-  background-color: #ff9c00 !important;
-  color: #ffffff !important;
-}
-
-.bg-\[\#8CEE47\]\/10 {
-  background-color: rgba(255, 156, 0, 0.1) !important;
-}
-
-/* Forms & inputs customization */
-input, select, textarea {
-  background-color: #f3f4f6 !important;
-  border: 1px solid transparent !important;
-  color: #1a1a1a !important;
-}
-
-input:focus, select:focus, textarea:focus {
-  border-color: #ff9c00 !important;
-  outline: none !important;
-}
-
-/* Custom styled inputs for login/register */
+/* Custom Component Classes */
 .auth-input {
-  @apply bg-[#f3f4f6] rounded-xl px-4 py-4 w-full outline-none focus:ring-2 focus:ring-[#ff9c00]/50 transition-all text-sm font-medium;
+  @apply bg-white border border-slate-200 rounded-2xl px-5 py-4 w-full text-sm font-semibold outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-slate-900;
 }
 
 .auth-button {
-  @apply w-full bg-gradient-to-r from-[#ff9c00] to-[#ffcc33] text-black font-bold py-4 rounded-xl shadow-lg active:scale-[0.98] transition-all;
+  @apply w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl shadow-xl shadow-indigo-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2;
+}
+
+.glass-card {
+  @apply bg-white border border-slate-100 rounded-[32px] p-6 shadow-sm;
+}
+
+.btn-primary {
+  @apply bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-indigo-100 flex items-center justify-center gap-2;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.safe-pb {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+/* Overrides for dynamic elements */
+.text-brand {
+  color: #4f46e5 !important;
+}
+
+.bg-brand {
+  background-color: #4f46e5 !important;
+}
+
+.border-brand {
+  border-color: #4f46e5 !important;
+}
+
+.shadow-brand {
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2), 0 4px 6px -4px rgba(79, 70, 229, 0.1) !important;
 }
