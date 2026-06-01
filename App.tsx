@@ -297,6 +297,9 @@ const App: React.FC = () => {
             // Setup platform inline popup using the server-initialized access_code
             const paystack = (window as any).PaystackPop.setup({
               key: publicKey,
+              email: userEmail,
+              amount: Math.round(Number(rechargeAmt) * 100), // pass amount in kobo
+              ref: reference, // pass server-generated unique reference
               access_code: access_code, // Resumes/loads the transaction initialized securely on backend
               callback: function(response: any) {
                 // Successfully authorized inside the platform popup!
