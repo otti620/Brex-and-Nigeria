@@ -219,38 +219,12 @@ const App: React.FC = () => {
   const [withdrawAmt, setWithdrawAmt] = useState<number>(1000);
   const [payeeAccount, setPayeeAccount] = useState<string>('');
   const [withdrawBank, setWithdrawBank] = useState<string>('OPay');
-  const [isVerifyingPayout, setIsVerifyingPayout] = useState(false);
-  const [verifiedPayoutName, setVerifiedPayoutName] = useState<string>('');
   const [withdrawSuccessMsg, setWithdrawSuccessMsg] = useState<string>('');
   const [withdrawErrorMsg, setWithdrawErrorMsg] = useState<string>('');
   
   // Receipt Generator state
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
-
-  // Auto recipient lookup lookup simulation
-  useEffect(() => {
-    if (payeeAccount.trim().length === 10) {
-      setIsVerifyingPayout(true);
-      setVerifiedPayoutName('');
-      const timeout = setTimeout(() => {
-        setIsVerifyingPayout(false);
-        const lookupNames = [
-          'OLUWASEUN ADEBAYO',
-          'CHIDI JONATHAN NKWOCHA',
-          'ABUBAKAR ALIYU BELLO',
-          'AMARA PRECIOUS NWOSU',
-          'BASHIR TUKUR ONDO',
-          'FOLASADE KIKELOMO'
-        ];
-        const hash = payeeAccount.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        setVerifiedPayoutName(lookupNames[hash % lookupNames.length]);
-      }, 1200);
-      return () => clearTimeout(timeout);
-    } else {
-      setVerifiedPayoutName('');
-    }
-  }, [payeeAccount, withdrawBank]);
 
   // Set default account based on Bank settings
   useEffect(() => {
@@ -565,7 +539,7 @@ const App: React.FC = () => {
 
     const activeBank = userData?.linkedBankName || withdrawBank;
     const activeAccount = userData?.linkedBankCode || payeeAccount;
-    const activeOwner = userData?.linkedBankOwner || verifiedPayoutName || userData?.name || "Verified Holder";
+    const activeOwner = userData?.linkedBankOwner || userData?.name || "Verified Holder";
 
     if (withdrawAmt < 1000) {
       setWithdrawErrorMsg('Minimum payout threshold is ₦1,000');
@@ -638,17 +612,6 @@ const App: React.FC = () => {
       showToast(`Earned +₦${plan.dailyProfit.toLocaleString()} daily profit!`);
     } catch (err: any) {
       showToast(err.message || "Failed to claim daily profit. Try again.");
-    }
-  };
-
-  // Invite Simulated active partner under MyTeam
-  const handleSimulateInvite = async () => {
-    try {
-      await simulateInvite();
-      await refreshTeamData();
-      showToast(`Simulated active partner registered successfully in the database.`);
-    } catch (err: any) {
-      showToast(err.message || "Failed to simulate registration.");
     }
   };
 
@@ -1532,22 +1495,12 @@ const App: React.FC = () => {
                       placeholder="10-digit account"
                       className="bg-slate-50 border border-slate-200 text-slate-900 px-5 py-4 rounded-2xl outline-none focus:ring-4 focus:ring-blue-100 font-black text-xs font-mono"
                     />
-                    {isVerifyingPayout && (
-                      <div className="text-[9px] text-blue-600 font-black font-mono animate-pulse flex items-center gap-1">
-                        <RefreshCw size={10} className="animate-spin" /> Verifying beneficiary...
-                      </div>
-                    )}
-                    {verifiedPayoutName && (
-                      <div className="bg-blue-50 p-4 rounded-2xl text-[10px] font-black text-blue-700 mt-1 border border-blue-100 font-mono">
-                        Payee: {verifiedPayoutName} ✅
-                      </div>
-                    )}
                   </div>
 
                   <button
                     onClick={async () => {
                       if (payeeAccount.trim().length !== 10) return showToast("Account number must be 10 digits");
-                      const name = verifiedPayoutName || userData.name || "HOLDER";
+                      const name = userData.name || "HOLDER";
                       await updateBank({ linkedBankName: withdrawBank, linkedBankCode: payeeAccount, linkedBankOwner: name.toUpperCase() });
                       showToast("Bank account linked! 💳");
                     }}

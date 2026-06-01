@@ -20,7 +20,6 @@ interface FirebaseContextType {
   rejectTransaction: (txnId: string, userId: string) => Promise<any>;
   accrueYield: (planId: string) => Promise<any>;
   subscribeToPlan: (planId: string) => Promise<any>;
-  simulateInvite: () => Promise<any>;
   loadTeamData: () => Promise<any>;
   refreshProfile: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -41,7 +40,6 @@ const FirebaseContext = createContext<FirebaseContextType>({
   withdraw: async () => {},
   accrueYield: async () => {},
   subscribeToPlan: async () => {},
-  simulateInvite: async () => {},
   loadTeamData: async () => ({ members: [], teamSize: 0, rechargeMembers: 0 }),
   refreshProfile: async () => {},
   resetPassword: async () => {},
@@ -577,10 +575,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const simulateInvite = async () => {
-     // Intentionally left blank as mock data generation shouldn't be main concern here
-  };
-
   const loadTeamData = async () => {
     if (!user || !userData) return { members: [], teamSize: 0, rechargeMembers: 0 };
     
@@ -669,7 +663,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       withdraw,
       accrueYield,
       subscribeToPlan,
-      simulateInvite,
       loadTeamData,
       globalPlans,
       refreshProfile,
