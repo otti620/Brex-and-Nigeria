@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./server-db";
 import { initializeApp as initFirebaseServer } from "firebase/app";
 import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch } from "firebase/firestore";
+import { getAuth as getAuthServer, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 
 function startServer() {
   const app = express();
@@ -44,13 +45,13 @@ function startServer() {
     if (PAYSTACK_SECRET_KEY) return PAYSTACK_SECRET_KEY;
     if (serverDb) {
       try {
-        const docSnap = await getDocs(query(collection(serverDb, 'config')));
-        for (const d of docSnap.docs) {
-          if (d.id === 'payments_config' && d.data().paystackSecretKey) {
-            return d.data().paystackSecretKey;
-          }
+        const configDocSnap = await getDoc(doc(serverDb, 'config', 'payments_config'));
+        if (configDocSnap.exists() && configDocSnap.data().paystackSecretKey) {
+          return configDocSnap.data().paystackSecretKey;
         }
-      } catch(e) {}
+      } catch(e) {
+        console.error("[Paystack Key Load Error]", e);
+      }
     }
     return "";
   };
@@ -61,13 +62,13 @@ function startServer() {
     if (PAYSTACK_PUBLIC_KEY) return PAYSTACK_PUBLIC_KEY;
     if (serverDb) {
       try {
-        const docSnap = await getDocs(query(collection(serverDb, 'config')));
-        for (const d of docSnap.docs) {
-          if (d.id === 'payments_config' && d.data().paystackPublicKey) {
-            return d.data().paystackPublicKey;
-          }
+        const configDocSnap = await getDoc(doc(serverDb, 'config', 'payments_config'));
+        if (configDocSnap.exists() && configDocSnap.data().paystackPublicKey) {
+          return configDocSnap.data().paystackPublicKey;
         }
-      } catch(e) {}
+      } catch(e) {
+        console.error("[Paystack PubKey Load Error]", e);
+      }
     }
     return "";
   };
@@ -76,6 +77,37 @@ function startServer() {
     try {
       const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
       serverDb = getFirestoreServer(serverFirebaseApp, "(default)");
+
+      // Automatically authenticate the container service as a system service account for authorized reads/writes
+      const serverAuth = getAuthServer(serverFirebaseApp);
+      const serviceEmail = "backend-system-service-account@seedstreet.internal";
+      const servicePassword = "SecureBackendPassword123-SystemServer-Token!";
+
+      const loginServiceAccount = async () => {
+        try {
+          await signInWithEmailAndPassword(serverAuth, serviceEmail, servicePassword);
+          console.log("[Firebase Server Auth] System service account signed in successfully.");
+        } catch (signInErr: any) {
+          if (signInErr.code === 'auth/user-not-found' || signInErr.message?.includes('user-not-found') || signInErr.code === 'auth/invalid-credential') {
+            try {
+              await createUserWithEmailAndPassword(serverAuth, serviceEmail, servicePassword);
+              console.log("[Firebase Server Auth] System service account created and signed in successfully.");
+            } catch (createErr: any) {
+              // If creation failed but because it exists, try to log in again, otherwise log error
+              console.error("[Firebase Server Auth] System account setup fallback:", createErr.message);
+              try {
+                await signInWithEmailAndPassword(serverAuth, serviceEmail, servicePassword);
+              } catch (retryErr) {
+                console.error("[Firebase Server Auth] System account retry login failed.");
+              }
+            }
+          } else {
+            console.error("[Firebase Server Auth] System account auto-login failed:", signInErr.message);
+          }
+        }
+      };
+      
+      loginServiceAccount();
     } catch (err) {
       console.error("Firebase server initialization failed:", err);
     }
@@ -133,12 +165,17 @@ function startServer() {
       // amount is in NGN, Paystack expects kobo
       const amountInKobo = Math.round(Number(amount) * 100);
 
-      const proto = req.headers['x-forwarded-proto'] 
+      let proto = req.headers['x-forwarded-proto'] 
         ? (Array.isArray(req.headers['x-forwarded-proto']) ? req.headers['x-forwarded-proto'][0] : req.headers['x-forwarded-proto'].split(',')[0])
         : req.protocol;
       const host = req.headers['x-forwarded-host']
         ? (Array.isArray(req.headers['x-forwarded-host']) ? req.headers['x-forwarded-host'][0] : req.headers['x-forwarded-host'].split(',')[0])
         : req.get("host");
+
+      // Upgrade protocol to https on production environments to prevent Paystack mixed content errors or SSL redirection breaks
+      if (host && !host.includes("localhost") && !host.includes("127.0.0.1") && !host.includes(":3000")) {
+        proto = "https";
+      }
 
       const response = await fetch("https://api.paystack.co/transaction/initialize", {
         method: "POST",
