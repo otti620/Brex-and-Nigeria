@@ -157,9 +157,13 @@ const App: React.FC = () => {
         body: JSON.stringify({
           email: userData?.email || `${userData?.phoneNumber?.replace(/\s+/g, '')}@seedstreet.internal`,
           amount: rechargeAmt,
+          first_name: userData?.name?.split(' ')[0] || '',
+          last_name: userData?.name?.split(' ').slice(1).join(' ') || '',
           metadata: {
-            userId: userData?.id,
-            userName: userData?.name
+            custom_fields: [
+              { display_name: "User Name", variable_name: "user_name", value: userData?.name || "Unknown" },
+              { display_name: "User ID", variable_name: "user_id", value: userData?.id || "Unknown" }
+            ]
           }
         })
       });

@@ -65,7 +65,11 @@ async function startServer() {
   // Paystack transaction initialization
   app.post("/api/payments/paystack/initialize", async (req, res) => {
     try {
-      const { email, amount, metadata } = req.body;
+      if (!req.body) {
+        return res.status(400).json({ error: "Missing request body. Make sure Content-Type is application/json" });
+      }
+
+      const { email, amount, metadata, first_name, last_name } = req.body;
       const paystackKey = await getPaystackKey();
       
       if (!paystackKey) {
@@ -84,6 +88,8 @@ async function startServer() {
         body: JSON.stringify({
           email,
           amount: amountInKobo,
+          first_name,
+          last_name,
           metadata,
           callback_url: `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers['x-forwarded-host'] || req.get("host")}/?payment=success`,
         }),
@@ -103,6 +109,9 @@ async function startServer() {
 
   // Paystack Webhook Handler (Secure)
   app.post("/api/webhook/paystack", async (req, res) => {
+    if (!req.body) {
+      return res.status(400).send("No body");
+    }
     const paystackKey = await getPaystackKey();
     if (!paystackKey) {
       console.error("[Paystack Webhook] Paystack Secret Key is missing.");
@@ -952,6 +961,10 @@ async function startServer() {
 const appPromise = startServer();
 export default async function handler(req: any, res: any) {
   const app = await appPromise;
-  app(req, res);
+  await new Promise((resolve) => {
+    res.on('finish', resolve);
+    res.on('close', resolve);
+    app(req, res);
+  });
 }
 
