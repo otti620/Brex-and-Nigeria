@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./server-db";
 import { initializeApp as initFirebaseServer } from "firebase/app";
-import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, writeBatch } from "firebase/firestore";
+import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch } from "firebase/firestore";
 
 async function startServer() {
   const app = express();
@@ -18,7 +18,11 @@ async function startServer() {
     }
     next();
   });
-  app.use(express.json());
+  app.use(express.json({
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf;
+    }
+  }));
 
   // Server-side Firebase integration for webhook processing
   const firebaseServerConfig = {
@@ -79,6 +83,13 @@ async function startServer() {
       // amount is in NGN, Paystack expects kobo
       const amountInKobo = Math.round(Number(amount) * 100);
 
+      const proto = req.headers['x-forwarded-proto'] 
+        ? (Array.isArray(req.headers['x-forwarded-proto']) ? req.headers['x-forwarded-proto'][0] : req.headers['x-forwarded-proto'].split(',')[0])
+        : req.protocol;
+      const host = req.headers['x-forwarded-host']
+        ? (Array.isArray(req.headers['x-forwarded-host']) ? req.headers['x-forwarded-host'][0] : req.headers['x-forwarded-host'].split(',')[0])
+        : req.get("host");
+
       const response = await fetch("https://api.paystack.co/transaction/initialize", {
         method: "POST",
         headers: {
@@ -91,7 +102,7 @@ async function startServer() {
           first_name,
           last_name,
           metadata,
-          callback_url: `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers['x-forwarded-host'] || req.get("host")}/?payment=success`,
+          callback_url: `${proto}://${host}/?payment=success`,
         }),
       });
 
@@ -106,6 +117,137 @@ async function startServer() {
       res.status(500).json({ error: "Failed to initialize payment" });
     }
   });
+
+  // Helper function to verify a transaction reference on Paystack, credit the user, and pay referrals
+  async function creditUserForPaystackTransaction(reference: string, paystackKey: string, serverDb: any) {
+    // 1. Verify transaction status directly from Paystack API
+    const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${paystackKey}` },
+    });
+    const verifyData: any = await verifyResponse.json();
+
+    if (!verifyData.status || verifyData.data.status !== "success") {
+      throw new Error("Transaction verification failed at source (Paystack returned error or pending status)");
+    }
+
+    const verifiedAmountKobo = verifyData.data.amount;
+    const amountNGN = Math.floor(verifiedAmountKobo / 100);
+    const email = verifyData.data.customer.email.toLowerCase().trim();
+
+    console.log(`[Paystack Verification] Confirmed ₦${amountNGN} payment for customer ${email} using reference ${reference}`);
+
+    if (!serverDb) {
+      console.warn("[Paystack Verification] Firestore is not configured. Updating local mock DB.");
+      // If serverDb is not set up, update local mock JSON DB backup
+      const db = loadDatabase();
+      const idx = db.users.findIndex((u) => u.email?.toLowerCase().trim() === email);
+      if (idx !== -1) {
+        const userId = db.users[idx].id;
+        const txnId = `txn_ps_${reference}`;
+        
+        // Idempotency check 
+        const exists = db.users[idx].transactions.some((t: any) => t.id === txnId);
+        if (exists) {
+          console.log(`[Paystack Verification] Local Transaction ${txnId} already processed previously.`);
+          return { status: "already_processed", amount: amountNGN, email, userId };
+        }
+
+        db.users[idx].balance += amountNGN;
+        db.users[idx].monthlyGains += Math.floor(amountNGN * 0.05);
+        db.users[idx].transactions.unshift({
+          id: txnId,
+          amount: amountNGN,
+          type: "recharge",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Paystack Deposit (Ref: ${reference})`
+        });
+        saveDatabase(db);
+        console.log(`[Paystack Verification] Local account ${userId} credited successfully (₦${amountNGN})`);
+        return { status: "success", amount: amountNGN, email, userId };
+      }
+      throw new Error(`User with email ${email} not found in local JSON database backup`);
+    }
+
+    // 2. Fetch User in Firestore
+    const usersCol = collection(serverDb, "users");
+    const q = query(usersCol, where("email", "==", email));
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      throw new Error(`User with email ${email} not found in Firestore database`);
+    }
+
+    const userDoc = snapshot.docs[0];
+    const userId = userDoc.id;
+    const userData = userDoc.data();
+
+    // 3. SECURE IDEMPOTENCY CHECK
+    const txnId = `txn_ps_${reference}`;
+    const txnRef = doc(serverDb, `users/${userId}/transactions/${txnId}`);
+    const txnSnap = await getDoc(txnRef);
+
+    if (txnSnap.exists()) {
+      console.log(`[Paystack Verification] Transaction ${txnId} already registered in Firestore previously. Skipping double credit.`);
+      return { status: "already_processed", amount: amountNGN, email, userId };
+    }
+
+    // 4. Batch transaction updates to avoid race conditions and ensure atomicity
+    const batch = writeBatch(serverDb);
+    batch.update(doc(serverDb, 'users', userId), {
+      balance: (userData.balance || 0) + amountNGN,
+      monthlyGains: (userData.monthlyGains || 0) + Math.floor(amountNGN * 0.05)
+    });
+
+    batch.set(txnRef, {
+      id: txnId,
+      userId: userId,
+      amount: amountNGN,
+      type: "recharge",
+      status: "success",
+      date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      details: `Paystack Deposit (Ref: ${reference})`
+    });
+
+    // Process 10% Referral Bonus
+    if (userData.referrerId || userData.invitedBy) {
+      const referrerTargetId = userData.referrerId || userData.invitedBy;
+      try {
+        const referrerDocSnap = await getDocs(query(usersCol, where("inviteCode", "==", referrerTargetId)));
+        if (!referrerDocSnap.empty) {
+          const referrerDoc = referrerDocSnap.docs[0];
+          const referrerId = referrerDoc.id;
+          const referrerData = referrerDoc.data();
+          
+          const bonusAmount = Math.floor(amountNGN * 0.10); // 10%
+
+          batch.update(doc(serverDb, 'users', referrerId), {
+            balance: (referrerData.balance || 0) + bonusAmount,
+            referralBonus: (referrerData.referralBonus || 0) + bonusAmount,
+          });
+
+          const bonusTxnId = `txn_bonus_${reference}`;
+          batch.set(doc(serverDb, `users/${referrerId}/transactions/${bonusTxnId}`), {
+            id: bonusTxnId,
+            userId: referrerId,
+            amount: bonusAmount,
+            type: "earning",
+            status: "success",
+            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            details: `Referral Bonus (10% from team recharge)`
+          });
+          
+          console.log(`[Paystack Verification] Credited 10% referral bonus (₦${bonusAmount}) to referrer ${referrerId}`);
+        }
+      } catch (refErr) {
+        console.error("[Paystack Verification] Failed to process referral bonus:", refErr);
+      }
+    }
+
+    await batch.commit();
+    console.log(`[Paystack Verification] Firestore account ${userId} credited successfully for ₦${amountNGN}`);
+    return { status: "success", amount: amountNGN, email, userId };
+  }
 
   // Paystack Webhook Handler (Secure)
   app.post("/api/webhook/paystack", async (req, res) => {
@@ -126,14 +268,15 @@ async function startServer() {
     // Verify signature
     const hash = crypto
       .createHmac("sha512", paystackKey)
-      .update(JSON.stringify(req.body))
+      .update((req as any).rawBody || JSON.stringify(req.body))
       .digest("hex");
 
     if (hash !== signature) {
+      console.error("[Paystack Webhook] Signature mismatch. Received:", signature, "Computed:", hash);
       return res.status(400).send("Invalid signature");
     }
 
-    console.log("[Paystack Webhook] Verified payload received");
+    console.log("[Paystack Webhook] Verified payload received successfully");
     
     try {
       const event = req.body;
@@ -143,97 +286,41 @@ async function startServer() {
 
       const { data } = event;
       const reference = data.reference;
-      
-      // Secondary Verification: Directly call Paystack to confirm status
-      const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-        headers: { Authorization: `Bearer ${paystackKey}` },
+
+      // Handle credit and referrers safely using our verification helper
+      const creditResult = await creditUserForPaystackTransaction(reference, paystackKey, serverDb);
+      return res.status(200).json({ status: "success", result: creditResult.status });
+    } catch (err: any) {
+      console.error("[Paystack Webhook Error]", err);
+      return res.status(500).send(err.message || "Webhook internal processing error");
+    }
+  });
+
+  // Paystack Secure Server-Side Manual/Redirect Verification API
+  app.post("/api/payments/paystack/verify", async (req, res) => {
+    try {
+      const { reference } = req.body;
+      if (!reference) {
+        return res.status(400).json({ error: "Missing transaction reference in payload body" });
+      }
+
+      const paystackKey = await getPaystackKey();
+      if (!paystackKey) {
+        return res.status(500).json({ error: "Paystack Secret Key is not configured on the server." });
+      }
+
+      const result = await creditUserForPaystackTransaction(reference, paystackKey, serverDb);
+      return res.json({
+        success: true,
+        status: result.status,
+        amount: result.amount,
+        message: result.status === "already_processed"
+          ? "Payment has already been credited to your balance!"
+          : `Successfully verified and credited ₦${result.amount.toLocaleString()} NGN into account balance!`
       });
-      const verifyData: any = await verifyResponse.json();
-
-      if (!verifyData.status || verifyData.data.status !== "success") {
-        return res.status(400).json({ error: "Transaction verification failed at source" });
-      }
-
-      const verifiedAmountKobo = verifyData.data.amount;
-      const amountNGN = Math.floor(verifiedAmountKobo / 100);
-      const email = verifyData.data.customer.email.toLowerCase().trim();
-
-      console.log(`[Paystack Webhook] Verified credit of ₦${amountNGN} for ${email}`);
-
-      // Sync to Firestore
-      if (serverDb) {
-        const usersCol = collection(serverDb, "users");
-        const q = query(usersCol, where("email", "==", email));
-        const snapshot = await getDocs(q);
-
-        if (!snapshot.empty) {
-          const userDoc = snapshot.docs[0];
-          const userId = userDoc.id;
-          const userData = userDoc.data();
-
-          const batch = writeBatch(serverDb);
-          batch.update(doc(serverDb, 'users', userId), {
-            balance: (userData.balance || 0) + amountNGN,
-            monthlyGains: (userData.monthlyGains || 0) + Math.floor(amountNGN * 0.05)
-          });
-
-          // Insert transaction for the user
-          const txnId = `txn_ps_${reference}`;
-          batch.set(doc(serverDb, `users/${userId}/transactions/${txnId}`), {
-            id: txnId,
-            userId: userId,
-            amount: amountNGN,
-            type: "recharge",
-            status: "success",
-            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            details: `Paystack Deposit (Ref: ${reference})`
-          });
-
-          // Process 10% Referral Bonus
-          if (userData.referrerId || userData.invitedBy) {
-            const referrerTargetId = userData.referrerId || userData.invitedBy;
-            try {
-              const referrerDocSnap = await getDocs(query(usersCol, where("inviteCode", "==", referrerTargetId)));
-              if (!referrerDocSnap.empty) {
-                const referrerDoc = referrerDocSnap.docs[0];
-                const referrerId = referrerDoc.id;
-                const referrerData = referrerDoc.data();
-                
-                const bonusAmount = Math.floor(amountNGN * 0.10); // 10%
-
-                batch.update(doc(serverDb, 'users', referrerId), {
-                  balance: (referrerData.balance || 0) + bonusAmount,
-                  referralBonus: (referrerData.referralBonus || 0) + bonusAmount,
-                });
-
-                // Insert referral bonus transaction for referrer
-                const bonusTxnId = `txn_bonus_${reference}`;
-                batch.set(doc(serverDb, `users/${referrerId}/transactions/${bonusTxnId}`), {
-                  id: bonusTxnId,
-                  userId: referrerId,
-                  amount: bonusAmount,
-                  type: "earning",
-                  status: "success",
-                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                  details: `Referral Bonus (10% from team recharge)`
-                });
-                
-                console.log(`[Paystack Webhook] Credited 10% referral bonus (₦${bonusAmount}) to ${referrerId}`);
-              }
-            } catch (refErr) {
-              console.error("[Paystack Webhook] Failed to process referral bonus:", refErr);
-            }
-          }
-
-          await batch.commit();
-          console.log(`[Paystack Webhook] Account ${userId} credited successfully`);
-        }
-      }
-
-      return res.status(200).json({ status: "success" });
-    } catch (err) {
-      console.error("[Paystack Webhook Store Error]", err);
-      return res.status(500).send("Webhook internal sync error");
+    } catch (err: any) {
+      console.error("[Paystack Verify API Error]", err);
+      return res.status(400).json({ error: err.message || "Failed to verify transaction with Paystack" });
     }
   });
 

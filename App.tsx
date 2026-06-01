@@ -75,11 +75,55 @@ const App: React.FC = () => {
   
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('payment') === 'success') {
-      // Small timeout to allow Toast system to initialize if it depends on mount
-      setTimeout(() => {
-        setToastMessage("Payment processed! Your balance will update momentarily.");
-      }, 500);
+    const reference = params.get('reference') || params.get('trxref');
+    const paymentSuccess = params.get('payment') === 'success';
+
+    if (reference || paymentSuccess) {
+      const verifyPaymentReference = async (ref: string) => {
+        // Small timeout to allow Toast and component state initialization
+        await new Promise(resolve => setTimeout(resolve, 800));
+        showToast("Verifying payment with Paystack secure server...");
+        try {
+          const response = await fetch("/api/payments/paystack/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ reference: ref })
+          });
+          const textRes = await response.text();
+          let data;
+          try {
+            data = JSON.parse(textRes);
+          } catch(e) {
+            console.error("Non-JSON verify response:", textRes);
+            showToast("Server returned invalid response. Checking backend...");
+            return;
+          }
+
+          if (response.ok && data?.success) {
+            showToast(data.message || "Payment verified and credited!");
+            // Refresh user profile so the UI instantly updates the balance
+            refreshProfile();
+          } else {
+            showToast(data?.error || "We're verifying your payment. Your balance will sync shortly.");
+          }
+        } catch (err) {
+          console.error("Verification error:", err);
+          showToast("Network is busy. Our webhook will automatically credit your deposit.");
+        }
+      };
+
+      if (reference) {
+        verifyPaymentReference(reference);
+      } else if (paymentSuccess) {
+        setTimeout(() => {
+          showToast("Payment processed! Your balance will update momentarily.");
+          refreshProfile();
+        }, 800);
+      }
+
+      // Clear the query params from browser address bar as UX and security best practice
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
@@ -168,12 +212,26 @@ const App: React.FC = () => {
         })
       });
       
-      const data = await response.json();
-      if (data.authorization_url) {
+      let data;
+      try {
+        const textResponse = await response.text();
+        try {
+          data = JSON.parse(textResponse);
+        } catch (e) {
+          console.error("Non-JSON Response from Server:", textResponse);
+          showToast("Payment server error. Please try again.");
+          return;
+        }
+      } catch (e) {
+        showToast("Network error reading response");
+        return;
+      }
+
+      if (response.ok && data?.authorization_url) {
         // Clear local state and redirect to Paystack
         window.location.href = data.authorization_url;
       } else {
-        showToast(data.error || "Failed to initialize payment gateway");
+        showToast(data?.error || "Failed to initialize payment gateway");
       }
     } catch (e: any) {
       showToast("Payment service unreachable: " + (e.message || "Network error"));
