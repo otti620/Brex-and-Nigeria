@@ -1253,7 +1253,17 @@ let appInstance: any = null;
 
 function getAppInstance() {
   if (!appInstance) {
-    appInstance = startServer();
+    try {
+      console.log("[DEBUG] Initializing Express app...");
+      appInstance = startServer();
+      console.log("[DEBUG] Express app initialized successfully.");
+    } catch (err) {
+      console.error("[IMPORTANT: Server Initialization Crash]", err);
+      // Return a dummy handler to prevent module-level crash
+      return (req: any, res: any) => {
+        res.status(500).json({ error: "Server Initialization Failed", details: String(err) });
+      };
+    }
   }
   return appInstance;
 }
