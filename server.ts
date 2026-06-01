@@ -41,7 +41,11 @@ function startServer() {
   const ensureAuthenticated = async () => {
     if (loginPromise) {
       try {
-        await loginPromise;
+        // Run with a 4-second timeout to avoid blocking serverless functions indefinitely
+        await Promise.race([
+          loginPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Firebase Auth Timed Out")), 4000))
+        ]);
       } catch (e) {
         console.error("Error awaiting loginPromise:", e);
       }
