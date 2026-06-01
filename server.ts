@@ -11,6 +11,13 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Fix for Vercel serverless environment body parsing
+  app.use((req: any, res, next) => {
+    if (req.body && typeof req.body === 'object') {
+      req._body = true;
+    }
+    next();
+  });
   app.use(express.json());
 
   // Server-side Firebase integration for webhook processing

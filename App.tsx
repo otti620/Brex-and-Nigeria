@@ -73,6 +73,17 @@ const App: React.FC = () => {
 
   const isSpecificAdmin = userData?.isAdmin;
   
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      // Small timeout to allow Toast system to initialize if it depends on mount
+      setTimeout(() => {
+        setToastMessage("Payment processed! Your balance will update momentarily.");
+      }, 500);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   // Custom alerts/toast system
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => {
