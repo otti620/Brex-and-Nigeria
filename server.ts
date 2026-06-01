@@ -37,12 +37,24 @@ function startServer() {
 
   const isFirebaseConfigured = !!(firebaseServerConfig.apiKey && firebaseServerConfig.projectId);
   let serverDb: any = null;
+  let loginPromise: Promise<void> | null = null;
+
+  const ensureAuthenticated = async () => {
+    if (loginPromise) {
+      try {
+        await loginPromise;
+      } catch (e) {
+        console.error("Error awaiting loginPromise:", e);
+      }
+    }
+  };
 
   let PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
 
   // Helper to get Paystack Key (from env or Firestore fallback)
   const getPaystackKey = async () => {
     if (PAYSTACK_SECRET_KEY) return PAYSTACK_SECRET_KEY;
+    await ensureAuthenticated();
     if (serverDb) {
       try {
         const configDocSnap = await getDoc(doc(serverDb, 'config', 'payments_config'));
@@ -60,6 +72,7 @@ function startServer() {
   const getPaystackPublicKey = async () => {
     let PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || "";
     if (PAYSTACK_PUBLIC_KEY) return PAYSTACK_PUBLIC_KEY;
+    await ensureAuthenticated();
     if (serverDb) {
       try {
         const configDocSnap = await getDoc(doc(serverDb, 'config', 'payments_config'));
@@ -107,7 +120,7 @@ function startServer() {
         }
       };
       
-      loginServiceAccount();
+      loginPromise = loginServiceAccount();
     } catch (err) {
       console.error("Firebase server initialization failed:", err);
     }
@@ -119,10 +132,23 @@ function startServer() {
   app.get("/api/payments/paystack/config", async (req, res) => {
     try {
       const publicKey = await getPaystackPublicKey();
-      res.json({ publicKey });
+      const secretKey = await getPaystackKey();
+      res.json({ 
+        publicKey,
+        hasSecretKey: !!secretKey,
+        secretKeyPrefix: secretKey ? secretKey.substring(0, 7) + "..." : "none",
+        firebaseConfigured: isFirebaseConfigured,
+        serverDbActive: !!serverDb
+      });
     } catch (err: any) {
       console.error("[Paystack Config Error]", err);
-      res.json({ publicKey: "" });
+      res.json({ 
+        publicKey: "",
+        hasSecretKey: false,
+        firebaseConfigured: isFirebaseConfigured,
+        serverDbActive: !!serverDb,
+        error: err.message || String(err)
+      });
     }
   });
 
@@ -137,7 +163,14 @@ function startServer() {
       const paystackKey = await getPaystackKey();
       
       if (!paystackKey) {
-        return res.status(500).json({ error: "Paystack is not configured on the server. Please set the key in the Admin Panel or environment variables." });
+        return res.status(500).json({ 
+          error: "Paystack Secret Key is not configured on the server. Please define PAYSTACK_SECRET_KEY in your hosting platform environment variables OR configure it under System Rules / Admin Panel.",
+          debug: {
+            resolvedKeyStatus: "Missing / Empty String",
+            firebaseConfigured: isFirebaseConfigured,
+            serverDbActive: !!serverDb
+          }
+        });
       }
 
       // Check and sanitize email to avoid Paystack API errors
@@ -177,36 +210,75 @@ function startServer() {
         proto = "https";
       }
 
-      const response = await fetch("https://api.paystack.co/transaction/initialize", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${paystackKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: cleanEmail,
-          amount: amountInKobo,
-          first_name,
-          last_name,
-          metadata,
-          callback_url: callback_url || `${proto}://${host}/?payment=success`,
-        }),
-      });
+      let responseText = "";
+      let responseJson: any = null;
+      let isJson = false;
 
-      const data: any = await response.json();
-      if (!data.status) {
-        return res.status(400).json({ error: data.message || "Paystack initialization failed" });
+      let response;
+      try {
+        response = await fetch("https://api.paystack.co/transaction/initialize", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${paystackKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: cleanEmail,
+            amount: amountInKobo,
+            first_name,
+            last_name,
+            metadata,
+            callback_url: callback_url || `${proto}://${host}/?payment=success`,
+          }),
+        });
+        
+        responseText = await response.text();
+        try {
+          responseJson = JSON.parse(responseText);
+          isJson = true;
+        } catch (e) {
+          isJson = false;
+        }
+      } catch (fetchErr: any) {
+        return res.status(502).json({
+          error: "Failed to connect to Paystack transaction API.",
+          details: fetchErr.message || String(fetchErr),
+          debug: {
+            endpoint: "https://api.paystack.co/transaction/initialize",
+            hasSecretKey: true,
+            secretKeyPrefix: paystackKey ? paystackKey.substring(0, 7) + "..." : "none"
+          }
+        });
       }
 
-      res.json(data.data);
+      if (!response.ok || (isJson && !responseJson.status)) {
+        return res.status(response.status || 400).json({
+          error: responseJson?.message || `Paystack API returned an error status code ${response.status}`,
+          details: isJson ? responseJson : responseText,
+          debug: {
+            httpStatus: response.status,
+            hasSecretKey: true,
+            secretKeyPrefix: paystackKey ? paystackKey.substring(0, 7) + "..." : "none",
+            cleanEmail,
+            originalAmount: amount,
+            amountInKobo
+          }
+        });
+      }
+
+      res.json(responseJson.data);
     } catch (err: any) {
       console.error("[Paystack Init Error]", err);
-      res.status(500).json({ error: "Failed to initialize payment" });
+      res.status(500).json({ 
+        error: "An unexpected server crash occurred while communicating with Paystack",
+        details: err.message || String(err)
+      });
     }
   });
 
   // Helper function to verify a transaction reference on Paystack, credit the user, and pay referrals
   async function creditUserForPaystackTransaction(reference: string, paystackKey: string, serverDb: any) {
+    await ensureAuthenticated();
     // 1. Verify transaction status directly from Paystack API
     const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${paystackKey}` },

@@ -53,7 +53,8 @@ export interface DbUser {
   transactions: TransactionRecord[];
 }
 
-const DB_DIR = path.join(process.cwd(), "data");
+const isVercel = !!process.env.VERCEL;
+const DB_DIR = isVercel ? "/tmp" : path.join(process.cwd(), "data");
 const DB_FILE = path.join(DB_DIR, "database.json");
 
 // Define VIP Level Products (as requested: VIP1 up to VIP8 with varied prices & rewards)
@@ -181,6 +182,17 @@ export function loadDatabase(): { users: DbUser[] } {
   try {
     if (!fs.existsSync(DB_DIR)) {
       fs.mkdirSync(DB_DIR, { recursive: true });
+    }
+    if (isVercel && !fs.existsSync(DB_FILE)) {
+      const originalPath = path.join(process.cwd(), "data", "database.json");
+      if (fs.existsSync(originalPath)) {
+        try {
+          fs.copyFileSync(originalPath, DB_FILE);
+          console.log("[Vercel Temp DB] Copying initial database.json seed from bundle to /tmp/database.json");
+        } catch (copyErr) {
+          console.error("[Vercel Temp DB] Failed to copy bundled database.json seed:", copyErr);
+        }
+      }
     }
     if (!fs.existsSync(DB_FILE)) {
       const initialDb = {

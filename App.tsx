@@ -193,6 +193,7 @@ const App: React.FC = () => {
       return;
     }
     
+    setPaymentErrorDetails(null);
     try {
       showToast("Preparing secure checkout...");
       
@@ -240,37 +241,58 @@ const App: React.FC = () => {
         })
       });
       
-      let data;
+      let data: any = null;
+      let textResponse = "";
       try {
-        const textResponse = await response.text();
+        textResponse = await response.text();
         try {
           data = JSON.parse(textResponse);
-        } catch (e) {
-          console.error("Non-JSON Response:", textResponse);
-          showToast("Payment server error.");
+        } catch (jsonErr) {
+          console.error("Non-JSON Response from Paystack init:", textResponse);
+          setPaymentErrorDetails({
+            error: "The server returned a raw, non-JSON error. This indicates that server is misconfigured, unreachable, or crashed with status " + response.status,
+            details: textResponse,
+            debug: { httpStatus: response.status, url: "/api/payments/paystack/initialize" }
+          });
+          showToast("Payment server returned an unparseable error response.");
           return;
         }
-      } catch (e) {
-        showToast("Network error reading response.");
+      } catch (readErr: any) {
+        setPaymentErrorDetails({
+          error: "Failed to read response body from backend.",
+          details: readErr.message || String(readErr)
+        });
+        showToast("Network error reading payment response.");
         return;
       }
 
       if (!response.ok || !data?.authorization_url || !data?.access_code) {
-        showToast(data?.error || "Failed to initialize payment gateway.");
+        const primaryError = data?.error || data?.message || "Failed to initialize payment gateway.";
+        setPaymentErrorDetails({
+          error: primaryError,
+          details: data?.details || data,
+          debug: data?.debug || { httpStatus: response.status, userEmail, rechargeAmt }
+        });
+        showToast(primaryError);
         return;
       }
 
       const { authorization_url, access_code, reference } = data;
 
-      // 2. Try to get public key
+      // 2. Try to get public key & configurations
       let publicKey = "";
+      let configDetails: any = null;
       try {
         const configRes = await fetch("/api/payments/paystack/config");
         if (configRes.ok) {
           const configData = await configRes.json().catch(() => ({}));
           publicKey = configData?.publicKey;
+          configDetails = configData;
+        } else {
+          configDetails = { error: `HTTP status ${configRes.status}` };
         }
-      } catch (err) {
+      } catch (err: any) {
+        configDetails = { error: err.message || String(err) };
         console.warn("Could not retrieve public key:", err);
       }
 
@@ -312,16 +334,39 @@ const App: React.FC = () => {
             
             paystack.openIframe();
             return;
-          } catch (setupErr) {
+          } catch (setupErr: any) {
             console.error("PaystackPop.setup failed, falling back to redirect:", setupErr);
+            setPaymentErrorDetails({
+              error: "Paystack Inline Pop setup error. Falling back to hosted redirection link.",
+              details: setupErr.message || String(setupErr),
+              debug: { publicKey, resolvedPublicKey: publicKey, isConfigured: true }
+            });
           }
+        } else {
+          setPaymentErrorDetails({
+            error: "Paystack SDK script could not be loaded dynamically. Falling back to external hosted link.",
+            details: "Please verify that network filters or adblockers are not blocking js.paystack.co",
+            resolvedPublicKey: publicKey,
+            isConfigured: !!publicKey
+          });
         }
+      } else {
+        setPaymentErrorDetails({
+          error: "Paystack Public Key (pk_...) is either missing, empty, or misconfigured. Falling back to external hosted link.",
+          details: configDetails,
+          resolvedPublicKey: publicKey || "None",
+          isConfigured: !!(configDetails?.hasSecretKey)
+        });
       }
 
       // Hosted/Fallback Redirect flow (runs if inline popup fails, script doesn't load, or public key is unavailable)
       window.location.href = authorization_url;
 
     } catch (e: any) {
+      setPaymentErrorDetails({
+        error: "Critical exception occurred during secure checkout initialization.",
+        details: e.message || String(e)
+      });
       showToast("Payment service unreachable: " + (e.message || "Network error"));
     }
   };
@@ -349,6 +394,7 @@ const App: React.FC = () => {
 
   // Recharge states
   const [rechargeAmt, setRechargeAmt] = useState<number>(10000);
+  const [paymentErrorDetails, setPaymentErrorDetails] = useState<{ error: string; details?: any; debug?: any; resolvedPublicKey?: string; isConfigured?: boolean } | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<string>('Hpay');
   const [rechargeStep, setRechargeStep] = useState<'input' | 'payment_instructions' | 'confirming' | 'success'>('input');
   const [rechargeSenderName, setRechargeSenderName] = useState('');
@@ -1535,6 +1581,72 @@ const App: React.FC = () => {
             >
               <CreditCard size={20} /> Secure Recharge
             </button>
+
+            {/* Real-time Production Diagnostics Console */}
+            {paymentErrorDetails && (
+              <div className="bg-rose-50 border border-rose-100 rounded-[24px] p-5 animate-in fade-in zoom-in-95 duration-200 mt-2 text-left">
+                <div className="flex items-center justify-between pb-3 border-b border-rose-200">
+                  <div className="flex items-center gap-2 text-rose-700">
+                    <AlertCircle size={16} className="text-rose-600 shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-wider font-mono">Error Diagnostics</span>
+                  </div>
+                  <button 
+                    onClick={() => setPaymentErrorDetails(null)}
+                    className="text-slate-400 hover:text-slate-600 font-bold text-[10px] uppercase tracking-wider font-mono"
+                    id="close-diagnostics-btn"
+                  >
+                    Clear
+                  </button>
+                </div>
+                
+                <div className="mt-3 flex flex-col gap-2.5">
+                  <div className="text-[11px] text-rose-900 font-black leading-relaxed">
+                    {paymentErrorDetails.error}
+                  </div>
+
+                  {paymentErrorDetails.details && (
+                    <div className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm">
+                      <div className="text-[9px] font-black text-slate-400 uppercase font-mono tracking-wider mb-1">Details / Raw Payload</div>
+                      <pre className="text-[10px] text-slate-600 font-mono overflow-x-auto whitespace-pre-wrap max-h-40 leading-relaxed font-semibold">
+                        {typeof paymentErrorDetails.details === 'object' 
+                          ? JSON.stringify(paymentErrorDetails.details, null, 2) 
+                          : String(paymentErrorDetails.details)
+                        }
+                      </pre>
+                    </div>
+                  )}
+
+                  {paymentErrorDetails.debug && (
+                    <div className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm">
+                      <div className="text-[9px] font-black text-slate-400 uppercase font-mono tracking-wider mb-1">Internal Debug State</div>
+                      <pre className="text-[10px] text-slate-700 font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed font-bold">
+                        {JSON.stringify(paymentErrorDetails.debug, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5 border-t border-rose-100 pt-3 text-[9px] text-slate-500 font-mono font-bold leading-normal">
+                    <div className="flex justify-between">
+                      <span>Server DB Connection:</span>
+                      <span className={paymentErrorDetails.isConfigured !== false ? "text-emerald-600" : "text-rose-600 font-black"}>
+                        {paymentErrorDetails.isConfigured !== false ? "Active / Initialized" : "Unreachable"}
+                      </span>
+                    </div>
+                    {paymentErrorDetails.resolvedPublicKey && (
+                      <div className="flex justify-between">
+                        <span>Loaded Public Key:</span>
+                        <span className="text-slate-700">
+                          {paymentErrorDetails.resolvedPublicKey.startsWith("pk_") 
+                            ? `${paymentErrorDetails.resolvedPublicKey.substring(0, 10)}... (Valid)` 
+                            : `None (${paymentErrorDetails.resolvedPublicKey})`
+                          }
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : fundTab === 'withdrawal' ? (
           /* WITHDRAWAL FLOW */
