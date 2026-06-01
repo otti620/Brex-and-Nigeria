@@ -78,7 +78,7 @@ async function startServer() {
           email,
           amount: amountInKobo,
           metadata,
-          callback_url: `${req.protocol}://${req.get("host")}/?payment=success`,
+          callback_url: `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers['x-forwarded-host'] || req.get("host")}/?payment=success`,
         }),
       });
 
@@ -161,7 +161,7 @@ async function startServer() {
             monthlyGains: (userData.monthlyGains || 0) + Math.floor(amountNGN * 0.05)
           });
 
-          // Insert transaction
+          // Insert transaction for the user
           const txnId = `txn_ps_${reference}`;
           batch.set(doc(serverDb, `users/${userId}/transactions/${txnId}`), {
             id: txnId,
@@ -172,6 +172,42 @@ async function startServer() {
             date: new Date().toISOString().slice(0, 19).replace('T', ' '),
             details: `Paystack Deposit (Ref: ${reference})`
           });
+
+          // Process 10% Referral Bonus
+          if (userData.referrerId || userData.invitedBy) {
+            const referrerTargetId = userData.referrerId || userData.invitedBy;
+            try {
+              const referrerDocSnap = await getDocs(query(usersCol, where("inviteCode", "==", referrerTargetId)));
+              if (!referrerDocSnap.empty) {
+                const referrerDoc = referrerDocSnap.docs[0];
+                const referrerId = referrerDoc.id;
+                const referrerData = referrerDoc.data();
+                
+                const bonusAmount = Math.floor(amountNGN * 0.10); // 10%
+
+                batch.update(doc(serverDb, 'users', referrerId), {
+                  balance: (referrerData.balance || 0) + bonusAmount,
+                  referralBonus: (referrerData.referralBonus || 0) + bonusAmount,
+                });
+
+                // Insert referral bonus transaction for referrer
+                const bonusTxnId = `txn_bonus_${reference}`;
+                batch.set(doc(serverDb, `users/${referrerId}/transactions/${bonusTxnId}`), {
+                  id: bonusTxnId,
+                  userId: referrerId,
+                  amount: bonusAmount,
+                  type: "earning",
+                  status: "success",
+                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                  details: `Referral Bonus (10% from team recharge)`
+                });
+                
+                console.log(`[Paystack Webhook] Credited 10% referral bonus (₦${bonusAmount}) to ${referrerId}`);
+              }
+            } catch (refErr) {
+              console.error("[Paystack Webhook] Failed to process referral bonus:", refErr);
+            }
+          }
 
           await batch.commit();
           console.log(`[Paystack Webhook] Account ${userId} credited successfully`);
@@ -890,7 +926,7 @@ async function startServer() {
     if (!process.env.VERCEL) {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('*all', (req, res) => {
+      app.get(/(.*)/, (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }

@@ -123,6 +123,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     let unsubDoc: () => void;
+    let unsubTxns: () => void;
     
     // Connection health check as per skill
     const checkConnection = async () => {
@@ -141,8 +142,22 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (fbUser && fbUser.email) {
         setUser({ uid: fbUser.uid, email: fbUser.email, name: fbUser.displayName || 'User' });
         
+        // Listen to transactions subcollection
+        if (unsubTxns) unsubTxns();
+        unsubTxns = onSnapshot(collection(db, `users/${fbUser.uid}/transactions`), (snap) => {
+          const txns = snap.docs.map(d => d.data());
+          // sort descending by date
+          txns.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          
+          setUserData(prev => {
+            if (!prev) return prev;
+            return { ...prev, transactions: txns };
+          });
+        });
+        
         // Listen to user document
         if (unsubDoc) unsubDoc();
+
         let firstCheck = true;
         unsubDoc = onSnapshot(doc(db, 'users', fbUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
@@ -164,7 +179,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               };
             });
 
-            setUserData({ ...data, investments: mergedInvestments, isLoggedIn: true } as UserState);
+            setUserData(prev => ({ 
+              ...(prev || {}), 
+              ...data, 
+              investments: mergedInvestments, 
+              transactions: prev?.transactions || [],
+              isLoggedIn: true 
+            }) as UserState);
             setLoading(false);
           } else {
             // Document missing (often during active registration or test account refresh).
@@ -226,6 +247,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
       } else {
         if (unsubDoc) unsubDoc();
+        if (unsubTxns) unsubTxns();
         setUser(null);
         setUserData(null);
         setLoading(false);
@@ -234,6 +256,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return () => {
       if (unsubDoc) unsubDoc();
+      if (unsubTxns) unsubTxns();
       unsub();
     };
   }, []);

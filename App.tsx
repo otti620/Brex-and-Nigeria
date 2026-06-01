@@ -51,24 +51,6 @@ const CLIENT_DEFAULT_VIP_PLANS = [
   { id: 'vip-8', name: 'Diamond Infinity', period: '365 Days', workingDays: 0, cost: 2500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '💎', dailyProfit: 300000 }
 ];
 
-const SOCIAL_PROOF_DEEDS = [
-  "🇳🇬 Chinedu O. withdrew ₦18,500 successfully • Just now",
-  "🇳🇬 Fatimah Z. deposited ₦50,050 • 2 mins ago",
-  "🇳🇬 Babajide A. withdrew ₦120,400 successfully • 5 mins ago",
-  "🇳🇬 Chioma E. subscribed to Gamma Prime • 8 mins ago",
-  "🇳🇬 Gidado M. withdrew ₦8,300 successfully • 11 mins ago",
-  "🇳🇬 Aminat S. deposited ₦22,000 • 15 mins ago",
-  "🇳🇬 Festus K. withdrew ₦240,500 successfully • 17 mins ago",
-  "🇳🇬 Emeka U. just earned ₦15,200 referral bonus • 1 min ago",
-  "🇳🇬 Bisi A. withdrew ₦35,000 via OPay • 4 mins ago",
-  "🇳🇬 Ibrahim L. upgraded to Sigma Zenith • 6 mins ago",
-  "🇳🇬 Ngozi J. successfully withdrew ₦12,800 • 9 mins ago",
-  "🇳🇬 Hassan W. deposited ₦100,000 • 12 mins ago",
-  "🇳🇬 Tunde R. withdrew ₦55,600 successfully • 14 mins ago",
-  "🇳🇬 Zainab M. subscribed to Alpha Core • 18 mins ago",
-  "🇳🇬 Olumide S. withdrew ₦12,200 successfully • 20 mins ago"
-];
-
 const App: React.FC = () => {
   const { 
     user, 
@@ -88,15 +70,6 @@ const App: React.FC = () => {
     loadTeamData,
     refreshProfile 
   } = useFirebase();
-
-  const [socialIdx, setSocialIdx] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSocialIdx((prev) => (prev + 1) % SOCIAL_PROOF_DEEDS.length);
-    }, 4500);
-    return () => clearInterval(timer);
-  }, []);
 
   const isSpecificAdmin = userData?.isAdmin;
   
@@ -187,8 +160,8 @@ const App: React.FC = () => {
       } else {
         showToast(data.error || "Failed to initialize payment gateway");
       }
-    } catch (e) {
-      showToast("Payment service is currently unreachable. Check your internet.");
+    } catch (e: any) {
+      showToast("Payment service unreachable: " + (e.message || "Network error"));
     }
   };
 
@@ -885,16 +858,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Dynamic Social Proof marquee banner */}
-        <div className="bg-white border border-blue-100 rounded-[28px] px-6 py-5 flex items-center gap-4 overflow-hidden shadow-md -mt-1 select-none animate-in fade-in slide-in-from-top-4 duration-700">
-          <div className="flex-shrink-0 flex items-center justify-center bg-blue-600 text-white border border-blue-500 text-[10px] font-black uppercase tracking-wider font-mono rounded-full px-4 py-1.5 shadow-lg shadow-blue-600/20">
-            Live Feed
-          </div>
-          <p className="text-slate-900 font-mono text-[12px] font-black truncate tracking-tighter">
-            {SOCIAL_PROOF_DEEDS[socialIdx]}
-          </p>
-        </div>
-
         {/* Improved Broadcast banner - triggers Modal */}
         {currentNotice && (
           <div 
@@ -1004,53 +967,6 @@ const App: React.FC = () => {
               {userData.balance > 0 ? 'Active Account' : `New Account`}
             </p>
           </div>
-        </div>
-
-        {/* Recent Payouts Feed - Enlarged as requested */}
-        <div className="bg-white border border-slate-200 rounded-[32px] p-6 shadow-sm">
-          <div className="flex justify-between items-center mb-5">
-            <h4 className="text-slate-900 font-black text-[13px] tracking-tight flex items-center gap-2 uppercase">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-              Latest Withdrawals
-            </h4>
-            <span className="text-[9px] font-black text-slate-400 font-mono tracking-widest uppercase">Verified Transactive</span>
-          </div>
-          
-          <div className="flex flex-col gap-4">
-            {[1, 2, 3, 4].map((i) => {
-              const names = ['Adeyemo K.', 'Tunde A.', 'Ibrahim J.', 'Ngozi O.', 'Bello S.', 'Umaru F.', 'Chioma W.'];
-              const banks = ['OPay Digital', 'PalmPay MFB', 'Moniepoint', 'Zenith Bank', 'Kuda Tech', 'FirstBank'];
-              const amounts = [12500, 24000, 8900, 15000, 42000, 10500, 6800, 31000];
-              const nameIdx = (socialIdx + i) % names.length;
-              const bankIdx = (socialIdx + i) % banks.length;
-              const amtIdx = (socialIdx + i) % amounts.length;
-              
-              return (
-                <div key={i} className="flex items-center justify-between group animate-in fade-in slide-in-from-right-4" style={{ animationDelay: `${i * 100}ms` }}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-xs font-black text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
-                      {names[nameIdx].slice(0, 1)}
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-black text-slate-900 tracking-tight">{names[nameIdx]}</p>
-                      <p className="text-[8px] text-slate-500 font-bold uppercase font-mono">{banks[bankIdx]}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[12px] font-black text-emerald-600 font-mono tracking-tighter">+₦{amounts[amtIdx].toLocaleString()}</p>
-                    <p className="text-[7px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Success ✅</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          
-          <button 
-            disabled
-            className="w-full mt-6 bg-slate-50 border border-slate-100 py-3 rounded-2xl text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed"
-          >
-            <RefreshCw size={12} className="animate-spin-slow opacity-30" /> View Live Registry
-          </button>
         </div>
 
         {/* Advisor Insight */}
@@ -1479,9 +1395,20 @@ const App: React.FC = () => {
                       <option value="Moniepoint">Moniepoint MFB</option>
                       <option value="PalmPay">PalmPay Financials</option>
                       <option value="Kuda Bank">Kuda Technologies</option>
+                      <option value="Access Bank">Access Bank PLC</option>
+                      <option value="Fidelity Bank">Fidelity Bank</option>
+                      <option value="FirstBank">FirstBank of Nigeria</option>
                       <option value="GTBank">Guaranty Trust Bank</option>
                       <option value="Zenith Bank">Zenith Bank PLC</option>
                       <option value="UBA">United Bank for Africa</option>
+                      <option value="Union Bank">Union Bank of Nigeria</option>
+                      <option value="Sterling Bank">Sterling Bank</option>
+                      <option value="Stanbic IBTC">Stanbic IBTC Bank</option>
+                      <option value="Wema Bank">Wema Bank / ALAT</option>
+                      <option value="FCMB">First City Monument Bank</option>
+                      <option value="Polaris Bank">Polaris Bank</option>
+                      <option value="VFD">VFD Microfinance Bank</option>
+                      <option value="Standard Chartered">Standard Chartered</option>
                     </select>
                   </div>
 
@@ -2153,11 +2080,20 @@ const App: React.FC = () => {
                         <option value="Moniepoint">Moniepoint Microfinance</option>
                         <option value="PalmPay">PalmPay Financials</option>
                         <option value="Kuda Bank">Kuda Technologies</option>
-                        <option value="GTBank">Guaranty Trust Bank (GTBank)</option>
-                        <option value="Zenith Bank">Zenith Bank PLC</option>
                         <option value="Access Bank">Access Bank PLC</option>
+                        <option value="Fidelity Bank">Fidelity Bank</option>
+                        <option value="FirstBank">FirstBank of Nigeria</option>
+                        <option value="GTBank">Guaranty Trust Bank</option>
+                        <option value="Zenith Bank">Zenith Bank PLC</option>
                         <option value="UBA">United Bank for Africa (UBA)</option>
+                        <option value="Union Bank">Union Bank of Nigeria</option>
+                        <option value="Sterling Bank">Sterling Bank</option>
+                        <option value="Stanbic IBTC">Stanbic IBTC Bank</option>
                         <option value="Wema Bank">Wema Bank / ALAT</option>
+                        <option value="FCMB">First City Monument Bank</option>
+                        <option value="Polaris Bank">Polaris Bank</option>
+                        <option value="VFD">VFD Microfinance Bank</option>
+                        <option value="Standard Chartered">Standard Chartered</option>
                       </select>
                     </div>
                     
