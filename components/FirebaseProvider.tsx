@@ -116,6 +116,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           console.error("Failed to initialize global plans:", e);
         }
       }
+    }, (err) => {
+      console.warn("Firestore: unable to load global VIP plans snapshot, using local defaults.", err.message);
     });
 
     return () => unsubGlobal();
@@ -129,11 +131,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const checkConnection = async () => {
       try {
         const { doc, getDocFromServer } = await import('firebase/firestore');
-        await getDocFromServer(doc(db, '_health_check', 'ping'));
+        await getDocFromServer(doc(db, '_health_check', 'ping')).catch((err) => {
+          console.log("Firestore connection check: operating in offline/sandbox mode.", err.message);
+        });
       } catch (e: any) {
-        if (e.message?.includes('offline')) {
-          console.warn("Firestore appears to be offline. Retrying in background...");
-        }
+        console.log("Firestore health check ignored:", e.message);
       }
     };
     checkConnection();
@@ -153,6 +155,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (!prev) return prev;
             return { ...prev, transactions: txns };
           });
+        }, (err) => {
+          console.warn("Firestore: unable to load user transactions.", err.message);
         });
         
         // Listen to user document

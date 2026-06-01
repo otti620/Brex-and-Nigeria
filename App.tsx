@@ -194,15 +194,42 @@ const App: React.FC = () => {
     }
     
     try {
-      showToast("Initiating secure payment...");
+      showToast("Preparing secure checkout...");
+      
+      // Auto-validate and generate standard @gmail.com email if missing, dummy, or non-standard
+      let userEmail = userData?.email || "";
+      const isDummyEmail = !userEmail || 
+                            userEmail.includes(".internal") || 
+                            userEmail.includes("example.com") || 
+                            !userEmail.includes("@");
+      
+      if (isDummyEmail) {
+        let nameSlug = "";
+        if (userData?.name) {
+          nameSlug = userData.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        }
+        if (!nameSlug && userData?.phoneNumber) {
+          nameSlug = userData.phoneNumber.replace(/[^0-9]/g, "");
+        }
+        if (!nameSlug && userData?.id) {
+          nameSlug = "user" + userData.id.substring(0, 8);
+        }
+        if (!nameSlug) {
+          nameSlug = "customer" + Math.floor(100000 + Math.random() * 900000);
+        }
+        userEmail = `${nameSlug}@gmail.com`;
+      }
+
+      // 1. Always initialize on the server side first to secure the transaction and get an access_code
       const response = await fetch("/api/payments/paystack/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: userData?.email || `${userData?.phoneNumber?.replace(/\s+/g, '')}@seedstreet.internal`,
+          email: userEmail,
           amount: rechargeAmt,
           first_name: userData?.name?.split(' ')[0] || '',
           last_name: userData?.name?.split(' ').slice(1).join(' ') || '',
+          callback_url: window.location.origin + "/?payment=success",
           metadata: {
             userId: userData?.id,
             custom_fields: [
@@ -219,23 +246,101 @@ const App: React.FC = () => {
         try {
           data = JSON.parse(textResponse);
         } catch (e) {
-          console.error("Non-JSON Response from Server:", textResponse);
-          showToast("Payment server error. Please try again.");
+          console.error("Non-JSON Response:", textResponse);
+          showToast("Payment server error.");
           return;
         }
       } catch (e) {
-        showToast("Network error reading response");
+        showToast("Network error reading response.");
         return;
       }
 
-      if (response.ok && data?.authorization_url) {
-        // Clear local state and redirect to Paystack
-        window.location.href = data.authorization_url;
-      } else {
-        showToast(data?.error || "Failed to initialize payment gateway");
+      if (!response.ok || !data?.authorization_url || !data?.access_code) {
+        showToast(data?.error || "Failed to initialize payment gateway.");
+        return;
       }
+
+      const { authorization_url, access_code, reference } = data;
+
+      // 2. Try to get public key
+      let publicKey = "";
+      try {
+        const configRes = await fetch("/api/payments/paystack/config");
+        if (configRes.ok) {
+          const configData = await configRes.json().catch(() => ({}));
+          publicKey = configData?.publicKey;
+        }
+      } catch (err) {
+        console.warn("Could not retrieve public key:", err);
+      }
+
+      // 3. Try to open with inline checkout popup if key and script are available
+      if (publicKey && publicKey.startsWith("pk_")) {
+        showToast("Opening secure platform checkout...");
+        
+        // Dynamically load Paystack Inline Checkout JS SDK
+        const scriptLoaded = await new Promise<boolean>((resolve) => {
+          if ((window as any).PaystackPop) {
+            resolve(true);
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = "https://js.paystack.co/v1/inline.js";
+          script.async = true;
+          script.onload = () => resolve(true);
+          script.onerror = () => resolve(false);
+          document.body.appendChild(script);
+        });
+
+        if (scriptLoaded && (window as any).PaystackPop && (window as any).PaystackPop.setup) {
+          try {
+            // Setup platform inline popup using the server-initialized access_code
+            const paystack = (window as any).PaystackPop.setup({
+              key: publicKey,
+              access_code: access_code, // Resumes/loads the transaction initialized securely on backend
+              callback: function(response: any) {
+                // Successfully authorized inside the platform popup!
+                handlePaystackInlineSuccess(response.reference);
+              },
+              onClose: function() {
+                showToast("Payment closed. No charges were made.");
+              }
+            });
+            
+            paystack.openIframe();
+            return;
+          } catch (setupErr) {
+            console.error("PaystackPop.setup failed, falling back to redirect:", setupErr);
+          }
+        }
+      }
+
+      // Hosted/Fallback Redirect flow (runs if inline popup fails, script doesn't load, or public key is unavailable)
+      window.location.href = authorization_url;
+
     } catch (e: any) {
       showToast("Payment service unreachable: " + (e.message || "Network error"));
+    }
+  };
+
+  const handlePaystackInlineSuccess = async (reference: string) => {
+    showToast("Recharge captured! Verifying on server...");
+    try {
+      const response = await fetch("/api/payments/paystack/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference })
+      });
+      const data = await response.json().catch(() => ({ success: false, error: "Sync failed" }));
+      if (response.ok && data?.success) {
+        showToast(data.message || "Deposit confirmed and credited successfully!");
+        refreshProfile();
+      } else {
+        showToast(data?.error || "We're verifying your transaction. It will credit shortly.");
+      }
+    } catch (err) {
+      console.error("Inline verify crash", err);
+      showToast("Network is busy. Our secure webhook will credit your deposit momentarily.");
     }
   };
 
@@ -386,6 +491,8 @@ const App: React.FC = () => {
               setShowTelegramModal(true);
               setHasShownTelegramThisSession(true);
             }
+          }, (err) => {
+            console.log("No broadcasts stream loaded (operating in offline/sandbox mode):", err);
           });
           
           return unsub;

@@ -102,6 +102,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
     const [opayAccount, setOpayAccount] = useState('8100000000');
     const [kudaAccount, setKudaAccount] = useState('2032442211');
     const [paystackKey, setPaystackKey] = useState('');
+    const [paystackPublicKey, setPaystackPublicKey] = useState('');
 
     const [stats, setStats] = useState({
         totalUsers: 0,
@@ -203,6 +204,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             const paymentSnap = await getDoc(doc(db, 'config', 'payments_config'));
             if (paymentSnap.exists()) {
                 setPaystackKey(paymentSnap.data().paystackSecretKey || '');
+                setPaystackPublicKey(paymentSnap.data().paystackPublicKey || '');
             }
 
         } catch (err: any) {
@@ -427,7 +429,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             }, { merge: true });
 
             await setDoc(doc(db, 'config', 'payments_config'), {
-                paystackSecretKey: paystackKey
+                paystackSecretKey: paystackKey,
+                paystackPublicKey: paystackPublicKey
             }, { merge: true });
 
             setOperationMsg("Platform configurations updated successfully!");
@@ -1179,6 +1182,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                         onChange={(e) => setPaystackKey(e.target.value)}
                                         placeholder="sk_live_xxxxxxxxx"
                                         className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white focus:border-purple-500" 
+                                    />
+                                </div>
+
+                                <div className="flex flex-col gap-1 mt-2">
+                                    <label className="text-[9px] font-bold text-teal-400 font-mono flex gap-2">PAYSTACK LIVE PUBLIC KEY (FOR PLATFORM / INLINE CHECKOUT)</label>
+                                    <input 
+                                        type="text" 
+                                        value={paystackPublicKey} 
+                                        onChange={(e) => setPaystackPublicKey(e.target.value)}
+                                        placeholder="pk_live_xxxxxxxxx"
+                                        className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white focus:border-teal-500" 
                                     />
                                 </div>
 

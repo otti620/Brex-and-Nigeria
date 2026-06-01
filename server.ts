@@ -7,7 +7,7 @@ import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./
 import { initializeApp as initFirebaseServer } from "firebase/app";
 import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch } from "firebase/firestore";
 
-async function startServer() {
+function startServer() {
   const app = express();
   const PORT = 3000;
 
@@ -55,6 +55,23 @@ async function startServer() {
     return "";
   };
 
+  // Helper to get Paystack Public Key
+  const getPaystackPublicKey = async () => {
+    let PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY || "";
+    if (PAYSTACK_PUBLIC_KEY) return PAYSTACK_PUBLIC_KEY;
+    if (serverDb) {
+      try {
+        const docSnap = await getDocs(query(collection(serverDb, 'config')));
+        for (const d of docSnap.docs) {
+          if (d.id === 'payments_config' && d.data().paystackPublicKey) {
+            return d.data().paystackPublicKey;
+          }
+        }
+      } catch(e) {}
+    }
+    return "";
+  };
+
   if (isFirebaseConfigured) {
     try {
       const serverFirebaseApp = initFirebaseServer(firebaseServerConfig, "server-instance");
@@ -66,6 +83,17 @@ async function startServer() {
     console.warn("Firebase is not configured on the server. Webhooks will not sync to Firestore.");
   }
 
+  // Paystack config helper for client-side inline checkout
+  app.get("/api/payments/paystack/config", async (req, res) => {
+    try {
+      const publicKey = await getPaystackPublicKey();
+      res.json({ publicKey });
+    } catch (err: any) {
+      console.error("[Paystack Config Error]", err);
+      res.json({ publicKey: "" });
+    }
+  });
+
   // Paystack transaction initialization
   app.post("/api/payments/paystack/initialize", async (req, res) => {
     try {
@@ -73,11 +101,33 @@ async function startServer() {
         return res.status(400).json({ error: "Missing request body. Make sure Content-Type is application/json" });
       }
 
-      const { email, amount, metadata, first_name, last_name } = req.body;
+      const { email, amount, metadata, first_name, last_name, callback_url } = req.body;
       const paystackKey = await getPaystackKey();
       
       if (!paystackKey) {
         return res.status(500).json({ error: "Paystack is not configured on the server. Please set the key in the Admin Panel or environment variables." });
+      }
+
+      // Check and sanitize email to avoid Paystack API errors
+      let cleanEmail = email || "";
+      const isDummyEmail = !cleanEmail || 
+                            cleanEmail.includes(".internal") || 
+                            cleanEmail.includes("example.com") || 
+                            !cleanEmail.includes("@");
+      
+      if (isDummyEmail) {
+        let nameSlug = "";
+        const combinedName = `${first_name || ""} ${last_name || ""}`.trim();
+        if (combinedName) {
+          nameSlug = combinedName.toLowerCase().replace(/[^a-z0-9]/g, "");
+        }
+        if (!nameSlug && metadata?.userId) {
+          nameSlug = "user" + String(metadata.userId).replace(/[^a-z0-9]/g, "").substring(0, 8);
+        }
+        if (!nameSlug) {
+          nameSlug = "customer" + Math.floor(100000 + Math.random() * 900000);
+        }
+        cleanEmail = `${nameSlug}@gmail.com`;
       }
 
       // amount is in NGN, Paystack expects kobo
@@ -97,12 +147,12 @@ async function startServer() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
+          email: cleanEmail,
           amount: amountInKobo,
           first_name,
           last_name,
           metadata,
-          callback_url: `${proto}://${host}/?payment=success`,
+          callback_url: callback_url || `${proto}://${host}/?payment=success`,
         }),
       });
 
@@ -1047,11 +1097,14 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+    }).then((vite) => {
+      app.use(vite.middlewares);
+    }).catch((err) => {
+      console.error("Vite server creation failed:", err);
     });
-    app.use(vite.middlewares);
   } else {
     // Only serve static files if not running in Vercel Serverless environment
     if (!process.env.VERCEL) {
@@ -1073,13 +1126,8 @@ async function startServer() {
   return app;
 }
 
-const appPromise = startServer();
-export default async function handler(req: any, res: any) {
-  const app = await appPromise;
-  await new Promise((resolve) => {
-    res.on('finish', resolve);
-    res.on('close', resolve);
-    app(req, res);
-  });
+const app = startServer();
+export default function handler(req: any, res: any) {
+  app(req, res);
 }
 
