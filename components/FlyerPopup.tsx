@@ -10,13 +10,13 @@ export const FlyerPopup = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/70 z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/90 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
+            initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-blue-950 rounded-3xl p-6 relative max-w-sm w-full border border-blue-800 shadow-2xl"
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="bg-blue-950 rounded-[40px] p-8 relative max-w-lg w-full border-4 border-blue-600 shadow-[0_0_50px_rgba(37,99,235,0.5)]"
           >
             <button 
               onClick={onClose}

@@ -527,24 +527,11 @@ const App: React.FC = () => {
     }
   }, [activeProfileOverlay, userData?.uid]);
 
-  // Trigger popups independently on mount
+  // Trigger popups automatically on mount
   useEffect(() => {
     if (userData) {
-      const today = new Date().toISOString().slice(0, 10);
-      
-      // Trigger Telegram popup if not shown today
-      if (localStorage.getItem('telegram_shown_date') !== today) {
-        console.log("[DEBUG] Triggering Telegram Modal independently...");
-        setShowTelegramModal(true);
-        localStorage.setItem('telegram_shown_date', today);
-      }
-
-      // Trigger flyer popup if not shown today
-      if (localStorage.getItem('flyer_shown_date') !== today) {
-        console.log("[DEBUG] Triggering Flyer Modal independently...");
-        setShowFlyerModal(true);
-        localStorage.setItem('flyer_shown_date', today);
-      }
+      setShowTelegramModal(true);
+      setShowFlyerModal(true);
     }
   }, [userData?.uid]);
 
