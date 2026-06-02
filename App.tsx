@@ -1597,7 +1597,7 @@ const App: React.FC = () => {
                   type="number" 
                   value={rechargeAmt || ''}
                   onChange={(e) => setRechargeAmt(Number(e.target.value))}
-                  placeholder="Min 1,000"
+                  placeholder="Min 100"
                   className="bg-transparent text-slate-900 w-full outline-none font-black text-xl font-mono"
                 />
               </div>
@@ -1622,7 +1622,7 @@ const App: React.FC = () => {
 
             <button
               onClick={triggerPaystackCheckout}
-              disabled={rechargeAmt < 1000}
+              disabled={rechargeAmt < 100}
               className="w-full bg-blue-600 hover:bg-blue-700 py-5 rounded-[24px] text-white font-black text-sm tracking-widest uppercase transition-all mt-2 cursor-pointer disabled:opacity-50 outline-none flex items-center justify-center gap-3 shadow-xl shadow-blue-600/30"
             >
               <CreditCard size={20} /> Secure Recharge
