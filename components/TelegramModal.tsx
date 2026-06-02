@@ -28,7 +28,7 @@ export const TelegramModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: (
             <h3 className="text-2xl font-black text-white mb-4">Join our Telegram</h3>
             <p className="text-sky-100 font-bold mb-6">Get real-time updates and support</p>
             <a 
-              href="https://t.me/brex_official" 
+              href="https://t.me/brexgroup6" 
               target="_blank" 
               rel="noopener noreferrer"
               className="w-full bg-white text-sky-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-sky-50"

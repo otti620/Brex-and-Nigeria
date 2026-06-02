@@ -1103,14 +1103,20 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowTelegramModal(true)} className="p-2 bg-sky-100 rounded-full text-sky-600">
-               <Send size={16} />
-            </button>
             <div onClick={() => navigate(Screen.Profile)} className="cursor-pointer active:scale-95 transition-transform ring-4 ring-gray-100 rounded-2xl p-0.5 bg-white shadow-sm">
               <Memoji state={userData.memojiState} size="sm" />
             </div>
           </div>
         </div>
+
+        {/* Floating Telegram Button */}
+        <button 
+          onClick={() => setShowTelegramModal(true)} 
+          className="fixed bottom-24 right-6 z-[200] bg-sky-600 text-white rounded-full p-4 shadow-[0_0_20px_rgba(2,132,199,0.5)] flex flex-col items-center gap-1 hover:bg-sky-700 transition-all border-4 border-white animate-bounce"
+        >
+          <Send size={28} />
+          <span className="text-[10px] font-black uppercase tracking-tight">Telegram</span>
+        </button>
 
         {/* Improved Broadcast banner - triggers Modal */}
         {currentNotice && (
