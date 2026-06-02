@@ -10,6 +10,7 @@ export enum Screen {
   BankLinking = 'bank_linking',
   Dashboard = 'dashboard',
   Market = 'market',
+  Promotions = 'promotions',
   Portfolio = 'portfolio',
   Profile = 'profile',
   Fund = 'fund',

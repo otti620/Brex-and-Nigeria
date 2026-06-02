@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import flyer1 from './src/assets/images/revenue_stream_flyer_1780385009267.png';
+import flyer2 from './src/assets/images/wealth_builder_flyer_1780385024026.png';
 import { FlyerPopup } from './components/FlyerPopup';
 import { LiveActivityBar } from './components/LiveActivityBar';
 import { TelegramModal } from './components/TelegramModal';
@@ -201,8 +203,8 @@ const App: React.FC = () => {
   };
 
   const triggerPaystackCheckout = async () => {
-    if (rechargeAmt < 1000) {
-      showToast("Minimum deposit is ₦1,000 NGN");
+    if (rechargeAmt < 100) {
+      showToast("Minimum deposit is ₦100 NGN");
       return;
     }
     
@@ -530,15 +532,15 @@ const App: React.FC = () => {
     }
   }, [activeProfileOverlay, userData?.uid]);
 
-  // Trigger popups automatically on mount
+  // Trigger popups automatically when navigating to dashboard
   useEffect(() => {
-    if (userData) {
+    if (userData && currentScreen === Screen.Dashboard) {
       setTimeout(() => {
         setShowTelegramModal(true);
         setShowFlyerModal(true);
       }, 1000);
     }
-  }, [userData?.uid]);
+  }, [userData?.uid, currentScreen]);
 
   // Load broadcasts for the dashboard banner (Real-time)
   useEffect(() => {
@@ -719,8 +721,8 @@ const App: React.FC = () => {
 
   // Fund screen manual recharge instant credit
   const handleFundSubmit = () => {
-    if (rechargeAmt < 1000) {
-      alert('Minimum instant recharge is ₦1,000');
+    if (rechargeAmt < 100) {
+      alert('Minimum instant recharge is ₦100');
       return;
     }
     if (!rechargeSenderName.trim()) {
@@ -780,7 +782,7 @@ const App: React.FC = () => {
     try {
       await withdraw(withdrawAmt, activeBank, activeAccount, activeOwner);
       
-      const expectedPayout = withdrawAmt * 0.98;
+      const expectedPayout = withdrawAmt * 0.96;
       const receipt = {
         amount: withdrawAmt,
         netAmount: expectedPayout,
@@ -1114,8 +1116,8 @@ const App: React.FC = () => {
           onClick={() => setShowTelegramModal(true)} 
           className="fixed bottom-24 right-6 z-[200] bg-sky-600 text-white rounded-full p-4 shadow-[0_0_20px_rgba(2,132,199,0.5)] flex flex-col items-center gap-1 hover:bg-sky-700 transition-all border-4 border-white animate-bounce"
         >
-          <Send size={28} />
-          <span className="text-[10px] font-black uppercase tracking-tight">Telegram</span>
+          <Send size={32} />
+          <span className="text-[12px] font-black uppercase text-center w-24">Join our telegram channel</span>
         </button>
 
         {/* Improved Broadcast banner - triggers Modal */}
@@ -1385,6 +1387,18 @@ const App: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPromotions = () => {
+    return (
+      <div className="px-5 pt-8 pb-10 flex flex-col gap-6 bg-[#f8f8f8] min-h-screen">
+        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Promotions</h2>
+        <div className="flex flex-col gap-6">
+          <img src={flyer1} alt="Revenue Stream Plan" className="rounded-3xl shadow-lg w-full" />
+          <img src={flyer2} alt="Wealth Builder Plan" className="rounded-3xl shadow-lg w-full" />
         </div>
       </div>
     );
@@ -1813,12 +1827,12 @@ const App: React.FC = () => {
 
                 <div className="bg-white border border-slate-200 p-6 rounded-[32px] space-y-3 shadow-sm font-semibold">
                    <div className="flex justify-between text-[10px] font-mono text-slate-400 uppercase tracking-widest">
-                      <span>Service Fee (2%)</span>
-                      <span className="text-rose-500">-₦{(withdrawAmt * 0.02).toLocaleString()}</span>
+                      <span>Service Fee (4%)</span>
+                      <span className="text-rose-500">-₦{(withdrawAmt * 0.04).toLocaleString()}</span>
                    </div>
                    <div className="flex justify-between text-base font-sans pt-3 border-t border-slate-50">
                       <span className="text-slate-500 font-black uppercase text-[10px] tracking-widest">You will receive</span>
-                      <span className="text-blue-600 font-black font-mono">₦{(withdrawAmt * 0.98).toLocaleString()}</span>
+                      <span className="text-blue-600 font-black font-mono">₦{(withdrawAmt * 0.96).toLocaleString()}</span>
                    </div>
                 </div>
 
@@ -2068,6 +2082,7 @@ const App: React.FC = () => {
               case Screen.Admin: return <AdminPanel onBack={() => navigate(Screen.Profile)} onRefreshUser={refreshProfile} />;
               case Screen.Dashboard: return renderDashboard();
               case Screen.Market: return renderMarket();
+              case Screen.Promotions: return renderPromotions();
               case Screen.Portfolio: return renderPortfolio();
               case Screen.Profile: return renderProfile();
               case Screen.Fund: return renderFund();
@@ -2455,10 +2470,14 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <span className="text-[#64748B] font-mono text-[9px] uppercase">verified Owner name</span>
-                      <div className="bg-[#0C1017] border border-[#1E293B] px-4 py-3 rounded-xl text-slate-400 font-mono text-[10px] break-all">
-                        {bankSettingsOwner || 'Resolving payee...'}
-                      </div>
+                      <span className="text-[#64748B] font-mono text-[9px] uppercase">Owner name (as in bank)</span>
+                      <input 
+                        type="text"
+                        value={bankSettingsOwner}
+                        onChange={(e) => setBankSettingsOwner(e.target.value.toUpperCase())}
+                        placeholder="e.g. JOHN DOE"
+                        className="bg-[#0C1017] border border-[#1E293B] px-4 py-3 rounded-xl text-white text-xs outline-none focus:border-[#8CEE47] font-mono"
+                      />
                     </div>
                   </>
                 ) : (
