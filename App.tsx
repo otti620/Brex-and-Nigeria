@@ -2535,10 +2535,10 @@ const App: React.FC = () => {
                   <div>
                     <span className="text-[#64748B] text-[8px] uppercase font-black block mb-0.5">Your unique referral link</span>
                     <div className="flex items-center justify-between bg-[#131926] p-2 rounded-xl text-xs text-slate-300 border border-[#1E293B] select-all truncate text-[9px]">
-                      <span>https://brex.com/join?ref={userData.invitationCode || 'BREX-8854'}</span>
+                      <span>https://brex-nigeria.vercel.app/join?ref={userData.invitationCode || 'BREX-8854'}</span>
                       <button 
                         onClick={() => {
-                          navigator.clipboard.writeText(`https://brex.com/join?ref=${userData.invitationCode || 'BREX-8854'}`);
+                          navigator.clipboard.writeText(`https://brex-nigeria.vercel.app/join?ref=${userData.invitationCode || 'BREX-8854'}`);
                           showToast('Referral link copied!');
                         }}
                         className="text-slate-400 hover:text-white transition-colors ml-1"

@@ -26,11 +26,11 @@ function startServer() {
 
   // Server-side Firebase integration for webhook processing
   const firebaseServerConfig = {
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "seedstreet-app",
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "brex-app",
     appId: process.env.VITE_FIREBASE_APP_ID || "1:425883713028:web:b1d79dd4ae414771fd0b79",
     apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyBewBW-Z9P5HtcUTsLvmEn0aZtBjwvD68I",
-    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "seedstreet-app.firebaseapp.com",
-    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "seedstreet-app.appspot.com",
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "brex-app.firebaseapp.com",
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "brex-app.appspot.com",
     messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "425883713028",
   };
 
@@ -103,7 +103,7 @@ function startServer() {
 
       // Automatically authenticate the container service as a system service account for authorized reads/writes
       const serverAuth = getAuthServer(serverFirebaseApp);
-      const serviceEmail = "backend-system-service-account@seedstreet.internal";
+      const serviceEmail = "backend-system-service-account@brex.internal";
       const servicePassword = "SecureBackendPassword123-SystemServer-Token!";
 
       const loginServiceAccount = async () => {
@@ -409,9 +409,11 @@ function startServer() {
     // Process 10% Referral Bonus
     if (userData.referrerId || userData.invitedBy) {
       const referrerTargetId = userData.referrerId || userData.invitedBy;
+      console.log(`[Paystack Verification] Referral found. Target ID: ${referrerTargetId}`);
       try {
         const referrerDocSnap = await getDocs(query(usersCol, where("inviteCode", "==", referrerTargetId)));
         if (!referrerDocSnap.empty) {
+          console.log(`[Paystack Verification] Found referrer via inviteCode: ${referrerTargetId}`);
           const referrerDoc = referrerDocSnap.docs[0];
           const referrerId = referrerDoc.id;
           const referrerData = referrerDoc.data() as any;
@@ -435,10 +437,14 @@ function startServer() {
           });
           
           console.log(`[Paystack Verification] Credited 10% referral bonus (₦${bonusAmount}) to referrer ${referrerId}`);
+        } else {
+          console.log(`[Paystack Verification] Referrer NOT FOUND for target ID: ${referrerTargetId}`);
         }
       } catch (refErr) {
         console.error("[Paystack Verification] Failed to process referral bonus:", refErr);
       }
+    } else {
+      console.log(`[Paystack Verification] No referrer found for customer: ${email}`);
     }
 
     await batch.commit();

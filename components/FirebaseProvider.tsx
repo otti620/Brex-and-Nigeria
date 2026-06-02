@@ -290,7 +290,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       // Use phone number as the primary identifier if email isn't provided or preferred
       const phoneDigits = payload.phoneNumber.replace(/[^0-9]/g, '');
-      const loginEmail = payload.email || `${phoneDigits}@seedstreet.internal`;
+      const loginEmail = payload.email || `${phoneDigits}@brex.internal`;
       
       const userCred = await createUserWithEmailAndPassword(auth, loginEmail, payload.password);
       

@@ -6,7 +6,7 @@ service cloud.firestore {
     }
 
     function isSystemServiceAccount() {
-      return isSignedIn() && request.auth.token.email == 'backend-system-service-account@seedstreet.internal';
+      return isSignedIn() && request.auth.token.email == 'backend-system-service-account@brex.internal';
     }
 
     match /{document=**} {
