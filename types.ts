@@ -60,7 +60,7 @@ export interface UserInvestment {
 export interface TransactionRecord {
   id: string;
   amount: number;
-  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe';
+  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe' | 'earning';
   status: 'pending' | 'success' | 'failed';
   date: string;
   details: string;
@@ -74,6 +74,7 @@ export interface UserState {
   kycLevel: number;
   balance: number;
   monthlyGains: number;
+  referralBonus?: number;
   streak: number;
   badges: string[];
   memojiState: 'Neutral' | 'Happy' | 'Focused' | 'Celebration' | 'Concerned';

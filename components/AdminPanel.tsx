@@ -300,6 +300,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                     details: 'Deposit Reviewed & Approved'
                 });
                 await addSystemLog(`Approved deposit transaction of ₦${txn.amount} for user ${txn.userId}`, 'financial');
+
+                // Crediting 10% referral bonus to the referrer!
+                try {
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const uData = userSnap.data();
+                        const referrerCode = uData.referredBy;
+                        const referrerUid = uData.referrerUid;
+
+                        if (referrerUid || referrerCode) {
+                            let referrerDocRef: any = null;
+                            if (referrerUid) {
+                                referrerDocRef = doc(db, 'users', referrerUid);
+                            } else if (referrerCode) {
+                                const q = query(collection(db, 'users'), where('invitationCode', '==', referrerCode.trim().toUpperCase()));
+                                const refSnap = await getDocs(q);
+                                if (!refSnap.empty) {
+                                    referrerDocRef = refSnap.docs[0].ref;
+                                }
+                            }
+
+                            if (referrerDocRef) {
+                                const bonusAmount = Math.floor(txn.amount * 0.10);
+                                if (bonusAmount > 0) {
+                                    await updateDoc(referrerDocRef, {
+                                        balance: increment(bonusAmount),
+                                        referralBonus: increment(bonusAmount)
+                                    });
+
+                                    const bonusTxnId = `txn_bonus_${txn.id}`;
+                                    await setDoc(doc(db, `users/${referrerDocRef.id}/transactions/${bonusTxnId}`), {
+                                        id: bonusTxnId,
+                                        userId: referrerDocRef.id,
+                                        amount: bonusAmount,
+                                        type: 'bonus',
+                                        status: 'success',
+                                        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                                        details: `Referral Bonus (10% from team recharge of ${uData.name})`
+                                    });
+                                    await addSystemLog(`Credited 10% referral bonus of ₦${bonusAmount} to referrer ${referrerDocRef.id} for team deposit`, 'financial');
+                                }
+                            }
+                        }
+                    }
+                } catch (refErr) {
+                    console.error("Failed to process manual deposit referral bonus:", refErr);
+                }
             } else if (txn.type === 'withdraw') {
                 // Withdrawal approval: Balance is already subtracted on request submission, so just close as success
                 await updateDoc(txnRef, {

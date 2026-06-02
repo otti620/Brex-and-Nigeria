@@ -23,6 +23,7 @@ interface FirebaseContextType {
   loadTeamData: () => Promise<any>;
   refreshProfile: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  simulateInvite: () => Promise<any>;
   globalPlans: any[];
 }
 
@@ -43,6 +44,7 @@ const FirebaseContext = createContext<FirebaseContextType>({
   loadTeamData: async () => ({ members: [], teamSize: 0, rechargeMembers: 0 }),
   refreshProfile: async () => {},
   resetPassword: async () => {},
+  simulateInvite: async () => {},
   globalPlans: []
 });
 
@@ -303,9 +305,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       // Resolve referrerUid if possible
       let referrerUid = "";
-      if (payload.invitationCode) {
+      const searchCode = payload.invitationCode ? payload.invitationCode.trim().toUpperCase() : "";
+      if (searchCode) {
         try {
-          const q = query(collection(db, 'users'), where('invitationCode', '==', payload.invitationCode));
+          const q = query(collection(db, 'users'), where('invitationCode', '==', searchCode));
           const snap = await getDocs(q);
           if (!snap.empty) {
             referrerUid = snap.docs[0].id;
@@ -332,13 +335,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         effectiveSizeToday: 0,
         teamSizeToday: 0,
         invitationCode: ourOwnCode,
-        referredBy: payload.invitationCode || "",
+        referredBy: searchCode,
         referrerUid: referrerUid,
         isAdmin: isAdminPhone || isAdminEmail,
         investments: CLIENT_DEFAULT_VIP_PLANS
       };
 
-      await setDoc(doc(db, 'users', userCred.user.uid), newUserProfile);
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', userCred.user.uid), newUserProfile);
       
       const txnRecord = {
         id: `txn_${Date.now()}`,
@@ -350,7 +354,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         details: "Setup Activation Welcome Bonus"
       };
 
-      await setDoc(doc(db, `users/${userCred.user.uid}/transactions/${txnRecord.id}`), txnRecord);
+      batch.set(doc(db, `users/${userCred.user.uid}/transactions/${txnRecord.id}`), txnRecord);
+
+      if (referrerUid) {
+        batch.update(doc(db, 'users', referrerUid), {
+          teamSize: increment(1),
+          teamSizeToday: increment(1)
+        });
+      }
+      
+      await batch.commit();
       
     } catch (err: any) {
       setLoading(false);
@@ -595,6 +608,44 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
         details: `Subscribed and activated ${globalPlan.name} Pool`
       });
+
+      // Handle active referral reward for funding first standard deposit pool
+      const otherActiveInvestments = userData.investments.filter(p => p.joined && p.id !== planId);
+      const isFirstPortfolioActivation = otherActiveInvestments.length === 0;
+      if (isFirstPortfolioActivation && (userData.referrerUid || userData.referredBy)) {
+        try {
+          let referrerDocRef: any = null;
+          if (userData.referrerUid) {
+            referrerDocRef = doc(db, 'users', userData.referrerUid);
+          } else if (userData.referredBy) {
+            const q = query(collection(db, 'users'), where('invitationCode', '==', userData.referredBy.trim().toUpperCase()));
+            const refSnap = await getDocs(q);
+            if (!refSnap.empty) {
+              referrerDocRef = refSnap.docs[0].ref;
+            }
+          }
+
+          if (referrerDocRef) {
+            batch.update(referrerDocRef, {
+              balance: increment(2500),
+              rechargeMembers: increment(1)
+            });
+
+            const refTxnId = `txn_ref_${Date.now()}`;
+            batch.set(doc(db, `users/${referrerDocRef.id}/transactions/${refTxnId}`), {
+              id: refTxnId,
+              userId: referrerDocRef.id,
+              amount: 2500,
+              type: "bonus",
+              status: "success",
+              date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+              details: `First Deposit Active Reward: ${userData.name}`
+            });
+          }
+        } catch (refErr) {
+          console.error("Failed to process active referral reward in subscribeToPlan:", refErr);
+        }
+      }
       
       await batch.commit();
     } catch (err: any) {
@@ -675,6 +726,120 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const simulateInvite = async () => {
+    if (!user || !userData) return;
+    try {
+      const batch = writeBatch(db);
+      
+      const randomNgs = ['703', '813', '906', '802', '915', '701', '805'];
+      const randomPrefix = randomNgs[Math.floor(Math.random() * randomNgs.length)];
+      const randomNumStr = Math.floor(1000000 + Math.random() * 9000000).toString();
+      const cleanPhone = `+234 ${randomPrefix} ${randomNumStr.slice(0, 3)} ${randomNumStr.slice(-4)}`;
+
+      const firstNames = ["Sade", "Kunle", "Temitope", "Nnamdi", "Chidi", "Akin", "Chioma", "Ibrahim", "Tunde", "Ayo"];
+      const lastNames = ["Oluaseun", "Jinadu", "Faroq", "Ebere", "Kolawole", "Nwachukwu", "Okoro", "Adeleke"];
+      const randomName = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+      const fakeMail = `${randomName.toLowerCase().replace(" ", "")}_${Math.floor(100 + Math.random() * 900)}@brex.internal`;
+
+      const possibleRecharges = [3000, 15000, 50000, 150000];
+      const amountChosen = possibleRecharges[Math.floor(Math.random() * possibleRecharges.length)];
+
+      const freshInvestments = CLIENT_DEFAULT_VIP_PLANS.map(p => {
+        if (p.cost === amountChosen) {
+          return {
+            ...p,
+            joined: true,
+            balance: amountChosen,
+            workingDays: Math.floor(1 + Math.random() * 5),
+            earnTotal: p.dailyProfit * Math.floor(1 + Math.random() * 5),
+            earnYesterday: p.dailyProfit
+          };
+        }
+        return p;
+      });
+
+      const simulatedUid = `user_sim_${Date.now()}`;
+      const generatedCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const simulatedUserProfile = {
+        id: simulatedUid,
+        name: randomName,
+        email: fakeMail,
+        phoneNumber: cleanPhone,
+        kycLevel: 3,
+        balance: 3000,
+        monthlyGains: freshInvestments.find(p => p.cost === amountChosen)?.earnTotal || 0,
+        streak: 1,
+        badges: ["First Brex 💧"],
+        memojiState: "Happy",
+        selectedIntent: "safe",
+        teamSize: 0,
+        rechargeMembers: 0,
+        effectiveSizeToday: 0,
+        teamSizeToday: 0,
+        invitationCode: generatedCode,
+        referredBy: userData.invitationCode,
+        referrerUid: user.uid,
+        isAdmin: false,
+        investments: freshInvestments
+      };
+
+      const simUserRef = doc(db, 'users', simulatedUid);
+      batch.set(simUserRef, simulatedUserProfile);
+
+      const simTxnId = `txn_${Date.now()}_sim1`;
+      const simTxnRef = doc(db, `users/${simulatedUid}/transactions/${simTxnId}`);
+      batch.set(simTxnRef, {
+        id: simTxnId,
+        userId: simulatedUid,
+        amount: amountChosen,
+        type: "subscribe",
+        status: "success",
+        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        details: `Simulated Pool Purchase: ${CLIENT_DEFAULT_VIP_PLANS.find(p => p.cost === amountChosen)?.name || "VIP Level"}`
+      });
+
+      const directReferralBonus = Math.floor(amountChosen * 0.10);
+      const activeReferralBonus = 2500;
+      const totalAwardedBonus = directReferralBonus + activeReferralBonus;
+
+      const parentRef = doc(db, 'users', user.uid);
+      batch.update(parentRef, {
+        balance: increment(totalAwardedBonus),
+        rechargeMembers: increment(1),
+        teamSize: increment(1),
+        teamSizeToday: increment(1)
+      });
+
+      const dBonusTxnId = `txn_bonus_dir_${Date.now()}`;
+      batch.set(doc(db, `users/${user.uid}/transactions/${dBonusTxnId}`), {
+        id: dBonusTxnId,
+        userId: user.uid,
+        amount: directReferralBonus,
+        type: "earning",
+        status: "success",
+        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        details: `Referral Bonus (10% on registration & deposit of ${randomName})`
+      });
+
+      const aBonusTxnId = `txn_bonus_act_${Date.now()}`;
+      batch.set(doc(db, `users/${user.uid}/transactions/${aBonusTxnId}`), {
+        id: aBonusTxnId,
+        userId: user.uid,
+        amount: activeReferralBonus,
+        type: "bonus",
+        status: "success",
+        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        details: `Active Invited Friend Pool Reward: ${randomName}`
+      });
+
+      await batch.commit();
+      console.log(`[Referral System Simulation] Registered and credited live parent ${user.uid} for simulated downline ${simulatedUid}`);
+    } catch (err) {
+      console.error("Referral simulation failed:", err);
+    }
+  };
+
   return (
     <FirebaseContext.Provider value={{
       user,
@@ -695,7 +860,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       refreshProfile,
       resetPassword,
       approveTransaction,
-      rejectTransaction
+      rejectTransaction,
+      simulateInvite
     }}>
       {children}
     </FirebaseContext.Provider>

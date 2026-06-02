@@ -453,6 +453,7 @@ const App: React.FC = () => {
   // Referral Program States
   const [activeTeamLevel, setActiveTeamLevel] = useState<number>(1);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [teamSubTab, setTeamSubTab] = useState<'members' | 'activity'>('members');
 
   // Derived Traditional Financial VIP Pools directly from session profile
   const investmentPlans = userData?.investments || CLIENT_DEFAULT_VIP_PLANS;
@@ -2608,56 +2609,169 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-            {activeProfileOverlay === 'referral_tree' && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center px-1">
-                  <p className="text-white text-xs font-black uppercase tracking-wider font-mono">My Referral Team</p>
-                  <span className="bg-[#8CEE47]/10 text-[#8CEE47] text-[9px] font-black px-2 py-0.5 rounded flex items-center gap-1.5 border border-[#8CEE47]/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#8CEE47] animate-pulse" />
-                    {teamMembers.length} Active
-                  </span>
-                </div>
-                
-                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                  {teamMembers.length === 0 ? (
-                    <div className="bg-[#131926] p-10 rounded-[32px] border border-[#1E293B] text-center flex flex-col items-center gap-4">
-                      <div className="w-14 h-14 bg-[#0C1017] rounded-full flex items-center justify-center text-2xl grayscale opacity-40 shadow-inner">👥</div>
-                      <div>
-                        <p className="text-white text-xs font-black uppercase tracking-tighter">No Genealogy Records</p>
-                        <p className="text-slate-500 text-[10px] font-bold mt-1 max-w-[180px] mx-auto leading-relaxed">Refer your partners to start building your wealth architecture.</p>
+            {activeProfileOverlay === 'referral_tree' && userData && (() => {
+              const activityLogs: Array<{ id: string; date: string; message: string; label: string; type: 'join' | 'bonus'; amount: number | null }> = [];
+              
+              teamMembers.forEach((member: any, index: number) => {
+                activityLogs.push({
+                  id: `join-${member.id || index}`,
+                  date: member.date || 'Recent',
+                  message: `User ${member.phone || 'Hidden'} joined your genealogy tree`,
+                  label: `Level L${member.lvl} Member`,
+                  type: 'join',
+                  amount: null
+                });
+              });
+              
+              if (userData.transactions) {
+                userData.transactions.forEach((tx: any) => {
+                  const isReferralBonus = tx.type === 'bonus' && (
+                    tx.details.toLowerCase().includes('referral') || 
+                    tx.details.toLowerCase().includes('invite') ||
+                    tx.details.toLowerCase().includes('invited') ||
+                    tx.details.toLowerCase().includes('deposit active') ||
+                    tx.details.toLowerCase().includes('first deposit')
+                  );
+                  if (isReferralBonus) {
+                    activityLogs.push({
+                      id: tx.id,
+                      date: tx.date || 'Recent',
+                      message: tx.details,
+                      label: 'Referral Bonus Credited',
+                      type: 'bonus',
+                      amount: tx.amount
+                    });
+                  }
+                });
+              }
+
+              activityLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+              return (
+                <div className="space-y-4">
+                  <div className="flex bg-[#0C1017] p-1 rounded-2xl border border-slate-850">
+                    <button
+                      onClick={() => setTeamSubTab('members')}
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        teamSubTab === 'members'
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      👥 Team Members ({teamMembers.length})
+                    </button>
+                    <button
+                      onClick={() => setTeamSubTab('activity')}
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        teamSubTab === 'activity'
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ⚡ Referral Activity ({activityLogs.length})
+                    </button>
+                  </div>
+
+                  {teamSubTab === 'members' ? (
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center px-1">
+                        <p className="text-white text-[10px] font-black uppercase tracking-wider font-mono">My Genealogy Tree</p>
+                        <span className="bg-[#8CEE47]/10 text-[#8CEE47] text-[9px] font-black px-2 py-0.5 rounded flex items-center gap-1.5 border border-[#8CEE47]/20">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#8CEE47] animate-pulse" />
+                          {teamMembers.length} Active Node(s)
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                        {teamMembers.length === 0 ? (
+                          <div className="bg-[#131926] p-10 rounded-[32px] border border-[#1E293B] text-center flex flex-col items-center gap-4 animate-in fade-in zoom-in-95 duration-250">
+                            <div className="w-14 h-14 bg-[#0C1017] rounded-full flex items-center justify-center text-2xl grayscale opacity-40 shadow-inner">👥</div>
+                            <div>
+                              <p className="text-white text-xs font-black uppercase tracking-tighter">No Genealogy Records</p>
+                              <p className="text-slate-500 text-[10px] font-bold mt-1 max-w-[180px] mx-auto leading-relaxed">Refer your partners to start building your wealth architecture.</p>
+                            </div>
+                          </div>
+                        ) : (
+                          teamMembers.map((m: any, idx: number) => (
+                            <div key={idx} className="bg-[#131926] p-4 rounded-[28px] border border-[#1E293B] flex items-center justify-between border-l-4 border-l-blue-600 transition-all hover:bg-[#1E293B]/50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                              <div className="flex items-center gap-3.5">
+                                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black ${m.lvl === 1 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' : 'bg-slate-800 text-slate-500'}`}>
+                                  L{m.lvl}
+                                </div>
+                                <div>
+                                  <p className="text-white text-xs font-black tracking-tight">{m.phone}</p>
+                                  <p className="text-[10px] text-slate-500 font-bold uppercase font-mono mt-0.5">{m.date}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className={`text-[10px] font-black uppercase tracking-wide ${m.recharge > 2000 ? 'text-[#8CEE47]' : 'text-slate-600'}`}>
+                                   {m.recharge > 2000 ? 'Verified' : 'Pending'}
+                                </p>
+                                <p className="text-[12px] font-black text-white font-mono mt-0.5 tracking-tighter">₦{m.recharge.toLocaleString()}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   ) : (
-                    teamMembers.map((m: any, idx: number) => (
-                      <div key={idx} className="bg-[#131926] p-4 rounded-[28px] border border-[#1E293B] flex items-center justify-between border-l-4 border-l-blue-600 transition-all hover:bg-[#1E293B]/50">
-                        <div className="flex items-center gap-3.5">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black ${m.lvl === 1 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' : 'bg-slate-800 text-slate-500'}`}>
-                            L{m.lvl}
-                          </div>
-                          <div>
-                            <p className="text-white text-xs font-black tracking-tight">{m.phone}</p>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase font-mono mt-0.5">{m.date}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className={`text-[10px] font-black uppercase tracking-wide ${m.recharge > 2000 ? 'text-[#8CEE47]' : 'text-slate-600'}`}>
-                             {m.recharge > 2000 ? 'Verified' : 'Pending'}
-                          </p>
-                          <p className="text-[12px] font-black text-white font-mono mt-0.5 tracking-tighter">₦{m.recharge.toLocaleString()}</p>
-                        </div>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center px-1">
+                        <p className="text-white text-[10px] font-black uppercase tracking-wider font-mono">Real-time Verified Network Logs</p>
+                        <span className="bg-[#8CEE47]/10 text-[#8CEE47] text-[9px] font-black px-2 py-0.5 rounded flex items-center border border-[#8CEE47]/20 font-mono">
+                          AUDITED
+                        </span>
                       </div>
-                    ))
-                  )}
-                </div>
 
-                <div className="bg-[#131926] p-4 rounded-[28px] border border-[#1E293B] flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-400">💡</div>
-                  <p className="text-[10px] leading-relaxed text-slate-400 font-semibold flex-1">
-                    Invite partners using your code <span className="text-white font-bold">{userData.invitationCode}</span> to grow your genealogy and claim rewards!
-                  </p>
+                      <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                        {activityLogs.length === 0 ? (
+                          <div className="bg-[#131926] p-10 rounded-[32px] border border-[#1E293B] text-center flex flex-col items-center gap-4 animate-in fade-in zoom-in-95 duration-250">
+                            <div className="w-14 h-14 bg-[#0C1017] rounded-full flex items-center justify-center text-2xl grayscale opacity-40 shadow-inner">⚡</div>
+                            <div>
+                              <p className="text-white text-xs font-black uppercase tracking-tighter">No Activity Recovers</p>
+                              <p className="text-slate-500 text-[10px] font-bold mt-1 max-w-[180px] mx-auto leading-relaxed">No referral memberships or bonus events registered yet.</p>
+                            </div>
+                          </div>
+                        ) : (
+                          activityLogs.map((log: any) => (
+                            <div key={log.id} className="bg-[#131926] p-4 rounded-[28px] border border-[#1E293B] flex items-start gap-3.5 transition-all hover:bg-[#1E293B]/50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                              <div className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                log.type === 'join' 
+                                  ? 'bg-blue-600/10 text-blue-400 border border-blue-500/10' 
+                                  : 'bg-[#8CEE47]/10 text-[#8CEE47] border border-[#8CEE47]/10'
+                              }`}>
+                                {log.type === 'join' ? <UserCheck size={14} /> : <Gift size={14} />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className={`text-[9px] font-black uppercase tracking-widest ${log.type === 'join' ? 'text-blue-400' : 'text-[#8CEE47]'}`}>
+                                    {log.label}
+                                  </p>
+                                  <span className="text-[9px] text-slate-500 font-bold whitespace-nowrap font-mono">{log.date}</span>
+                                </div>
+                                <p className="text-white text-xs font-bold leading-snug mt-1">{log.message}</p>
+                                {log.amount !== null && (
+                                  <p className="text-[11px] font-mono text-[#8CEE47] font-black mt-1">
+                                    +₦{log.amount.toLocaleString()} Credited Instantly
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-[#131926] p-4 rounded-[28px] border border-[#1E293B] flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-400">💡</div>
+                    <p className="text-[10px] leading-relaxed text-slate-400 font-semibold flex-1">
+                      Invite partners using your code <span className="text-white font-bold">{userData.invitationCode}</span> to grow your genealogy and claim rewards!
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {activeProfileOverlay === 'support' && (
               <div className="space-y-4">

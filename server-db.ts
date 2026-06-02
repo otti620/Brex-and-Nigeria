@@ -20,7 +20,7 @@ export interface UserInvestment {
 export interface TransactionRecord {
   id: string;
   amount: number;
-  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe';
+  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe' | 'earning';
   status: 'pending' | 'success' | 'failed';
   date: string;
   details: string;
@@ -35,6 +35,7 @@ export interface DbUser {
   kycLevel: number;
   balance: number;
   monthlyGains: number;
+  referralBonus?: number;
   streak: number;
   badges: string[];
   memojiState: 'Neutral' | 'Happy' | 'Focused' | 'Celebration' | 'Concerned';
@@ -45,6 +46,7 @@ export interface DbUser {
   teamSizeToday: number;
   invitationCode: string;
   referredBy?: string;
+  referrerUid?: string;
   linkedBankName?: string;
   linkedBankCode?: string;
   linkedBankOwner?: string;
