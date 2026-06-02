@@ -527,6 +527,27 @@ const App: React.FC = () => {
     }
   }, [activeProfileOverlay, userData?.uid]);
 
+  // Trigger popups independently on mount
+  useEffect(() => {
+    if (userData) {
+      const today = new Date().toISOString().slice(0, 10);
+      
+      // Trigger Telegram popup if not shown today
+      if (localStorage.getItem('telegram_shown_date') !== today) {
+        console.log("[DEBUG] Triggering Telegram Modal independently...");
+        setShowTelegramModal(true);
+        localStorage.setItem('telegram_shown_date', today);
+      }
+
+      // Trigger flyer popup if not shown today
+      if (localStorage.getItem('flyer_shown_date') !== today) {
+        console.log("[DEBUG] Triggering Flyer Modal independently...");
+        setShowFlyerModal(true);
+        localStorage.setItem('flyer_shown_date', today);
+      }
+    }
+  }, [userData?.uid]);
+
   // Load broadcasts for the dashboard banner (Real-time)
   useEffect(() => {
     if (userData) {
@@ -545,20 +566,6 @@ const App: React.FC = () => {
             if (data.length > 0 && !hasShownNoticeThisSession) {
               setShowNoticeModal(true);
               setHasShownNoticeThisSession(true);
-            } else if (!hasShownTelegramThisSession) {
-              // If no notices, show telegram prompt instead
-              console.log("[DEBUG] Triggering Telegram Modal...");
-              setShowTelegramModal(true);
-              setHasShownTelegramThisSession(true);
-
-              // Trigger flyer popup if not shown this year
-              const currentYear = new Date().getFullYear().toString();
-              const flyerShownYear = localStorage.getItem('flyer_shown_year');
-              if (flyerShownYear !== currentYear) {
-                console.log("[DEBUG] Triggering Flyer Modal...");
-                setShowFlyerModal(true);
-                localStorage.setItem('flyer_shown_year', currentYear);
-              }
             }
           }, (err) => {
             console.log("No broadcasts stream loaded (operating in offline/sandbox mode):", err);

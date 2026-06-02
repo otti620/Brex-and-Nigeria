@@ -25,7 +25,9 @@ export const FlyerPopup = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
               <X size={24} />
             </button>
             <h3 className="text-2xl font-black text-white mb-4">Brex Investment Structure</h3>
-            <img src="/flyer.png" alt="Flyer" className="rounded-2xl w-full mb-6" />
+            <div className="w-full h-64 bg-blue-800 rounded-2xl mb-6 flex items-center justify-center text-blue-400 font-bold">
+              [Flyer Placeholder]
+            </div>
             <button 
               onClick={onClose}
               className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2"
