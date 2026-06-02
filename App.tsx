@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { FlyerPopup } from './components/FlyerPopup';
 import { Screen, UserState } from './types';
 import Layout from './components/Layout';
 import Memoji from './components/Memoji';
@@ -125,6 +126,15 @@ const App: React.FC = () => {
 
       // Clear the query params from browser address bar as UX and security best practice
       window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  // Check for referral code in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    if (refCode) {
+      setInvitationCode(refCode);
     }
   }, []);
 
@@ -472,11 +482,11 @@ const App: React.FC = () => {
   const [linkedCardNumber, setLinkedCardNumber] = useState('');
   const [linkedCardExpiry, setLinkedCardExpiry] = useState('');
   const [linkedCardCvv, setLinkedCardCvv] = useState('');
-
   const [securityNewPass, setSecurityNewPass] = useState('');
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [showFlyerModal, setShowFlyerModal] = useState(false);
   const [hasShownNoticeThisSession, setHasShownNoticeThisSession] = useState(false);
   const [hasShownTelegramThisSession, setHasShownTelegramThisSession] = useState(false);
 
@@ -535,10 +545,20 @@ const App: React.FC = () => {
             if (data.length > 0 && !hasShownNoticeThisSession) {
               setShowNoticeModal(true);
               setHasShownNoticeThisSession(true);
-            } else if (!hasShownTelegramThisSession && data.length === 0) {
+            } else if (!hasShownTelegramThisSession) {
               // If no notices, show telegram prompt instead
+              console.log("[DEBUG] Triggering Telegram Modal...");
               setShowTelegramModal(true);
               setHasShownTelegramThisSession(true);
+
+              // Trigger flyer popup if not shown this year
+              const currentYear = new Date().getFullYear().toString();
+              const flyerShownYear = localStorage.getItem('flyer_shown_year');
+              if (flyerShownYear !== currentYear) {
+                console.log("[DEBUG] Triggering Flyer Modal...");
+                setShowFlyerModal(true);
+                localStorage.setItem('flyer_shown_year', currentYear);
+              }
             }
           }, (err) => {
             console.log("No broadcasts stream loaded (operating in offline/sandbox mode):", err);
@@ -2112,6 +2132,8 @@ const App: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <FlyerPopup isOpen={showFlyerModal} onClose={() => setShowFlyerModal(false)} />
 
       {/* Broadcast Notice Modal */}
       <AnimatePresence>

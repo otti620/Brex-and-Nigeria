@@ -275,7 +275,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       if (!isEmail) {
         const digits = loginId.replace(/[^0-9]/g, '');
-        loginEmail = `${digits}@seedstreet.internal`;
+        loginEmail = `${digits}@brex.internal`;
       }
       
       await signInWithEmailAndPassword(auth, loginEmail, securityKey);
