@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FlyerPopup } from './components/FlyerPopup';
+import { LiveActivityBar } from './components/LiveActivityBar';
+import { TelegramModal } from './components/TelegramModal';
 import { Screen, UserState } from './types';
 import Layout from './components/Layout';
 import Memoji from './components/Memoji';
@@ -38,7 +40,8 @@ import {
   CreditCard,
   Eye,
   EyeOff,
-  ChevronDown
+  ChevronDown,
+  Send
 } from 'lucide-react';
 
 const CLIENT_DEFAULT_VIP_PLANS = [
@@ -530,8 +533,10 @@ const App: React.FC = () => {
   // Trigger popups automatically on mount
   useEffect(() => {
     if (userData) {
-      setShowTelegramModal(true);
-      setShowFlyerModal(true);
+      setTimeout(() => {
+        setShowTelegramModal(true);
+        setShowFlyerModal(true);
+      }, 1000);
     }
   }, [userData?.uid]);
 
@@ -1097,8 +1102,13 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-          <div onClick={() => navigate(Screen.Profile)} className="cursor-pointer active:scale-95 transition-transform ring-4 ring-gray-100 rounded-2xl p-0.5 bg-white shadow-sm">
-            <Memoji state={userData.memojiState} size="sm" />
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowTelegramModal(true)} className="p-2 bg-sky-100 rounded-full text-sky-600">
+               <Send size={16} />
+            </button>
+            <div onClick={() => navigate(Screen.Profile)} className="cursor-pointer active:scale-95 transition-transform ring-4 ring-gray-100 rounded-2xl p-0.5 bg-white shadow-sm">
+              <Memoji state={userData.memojiState} size="sm" />
+            </div>
           </div>
         </div>
 
@@ -1121,6 +1131,8 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        <LiveActivityBar />
 
 
 
@@ -2128,6 +2140,7 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       <FlyerPopup isOpen={showFlyerModal} onClose={() => setShowFlyerModal(false)} />
+      <TelegramModal isOpen={showTelegramModal} onClose={() => setShowTelegramModal(false)} />
 
       {/* Broadcast Notice Modal */}
       <AnimatePresence>
