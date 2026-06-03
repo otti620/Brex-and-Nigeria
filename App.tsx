@@ -191,6 +191,87 @@ const App: React.FC = () => {
     }
   };
 
+  // Web Audio API tick generator mimicking physical wheel stops/pegs
+  const playTickSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      
+      const win = window as any;
+      if (!win.__brexAudioCtx) {
+        win.__brexAudioCtx = new AudioCtx();
+      }
+      const ctx = win.__brexAudioCtx;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      // High transient snap click
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(1400, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.02);
+
+      gain1.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.02);
+
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.025);
+
+      // Lower body resonance wood click
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(280, ctx.currentTime);
+      osc2.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.035);
+
+      gain2.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.035);
+
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start();
+      osc2.stop(ctx.currentTime + 0.04);
+    } catch (e) {
+      console.warn("Tick audio error:", e);
+    }
+  };
+
+  // Scheduled ticks simulating precise physical angular deceleration
+  const startSpinTicks = () => {
+    let delay = 35; // fast initial speed (35ms between pegs)
+    let elapsed = 0;
+    const maxDuration = 4050;
+
+    const triggerNextTick = () => {
+      if (elapsed >= maxDuration) return;
+
+      playTickSound();
+
+      elapsed += delay;
+
+      // Easing/deceleration curve scaling
+      if (elapsed < 1200) {
+        delay += 4;
+      } else if (elapsed < 2400) {
+        delay += 11;
+      } else if (elapsed < 3400) {
+        delay = delay * 1.15;
+      } else {
+        delay = delay * 1.25;
+      }
+
+      if (delay > 550) delay = 550; // maximum interval cap
+
+      setTimeout(triggerNextTick, delay);
+    };
+
+    triggerNextTick();
+  };
+
   const handleSpinWheel = async () => {
     if (spinning || !user) return;
     setSpinning(true);
@@ -232,6 +313,9 @@ const App: React.FC = () => {
       
       // Trigger rotation
       setWheelRotation(finalRotation);
+
+      // Play continuous slowing mechanical ticks
+      startSpinTicks();
       
       // Wait for animation to finish
       setTimeout(() => {
