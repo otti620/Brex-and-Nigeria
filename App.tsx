@@ -160,12 +160,14 @@ const App: React.FC = () => {
 
   // Promotions / Game States
   const [promoTab, setPromoTab] = useState<'spin' | 'lottery' | 'offers'>('spin');
+  const [spinWheelType, setSpinWheelType] = useState<'regular' | 'mega'>('regular');
   const [spinning, setSpinning] = useState(false);
   const [wheelRotation, setWheelRotation] = useState(0);
   const [spinResultModal, setSpinResultModal] = useState<{ show: boolean, reward: number, label: string } | null>(null);
 
-  // Lottery configurations and inputs
-  const [selectedNums, setSelectedNums] = useState<[number, number, number]>([5, 2, 7]);
+  // Lottery configurations and inputs (Naija 2-Sure Lotto Redesign)
+  const [selectedNums, setSelectedNums] = useState<[number, number]>([17, 88]);
+  const [betStake, setBetStake] = useState<number>(200); // custom stake (₦50 to ₦10000)
   const [userTickets, setUserTickets] = useState<any[]>([]);
   const [lotteryLoading, setLotteryLoading] = useState(false);
   const [drawLoading, setDrawLoading] = useState(false);
@@ -275,7 +277,7 @@ const App: React.FC = () => {
   const handleSpinWheel = async () => {
     if (spinning || !user) return;
     setSpinning(true);
-    showToast("Connecting live Fortune Oracle server...");
+    showToast(`Connecting live ${spinWheelType === 'mega' ? 'VIP Mega' : 'Standard'} Fortune server...`);
     
     // reset wheel rotation first
     setWheelRotation(0);
@@ -286,7 +288,8 @@ const App: React.FC = () => {
         headers: {
           "Content-Type": "application/json",
           "Authorization": user.uid
-        }
+        },
+        body: JSON.stringify({ spinType: spinWheelType })
       });
       
       if (!res.ok) {
@@ -298,14 +301,25 @@ const App: React.FC = () => {
       
       const data = await res.json();
       
-      // Sectors: 0: ₦50, 1: ₦100, 2: ₦500, 3: Try again, 4: ₦700, 5: ₦2000
+      // Select wedge indices depending on model
       let targetIndex = 3; // default: try again
-      if (data.reward === 50) targetIndex = 0;
-      else if (data.reward === 100) targetIndex = 1;
-      else if (data.reward === 500) targetIndex = 2;
-      else if (data.reward === 0) targetIndex = 3;
-      else if (data.reward === 700) targetIndex = 4;
-      else if (data.reward === 2000) targetIndex = 5;
+      if (spinWheelType === 'mega') {
+        // Mega sectors: 0: ₦200, 1: ₦500, 2: ₦1500, 3: Try again, 4: ₦3500, 5: ₦15000
+        if (data.reward === 200) targetIndex = 0;
+        else if (data.reward === 500) targetIndex = 1;
+        else if (data.reward === 1500) targetIndex = 2;
+        else if (data.reward === 0) targetIndex = 3;
+        else if (data.reward === 3500) targetIndex = 4;
+        else if (data.reward === 15000) targetIndex = 5;
+      } else {
+        // Regular sectors: 0: ₦50, 1: ₦100, 2: ₦500, 3: Try again, 4: ₦700, 5: ₦2000
+        if (data.reward === 50) targetIndex = 0;
+        else if (data.reward === 100) targetIndex = 1;
+        else if (data.reward === 500) targetIndex = 2;
+        else if (data.reward === 0) targetIndex = 3;
+        else if (data.reward === 700) targetIndex = 4;
+        else if (data.reward === 2000) targetIndex = 5;
+      }
 
       const targetRotationAngle = 360 - (targetIndex * 60 + 30);
       const spins = 6 * 360; // 6 full spins
@@ -338,7 +352,7 @@ const App: React.FC = () => {
   const handleBuyLottery = async () => {
     if (lotteryLoading || !user) return;
     setLotteryLoading(true);
-    showToast("Registering combinations into official Cashpot pool...");
+    showToast("Locking combinations with server terminal...");
     try {
       const res = await fetch("/api/user/lottery/buy", {
         method: "POST",
@@ -346,18 +360,18 @@ const App: React.FC = () => {
           "Content-Type": "application/json",
           "Authorization": user.uid
         },
-        body: JSON.stringify({ ticketNumbers: selectedNums })
+        body: JSON.stringify({ ticketNumbers: selectedNums, stake: betStake })
       });
 
       if (!res.ok) {
         const errData = await res.json();
-        showToast(errData.error || "Lottery registration failed");
+        showToast(errData.error || "2-Sure staking failed");
         setLotteryLoading(false);
         return;
       }
 
       await res.json();
-      showToast(`🎟️ Registered combination ${selectedNums.join(", ")} successfully!`);
+      showToast(`🎟️ [2-Sure] Registered [${selectedNums.join(", ")}] with ₦${betStake} stake successfully!`);
       fetchTickets(); // reload lottery tickets
       refreshProfile(); // reload balances
       setLotteryLoading(false);
@@ -371,7 +385,7 @@ const App: React.FC = () => {
   const handleExecuteLotteryDraw = async () => {
     if (drawLoading || !user) return;
     setDrawLoading(true);
-    showToast("Spinning Cashpot gravity balls... Standby!");
+    showToast("Spinning 2-Sure Lotto gravity balls... Standby!");
     
     try {
       const res = await fetch("/api/user/lottery/draw", {
@@ -1672,7 +1686,14 @@ const App: React.FC = () => {
   };
 
   const renderPromotions = () => {
-    const sectors = [
+    const sectors = spinWheelType === 'mega' ? [
+      { label: "₦200", color: "#6366f1", reward: 200 },
+      { label: "₦500", color: "#3b82f6", reward: 500 },
+      { label: "₦1,500", color: "#10b981", reward: 1500 },
+      { label: "Try again", color: "#64748b", reward: 0 },
+      { label: "₦3,500", color: "#f59e0b", reward: 3550 }, // slight edge multiplier
+      { label: "₦15,000", color: "#ec4899", reward: 15000 }
+    ] : [
       { label: "₦50", color: "#6366f1", reward: 50 },
       { label: "₦100", color: "#3b82f6", reward: 100 },
       { label: "₦500", color: "#10b981", reward: 500 },
@@ -1716,7 +1737,7 @@ const App: React.FC = () => {
                 : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
             }`}
           >
-            🎟️ Cashpot 3
+            🎟️ 2-Sure Lotto
           </button>
           <button
             onClick={() => setPromoTab('offers')}
@@ -1743,14 +1764,44 @@ const App: React.FC = () => {
               </span>
               <h3 className="text-lg font-black text-slate-900 tracking-tight mt-2.5">Circular Fortune Wheel</h3>
               <p className="text-[10px] text-slate-400 font-extrabold font-mono uppercase tracking-tight mt-1">
-                {hasFreeSpin 
-                  ? "🎉 Daily free spin is active! Grab free rewards" 
-                  : "🎡 Free spin claimed. Extra spin costs only ₦100 NGN"}
+                {spinWheelType === 'mega' ? (
+                  <span className="text-pink-600 animate-pulse">🔥 MEGA VIP ACTIVE: Spin costs ₦1,000. Win up to ₦15,000!</span>
+                ) : hasFreeSpin ? (
+                  "🎉 Daily free spin is active! Grab free rewards" 
+                ) : (
+                  "🎡 Free spin claimed. Extra spin costs only ₦100 NGN"
+                )}
               </p>
             </div>
 
+            {/* VIP/Regular Selector pill */}
+            <div className="bg-slate-100 p-1 rounded-2xl flex gap-1 w-full max-w-[280px] border border-slate-200">
+              <button
+                disabled={spinning}
+                onClick={() => setSpinWheelType('regular')}
+                className={`flex-1 py-2 px-1 rounded-xl font-bold text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer ${
+                  spinWheelType === 'regular'
+                    ? 'bg-slate-950 text-white shadow-md'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                 Regular (₦100)
+              </button>
+              <button
+                disabled={spinning}
+                onClick={() => setSpinWheelType('mega')}
+                className={`flex-1 py-2 px-1 rounded-xl font-black text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  spinWheelType === 'mega'
+                    ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-md'
+                    : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'
+                }`}
+              >
+                🔥 MEGA VIP (₦1k)
+              </button>
+            </div>
+
             {/* Wheel Canvas Container */}
-            <div className="relative flex flex-col items-center justify-center mt-3 scale-95 select-none">
+            <div className="relative flex flex-col items-center justify-center mt-1 scale-95 select-none">
               {/* Spinning Arrow Indicator (At Top Center) */}
               <div className="absolute -top-1.5 z-30 flex flex-col items-center">
                 <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[20px] border-t-rose-600 drop-shadow-md" />
@@ -1761,7 +1812,9 @@ const App: React.FC = () => {
               <motion.div
                 style={{ rotate: wheelRotation }}
                 transition={spinning ? { duration: 4, ease: [0.12, 0.8, 0.15, 1] } : { duration: 0 }}
-                className="relative w-64 h-64 rounded-full border-4 border-slate-950 bg-slate-950 shadow-2xl flex items-center justify-center overflow-hidden"
+                className={`relative w-64 h-64 rounded-full border-4 shadow-2xl flex items-center justify-center overflow-hidden transition-all ${
+                  spinning ? 'animate-pulse' : ''
+                } ${spinWheelType === 'mega' ? 'border-amber-400 bg-slate-950' : 'border-slate-950 bg-slate-950'}`}
               >
                 {sectors.map((sector, index) => {
                   const angle = index * 60;
@@ -1802,7 +1855,9 @@ const App: React.FC = () => {
                 className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-wider transform active:scale-95 transition-all shadow-lg ${
                   spinning
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
-                    : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-950 text-white shadow-slate-950/20 active:shadow-sm'
+                    : spinWheelType === 'mega'
+                      ? 'bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 text-white shadow-orange-500/20 shadow-lg'
+                      : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-950 text-white shadow-slate-950/20 active:shadow-sm'
                 }`}
               >
                 {spinning ? (
@@ -1810,6 +1865,8 @@ const App: React.FC = () => {
                     <span className="w-4 h-4 border-2 border-slate-400 border-t-white rounded-full animate-spin" />
                     Calculating Vectors...
                   </span>
+                ) : spinWheelType === 'mega' ? (
+                  "🔥 Spin VIP Mega (Costs ₦1,000)"
                 ) : hasFreeSpin ? (
                   "🍀 Spin For Free (Daily)"
                 ) : (
@@ -1820,86 +1877,153 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Tab CONTENT 2: Cashpot Pick3 Lottery */}
+        {/* Tab CONTENT 2: Brex Nigeria 2-Sure Lotto */}
         {promoTab === 'lottery' && (
           <div className="flex flex-col gap-5 bg-white border border-slate-100 p-5 rounded-[32px] shadow-sm relative overflow-hidden">
             
-            {/* Headline and Draw variables */}
-            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
-              <div>
-                <span className="font-bold text-[9px] uppercase tracking-widest text-[#ff9c00] bg-orange-50 border border-orange-100 px-3 py-1 rounded-full font-mono">
-                  Brex Cashpot Pick-3
-                </span>
-                <h3 className="text-md font-black text-slate-900 mt-2.5">Super Jackpot Draw</h3>
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-                  Pick-3 numbers matching 0-9. Ticket costs ₦200.
-                </p>
+            {/* Header / Payout Matrix Table */}
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="font-bold text-[9px] uppercase tracking-widest text-[#10b981] bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full font-mono">
+                    Brex 2-Sure Lotto
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900 mt-2.5 tracking-tight">Naija Terminal Betslip</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                    Draw 5 balls out of 1-90. Pick 2 to win!
+                  </p>
+                </div>
+                <div className="text-right bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-2xl">
+                  <p className="text-[8px] text-rose-600 font-extrabold uppercase font-mono tracking-wider">Lotto Yield</p>
+                  <p className="text-[13px] font-black font-mono text-rose-600 mt-0.5">150x Pay multiplier</p>
+                </div>
               </div>
-              <div className="text-right bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-2xl">
-                <p className="text-[8px] text-indigo-600 font-black uppercase font-mono tracking-wider">Estimated Jackpot</p>
-                <p className="text-[13px] font-black font-mono text-indigo-700 mt-0.5">₦20,000.00</p>
+
+              {/* Multiplier Payout Box description */}
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-2xl">
+                  <p className="text-[8px] text-slate-400 font-bold uppercase font-mono">✌️ 2-SURE HIT (Matches 2/2)</p>
+                  <p className="text-[14px] font-black text-rose-600 font-mono mt-0.5">150x Returns</p>
+                  <p className="text-[8.5px] text-slate-400 font-bold mt-0.5">₦1,000 stake wins ₦150k!</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-2xl">
+                  <p className="text-[8px] text-slate-400 font-bold uppercase font-mono">☝️ 1-DIRECT CONSOLATION (Matches 1/2)</p>
+                  <p className="text-[14px] font-black text-emerald-600 font-mono mt-0.5">3.5x Returns</p>
+                  <p className="text-[8.5px] text-slate-400 font-bold mt-0.5">₦1,000 stake wins ₦3,500!</p>
+                </div>
               </div>
             </div>
 
-            {/* Lucky digit selector widgets */}
+            {/* Lucky Ball Selection widgets */}
             <div className="flex flex-col gap-3">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono text-center">
-                Configure your 3 Lucky digits:
+                Configure your 2 Lucky combination numbers:
               </p>
 
-              <div className="grid grid-cols-3 gap-3 justify-center max-w-xs mx-auto w-full">
-                {selectedNums.map((num, i) => (
-                  <div key={i} className="flex flex-col items-center bg-slate-50 border border-slate-150 p-2.5 rounded-3xl">
-                    {/* Increase button */}
-                    <button
-                      onClick={() => {
-                        const copy = [...selectedNums] as [number, number, number];
-                        copy[i] = (copy[i] + 1) % 10;
-                        setSelectedNums(copy);
-                      }}
-                      className="w-8 h-8 rounded-full bg-white border border-slate-150 flex items-center justify-center font-black text-md text-slate-700 active:scale-95 hover:bg-slate-100 shadow-sm"
-                    >
-                      +
-                    </button>
-                    {/* Big selected Digit */}
-                    <span className="my-2.5 text-3xl font-black font-mono text-slate-900 tracking-tighter">
-                      {num}
-                    </span>
-                    {/* Decrease button */}
-                    <button
-                      onClick={() => {
-                        const copy = [...selectedNums] as [number, number, number];
-                        copy[i] = (copy[i] - 1 + 10) % 10;
-                        setSelectedNums(copy);
-                      }}
-                      className="w-8 h-8 rounded-full bg-white border border-slate-150 flex items-center justify-center font-black text-md text-slate-700 active:scale-95 hover:bg-slate-100 shadow-sm"
-                    >
-                      -
-                    </button>
+              <div className="flex gap-4 justify-center items-center">
+                {[0, 1].map((index) => (
+                  <div key={index} className="flex flex-col items-center bg-slate-50 border border-slate-205 p-4 rounded-[28px] w-32 shadow-sm relative">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono mb-2">BALL #{index+1}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const copy = [...selectedNums] as [number, number];
+                          copy[index] = copy[index] > 1 ? copy[index] - 1 : 90;
+                          if (copy[0] === copy[1]) {
+                            copy[index] = copy[index] > 1 ? copy[index] - 1 : 90;
+                          }
+                          setSelectedNums(copy);
+                        }}
+                        className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center font-black text-slate-600 hover:bg-slate-100 active:scale-95 transition-transform shadow-sm"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        max="90"
+                        value={selectedNums[index]}
+                        onChange={(e) => {
+                          const val = Math.max(1, Math.min(90, parseInt(e.target.value) || 1));
+                          const copy = [...selectedNums] as [number, number];
+                          copy[index] = val;
+                          setSelectedNums(copy);
+                        }}
+                        className="w-12 text-center text-2xl font-black font-mono text-slate-950 bg-transparent focus:outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          const copy = [...selectedNums] as [number, number];
+                          copy[index] = copy[index] < 90 ? copy[index] + 1 : 1;
+                          if (copy[0] === copy[1]) {
+                            copy[index] = copy[index] < 90 ? copy[index] + 1 : 1;
+                          }
+                          setSelectedNums(copy);
+                        }}
+                        className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center font-black text-slate-600 hover:bg-slate-100 active:scale-95 transition-transform shadow-sm"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Stake bets Selector presets to encourage spending */}
+              <div className="flex flex-col gap-2 mt-2 bg-slate-50/50 border border-slate-150 p-4 rounded-3xl">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest font-mono text-center">
+                  Select Your Bet Stake (NGN):
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {[100, 200, 500, 1000, 2000, 5000].map((amt) => (
+                    <button
+                      key={amt}
+                      onClick={() => setBetStake(amt)}
+                      className={`py-2 px-1 rounded-xl text-[11px] font-black font-mono border-2 transition-all cursor-pointer ${
+                        betStake === amt 
+                          ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/10' 
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      ₦{amt.toLocaleString()}
+                    </button>
+                  ))}
+                  {/* Custom Stake field */}
+                  <div className="col-span-2 flex items-center bg-white border-2 border-slate-200 rounded-xl px-2.5">
+                    <span className="text-[11px] font-black font-mono text-slate-400">₦</span>
+                    <input
+                      type="number"
+                      min="50"
+                      max="10000"
+                      value={betStake}
+                      onChange={(e) => setBetStake(Math.max(50, Math.min(10000, parseInt(e.target.value) || 50)))}
+                      className="w-full text-right text-[11px] font-black font-mono text-slate-800 bg-transparent focus:outline-none pl-1"
+                      placeholder="Custom"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Instant Action buttons */}
               <div className="grid grid-cols-2 gap-3 mt-1.5">
                 <button
                   onClick={() => {
-                    const r1 = Math.floor(Math.random() * 10);
-                    const r2 = Math.floor(Math.random() * 10);
-                    const r3 = Math.floor(Math.random() * 10);
-                    setSelectedNums([r1, r2, r3]);
-                    showToast("⚡ Quick Pick rolled random combination!");
+                    const pool = Array.from({ length: 90 }, (_, i) => i + 1);
+                    const r1 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+                    const r2 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+                    setSelectedNums([r1, r2]);
+                    showToast(`⚡ Quick Pick randomly selected: [${r1}, ${r2}]!`);
                   }}
-                  className="py-3.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm flex items-center justify-center gap-1"
+                  className="py-3.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm flex items-center justify-center gap-1 cursor-pointer"
                 >
                   ⚡ Quick Pick
                 </button>
                 <button
                   disabled={lotteryLoading}
                   onClick={handleBuyLottery}
-                  className="py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-rose-600/10 flex items-center justify-center gap-1 active:scale-95 transition-all"
+                  className="py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:opacity-90 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-rose-600/10 flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
                 >
-                  🎟️ Buy Ticket (₦200)
+                  🎟️ Stake 2-Sure (₦{betStake})
                 </button>
               </div>
             </div>
@@ -1918,13 +2042,13 @@ const App: React.FC = () => {
 
               <div className="flex flex-col gap-2 mt-1">
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-normal">
-                  You can wait for the official timer, or click the button below to execute a LIVE drawing for all pending combination tickets instantly!
+                  You can wait for the official timer, or click the button below to execute a LIVE gravity cage drawing for all pending combination tickets instantly!
                 </p>
 
                 <button
                   disabled={drawLoading || userTickets.filter(t => t.status === "pending").length === 0}
                   onClick={handleExecuteLotteryDraw}
-                  className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                  className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     userTickets.filter(t => t.status === "pending").length === 0
                       ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                       : 'bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-lg active:scale-95 shadow-indigo-600/15'
@@ -1932,7 +2056,7 @@ const App: React.FC = () => {
                 >
                   {drawLoading ? (
                     <span className="flex items-center gap-2">
-                       <span className="w-3.5 h-3.5 border-2 border-indigo-450 border-t-white rounded-full animate-spin" />
+                       <span className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-white rounded-full animate-spin" />
                        Rolling gravity cages...
                     </span>
                   ) : userTickets.filter(t => t.status === "pending").length === 0 ? (
@@ -1978,12 +2102,15 @@ const App: React.FC = () => {
                         <div className="flex items-center gap-2.5">
                           <Ticket size={16} className={isWon ? 'text-emerald-500' : isPending ? 'text-indigo-400' : 'text-slate-400'} />
                           <div>
-                            <div className="flex gap-1.5">
+                            <div className="flex gap-1.5 items-center">
                               {tc.ticketNumbers?.map((n: number, nIdx: number) => (
-                                <span key={nIdx} className="w-5 h-5 rounded-full bg-slate-900 text-white font-mono font-black text-[10px] flex items-center justify-center">
+                                <span key={nIdx} className="w-6 h-6 rounded-full bg-slate-900 text-white font-mono font-black text-[11px] flex items-center justify-center border border-white shadow-sm">
                                   {n}
                                 </span>
                               ))}
+                              <span className="text-[8.5px] font-black font-mono text-slate-500 bg-slate-150 px-1.5 py-0.5 rounded ml-1">
+                                ₦{tc.purchasePrice || 200} Stake
+                              </span>
                             </div>
                             <p className="text-[8px] text-slate-400 font-bold font-mono tracking-wider uppercase mt-1">ID: {tc.id?.slice(-8)} • {tc.entryDate}</p>
                           </div>
@@ -2000,7 +2127,7 @@ const App: React.FC = () => {
                                 WON
                               </span>
                               <span className="text-[11px] font-black text-emerald-600 font-mono mt-0.5">
-                                +₦{tc.rewardAmount}
+                                +₦{tc.rewardAmount.toLocaleString()}
                               </span>
                             </div>
                           ) : (
@@ -2084,7 +2211,7 @@ const App: React.FC = () => {
 
               <button
                 onClick={() => setSpinResultModal(null)}
-                className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-6 active:scale-95 transition-all"
+                className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-6 active:scale-95 transition-all cursor-pointer"
               >
                 Close Gateway
               </button>
@@ -2095,24 +2222,25 @@ const App: React.FC = () => {
         {/* Lottery Drawing Suspense Overlay Animation */}
         {drawLoading && (
           <div className="fixed inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-5 z-[230] select-none text-center">
-            <div className="flex gap-4 justify-center items-center my-6">
-              {[1, 2, 3].map((b) => {
-                const randomDigit = Math.floor(Math.random() * 10);
+            {/* Beautiful gravity bouncy balls animation */}
+            <div className="flex gap-3 justify-center items-center my-6 flex-wrap max-w-xs">
+              {[1, 2, 3, 4, 5].map((b) => {
+                const randomDigit = Math.floor(Math.random() * 90) + 1;
                 return (
                   <motion.div
                     key={b}
                     animate={{ 
-                      y: [-15, 15, -15],
+                      y: [-25, 25, -25],
                       rotate: [0, 360],
-                      scale: [1, 1.1, 1]
+                      scale: [1, 1.15, 1]
                     }}
                     transition={{
-                      duration: 0.6,
+                      duration: 0.5,
                       repeat: Infinity,
-                      delay: b * 0.15,
+                      delay: b * 0.08,
                       ease: "easeInOut"
                     }}
-                    className="w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-amber-500 to-[#ff9c00] border-4 border-white text-white font-mono font-black text-xl flex items-center justify-center shadow-2xl shadow-yellow-500/30"
+                    className="w-12 h-12 rounded-full bg-gradient-to-tr from-rose-500 via-orange-500 to-yellow-500 border-2 border-white text-white font-mono font-black text-sm flex items-center justify-center shadow-2xl shadow-rose-600/20"
                   >
                     {randomDigit}
                   </motion.div>
@@ -2120,11 +2248,11 @@ const App: React.FC = () => {
               })}
             </div>
             
-            <h3 className="text-lg font-black text-white tracking-tight animate-pulse uppercase tracking-[0.1em]">
-              Drawing Gravity Balls...
+            <h3 className="text-base font-black text-white tracking-wider animate-pulse uppercase">
+              Drawing 2-Sure Gravity Balls...
             </h3>
-            <p className="text-[10px] font-mono text-amber-400 uppercase tracking-widest mt-2 max-w-xs leading-relaxed">
-              Matching selected ticket combination digits. Payout matrices are loading...
+            <p className="text-[9px] font-mono text-amber-400 uppercase tracking-widest mt-2 max-w-xs leading-relaxed">
+              Tumbling cage cylinders. Checking combination matrices...
             </p>
           </div>
         )}
@@ -2140,19 +2268,19 @@ const App: React.FC = () => {
               <div className="absolute w-40 h-40 rounded-full bg-yellow-500/10 blur-3xl -top-10 -left-10" />
               <div className="absolute w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl -bottom-10 -right-10" />
 
-              <div className="w-16 h-16 rounded-full bg-yellow-100 border border-yellow-200 flex items-center justify-center text-3xl mb-4 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-rose-100 border border-rose-200 flex items-center justify-center text-3xl mb-4 shadow-sm animate-bounce">
                 🏆
               </div>
 
-              <h3 className="text-md font-black text-slate-900 tracking-tight">Official Drawing Output</h3>
-              <p className="text-[9px] font-extrabold text-slate-400 font-mono uppercase tracking-widest mt-1">
-                Gravity Cage Drawn Numbers:
+              <h3 className="text-md font-black text-slate-900 tracking-tight">Official Draw Output (Lagos Live)</h3>
+              <p className="text-[9px] font-extrabold text-slate-405 font-mono uppercase tracking-widest mt-1">
+                Gravity Balls Drawn:
               </p>
 
               {/* Drawn Winning Balls */}
-              <div className="flex gap-2.5 my-5 justify-center">
+              <div className="flex gap-2 my-5 justify-center flex-wrap">
                 {drawResult.numbers.map((n, idx) => (
-                  <div key={idx} className="w-10 h-10 rounded-full bg-slate-900 text-white border-2 border-slate-950 text-sm font-black font-mono flex items-center justify-center shadow-md animate-bounce" style={{ animationDelay: `${idx * 0.15}s` }}>
+                  <div key={idx} className="w-10 h-10 rounded-full bg-slate-900 text-white border-2 border-yellow-500 text-sm font-black font-mono flex items-center justify-center shadow-md animate-bounce" style={{ animationDelay: `${idx * 0.15}s` }}>
                     {n}
                   </div>
                 ))}
@@ -2160,20 +2288,20 @@ const App: React.FC = () => {
 
               {drawResult.reward > 0 ? (
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 w-full mb-3 text-center">
-                  <p className="text-[9px] text-emerald-600 font-black uppercase font-mono tracking-widest">
-                    🎉 You Won Match Prize!
+                  <p className="text-[9px] text-emerald-600 font-extrabold uppercase font-mono tracking-widest">
+                    🎉 Jackpot payout achieved!
                   </p>
                   <p className="text-2xl font-black font-mono text-emerald-700 mt-1">
-                    +₦{drawResult.reward} NGN
+                    +₦{drawResult.reward.toLocaleString()} NGN
                   </p>
                 </div>
               ) : (
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 w-full mb-3 text-center">
-                  <p className="text-[9px] text-slate-500 font-black uppercase font-mono tracking-widest">
-                    No matching combinations
+                  <p className="text-[9px] text-slate-500 font-extrabold uppercase font-mono tracking-widest">
+                    No matching direct balls
                   </p>
-                  <p className="text-sm font-bold text-slate-700 mt-1">
-                    Better luck in next drawing!
+                  <p className="text-xs font-black text-slate-700 mt-1">
+                    Better luck in the next drawing!
                   </p>
                 </div>
               )}
@@ -2181,13 +2309,13 @@ const App: React.FC = () => {
               {/* Matched Tickets breakdown list */}
               <div className="w-full text-left mt-1 border-t border-slate-100 pt-3">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono mb-2">
-                  Matching Ledger Summary:
+                  Betslip Ledger Match Report:
                 </p>
                 <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
                   {drawResult.matched.map((m, idx) => (
                     <div key={idx} className="flex justify-between items-center text-[10px] py-1 border-b border-slate-50 last:border-0 font-mono text-slate-600">
                       <span className="font-bold">Comb: [{m.ticketNumbers.join(",")}]</span>
-                      <span className="font-bold text-slate-400">{m.matchCount} matched indices</span>
+                      <span className="font-bold text-slate-400">{m.matchCount}/2 Matches</span>
                       <span className={`font-black uppercase ${m.prize > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                         {m.prize > 0 ? `+₦${m.prize}` : 'Lost'}
                       </span>
@@ -2198,7 +2326,7 @@ const App: React.FC = () => {
 
               <button
                 onClick={() => setDrawResult(null)}
-                className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-5 active:scale-95 transition-all"
+                className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-5 active:scale-95 transition-all cursor-pointer"
               >
                 Clear Draw Interface
               </button>

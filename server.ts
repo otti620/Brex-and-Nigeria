@@ -1202,33 +1202,57 @@ function startServer() {
   app.post("/api/user/spin-wheel", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
+      const { spinType } = req.body; // "regular" | "mega"
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
       const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+      const isMega = spinType === "mega";
       
-      // Determine prize
+      // Determine prize based on spin type
       const randValue = Math.random() * 100;
       let reward = 0;
       let label = "Try again";
 
-      if (randValue < 40) {
-        reward = 0;
-        label = "Try again";
-      } else if (randValue < 70) {
-        reward = 50;
-        label = "₦50 NGN";
-      } else if (randValue < 85) {
-        reward = 100;
-        label = "₦100 NGN";
-      } else if (randValue < 93) {
-        reward = 500;
-        label = "₦500 NGN";
-      } else if (randValue < 98.2) {
-        reward = 700;
-        label = "₦700 NGN";
+      if (isMega) {
+        if (randValue < 45) {
+          reward = 0;
+          label = "Try again";
+        } else if (randValue < 68) {
+          reward = 200;
+          label = "₦200 NGN";
+        } else if (randValue < 85) {
+          reward = 500;
+          label = "₦500 NGN";
+        } else if (randValue < 93) {
+          reward = 1500;
+          label = "₦1,500 NGN";
+        } else if (randValue < 98) {
+          reward = 3500;
+          label = "₦3,500 NGN";
+        } else {
+          reward = 15000;
+          label = "₦15,000 NGN"; // Ultra reward with 2% success rate!
+        }
       } else {
-        reward = 2000;
-        label = "₦2000 NGN";
+        if (randValue < 40) {
+          reward = 0;
+          label = "Try again";
+        } else if (randValue < 70) {
+          reward = 50;
+          label = "₦50 NGN";
+        } else if (randValue < 85) {
+          reward = 100;
+          label = "₦100 NGN";
+        } else if (randValue < 93) {
+          reward = 500;
+          label = "₦500 NGN";
+        } else if (randValue < 98.2) {
+          reward = 700;
+          label = "₦700 NGN";
+        } else {
+          reward = 2000;
+          label = "₦2,000 NGN";
+        }
       }
 
       if (serverDb) {
@@ -1238,22 +1262,25 @@ function startServer() {
 
         const userDataSnapshot = userSnap.data();
         const lastSpin = userDataSnapshot.lastSpinDate || "";
-        const isFree = lastSpin !== todayStr;
-        const spinCost = isFree ? 0 : 100;
+        const isFree = !isMega && lastSpin !== todayStr;
+        const spinCost = isMega ? 1000 : (isFree ? 0 : 100);
 
-        if (!isFree && (userDataSnapshot.balance || 0) < spinCost) {
-          return res.status(400).json({ error: "Insufficient balance. Extra spins cost ₦100." });
+        if ((userDataSnapshot.balance || 0) < spinCost) {
+          return res.status(400).json({ error: `Insufficient wallet balance. Spin costs ₦${spinCost}.` });
         }
 
         const finalBalance = (userDataSnapshot.balance || 0) - spinCost + reward;
         const finalMonthlyGains = (userDataSnapshot.monthlyGains || 0) + reward;
 
         const batch = writeBatch(serverDb);
-        batch.update(userRef, {
+        const updateFields: any = {
           balance: finalBalance,
-          monthlyGains: finalMonthlyGains,
-          lastSpinDate: todayStr
-        });
+          monthlyGains: finalMonthlyGains
+        };
+        if (!isMega) {
+          updateFields.lastSpinDate = todayStr;
+        }
+        batch.update(userRef, updateFields);
 
         // Save transaction
         const txnId = `txn_spin_${Date.now()}`;
@@ -1261,13 +1288,15 @@ function startServer() {
         batch.set(txnRef, {
           id: txnId,
           userId: authHeader,
-          amount: isFree ? reward : Math.abs(reward - spinCost),
+          amount: spinCost,
           type: "bonus",
           status: "success",
           date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: isFree 
-            ? `Daily Fortune Circular Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}` 
-            : `Paid Fortune Circular Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+          details: isMega
+            ? `Mega VIP Fortune Spin (Stake: ₦1,000): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+            : (isFree 
+                ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
+                : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`)
         });
 
         await batch.commit();
@@ -1288,26 +1317,30 @@ function startServer() {
 
       const user = db.users[idx];
       const lastSpin = (user as any).lastSpinDate || "";
-      const isFree = lastSpin !== todayStr;
-      const spinCost = isFree ? 0 : 100;
+      const isFree = !isMega && lastSpin !== todayStr;
+      const spinCost = isMega ? 1000 : (isFree ? 0 : 100);
 
-      if (!isFree && user.balance < spinCost) {
-        return res.status(400).json({ error: "Insufficient balance. Extra spins cost ₦100." });
+      if (user.balance < spinCost) {
+        return res.status(400).json({ error: `Insufficient wallet balance. Spin costs ₦${spinCost}.` });
       }
 
       user.balance = user.balance - spinCost + reward;
       user.monthlyGains += reward;
-      (user as any).lastSpinDate = todayStr;
+      if (!isMega) {
+        (user as any).lastSpinDate = todayStr;
+      }
 
       user.transactions.unshift({
         id: `txn_spin_${Date.now()}`,
-        amount: isFree ? reward : Math.abs(reward - spinCost),
+        amount: spinCost,
         type: "bonus" as const,
         status: "success" as const,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: isFree 
-          ? `Daily Fortune Circular Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}` 
-          : `Paid Fortune Circular Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+        details: isMega
+          ? `Mega VIP Fortune Spin (Stake: ₦1,000): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+          : (isFree 
+              ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
+              : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`)
       });
 
       saveDatabase(db);
@@ -1328,17 +1361,27 @@ function startServer() {
     }
   });
 
-  // 2. Buy Lottery Tickets
+  // 2. Buy Brex 2-Sure Lotto Tickets
   app.post("/api/user/lottery/buy", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const { ticketNumbers } = req.body; // e.g., [7, 3, 9]
+      const { ticketNumbers, stake } = req.body; // e.g., [17, 88], stake: 500
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
-      if (!Array.isArray(ticketNumbers) || ticketNumbers.length !== 3) {
-        return res.status(400).json({ error: "Invalid ticket selection. Pick 3 digits." });
+      
+      if (!Array.isArray(ticketNumbers) || ticketNumbers.length !== 2) {
+        return res.status(400).json({ error: "Invalid selection: Pick exactly 2 lucky numbers for 2-Sure Lotto." });
       }
 
-      const ticketCost = 200; // costs ₦200 NGN
+      const n1 = parseInt(ticketNumbers[0]);
+      const n2 = parseInt(ticketNumbers[1]);
+      if (isNaN(n1) || isNaN(n2) || n1 < 1 || n1 > 90 || n2 < 1 || n2 > 90) {
+        return res.status(400).json({ error: "Numbers must be integers between 1 and 90." });
+      }
+      if (n1 === n2) {
+        return res.status(400).json({ error: "Please choose two unique numbers. Duplicate entries are invalid." });
+      }
+
+      const betStake = Math.max(50, Math.min(10000, parseInt(stake) || 200));
 
       if (serverDb) {
         const userRef = doc(serverDb, 'users', authHeader);
@@ -1346,11 +1389,11 @@ function startServer() {
         if (!userSnap.exists()) return res.status(404).json({ error: "User profile not found" });
 
         const userDataSnapshot = userSnap.data();
-        if ((userDataSnapshot.balance || 0) < ticketCost) {
-          return res.status(400).json({ error: "Insufficient balance. Ticket costs ₦200." });
+        if ((userDataSnapshot.balance || 0) < betStake) {
+          return res.status(400).json({ error: `Insufficient wallet balance. Redeposit or adjust your stake (Min: ₦50).` });
         }
 
-        const finalBalance = (userDataSnapshot.balance || 0) - ticketCost;
+        const finalBalance = (userDataSnapshot.balance || 0) - betStake;
         const batch = writeBatch(serverDb);
 
         batch.update(userRef, {
@@ -1362,9 +1405,9 @@ function startServer() {
         const ticketData = {
           id: ticketId,
           userId: authHeader,
-          ticketNumbers: ticketNumbers,
+          ticketNumbers: [n1, n2],
           entryDate: new Date().toISOString().slice(0, 10),
-          purchasePrice: ticketCost,
+          purchasePrice: betStake,
           drawId: `draw_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
           status: "pending",
           rewardAmount: 0,
@@ -1377,11 +1420,11 @@ function startServer() {
         batch.set(txnRef, {
           id: txnId,
           userId: authHeader,
-          amount: ticketCost,
+          amount: betStake,
           type: "subscribe",
           status: "success",
           date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: `Registered Lottery Cashpot Combination: [${ticketNumbers.join(", ")}]`
+          details: `Staked ₦${betStake} on 2-Sure Lotto Combination: [${n1}, ${n2}]`
         });
 
         await batch.commit();
@@ -1398,18 +1441,18 @@ function startServer() {
       if (idx === -1) return res.status(404).json({ error: "User session not found" });
 
       const user = db.users[idx];
-      if (user.balance < ticketCost) {
-        return res.status(400).json({ error: "Insufficient balance. Ticket costs ₦200." });
+      if (user.balance < betStake) {
+        return res.status(400).json({ error: `Insufficient wallet balance. Redeposit or adjust your stake (Min: ₦50).` });
       }
 
-      user.balance -= ticketCost;
+      user.balance -= betStake;
       const ticketId = `lot_reg_${Date.now()}`;
       const ticketData = {
         id: ticketId,
         userId: authHeader,
-        ticketNumbers: ticketNumbers,
+        ticketNumbers: [n1, n2],
         entryDate: new Date().toISOString().slice(0, 10),
-        purchasePrice: ticketCost,
+        purchasePrice: betStake,
         drawId: `draw_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
         status: "pending",
         rewardAmount: 0,
@@ -1421,11 +1464,11 @@ function startServer() {
 
       user.transactions.unshift({
         id: `txn_lot_${Date.now()}`,
-        amount: ticketCost,
+        amount: betStake,
         type: "subscribe" as const,
         status: "success" as const,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: `Registered Lottery Cashpot Combination: [${ticketNumbers.join(", ")}]`
+        details: `Staked ₦${betStake} on 2-Sure Lotto Combination: [${n1}, ${n2}]`
       });
 
       saveDatabase(db);
@@ -1439,20 +1482,24 @@ function startServer() {
 
     } catch (e: any) {
       console.error(e);
-      res.status(500).json({ error: "Lottery purchase failed" });
+      res.status(500).json({ error: "2-Sure Lotto ticket staking failed" });
     }
   });
 
-  // 3. Process outstanding/drawn lottery tickets
+  // 3. Process outstanding/drawn 2-Sure Lotto tickets
   app.post("/api/user/lottery/draw", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
-      const d1 = Math.floor(Math.random() * 10);
-      const d2 = Math.floor(Math.random() * 10);
-      const d3 = Math.floor(Math.random() * 10);
-      const drawnNumbers = [d1, d2, d3];
+      // Generate 5 unique drawn numbers out of 1-90
+      const pool = Array.from({ length: 90 }, (_, i) => i + 1);
+      const drawnNumbers: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const randIndex = Math.floor(Math.random() * pool.length);
+        drawnNumbers.push(pool.splice(randIndex, 1)[0]);
+      }
+      drawnNumbers.sort((a, b) => a - b);
 
       let totalRewardAwarded = 0;
       let matchedTickets: any[] = [];
@@ -1473,18 +1520,22 @@ function startServer() {
 
         qSnap.forEach(docSnap => {
           const ticket = docSnap.data();
-          const pNums = ticket.ticketNumbers; // numbers user picked
+          const pNums = ticket.ticketNumbers; // user's 2 selected numbers
 
           // Calculate matches
           let matchCount = 0;
-          if (pNums[0] === d1) matchCount++;
-          if (pNums[1] === d2) matchCount++;
-          if (pNums[2] === d3) matchCount++;
+          if (drawnNumbers.includes(pNums[0])) matchCount++;
+          if (drawnNumbers.includes(pNums[1])) matchCount++;
 
-          let prize = 0;
-          if (matchCount === 3) prize = 10000;
-          else if (matchCount === 2) prize = 1000;
-          else if (matchCount === 1) prize = 150;
+          let multiplier = 0;
+          if (matchCount === 2) {
+            multiplier = 150; // Match both = 150x return (Huge win!)
+          } else if (matchCount === 1) {
+            multiplier = 3.5; // Match 1 = 3.5x return (Easy back comfort reward!)
+          }
+
+          const ticketStake = ticket.purchasePrice || 200;
+          const prize = Math.round(ticketStake * multiplier);
 
           const status = prize > 0 ? "won" : "lost";
           totalRewardAwarded += prize;
@@ -1522,7 +1573,7 @@ function startServer() {
             type: "bonus",
             status: "success",
             date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            details: `Won ₦${totalRewardAwarded} Grand Cashpot Lottery Prize!`
+            details: `Lotto Pay-out: Won ₦${totalRewardAwarded.toLocaleString()} inside Brex 2-Sure Gravity Terminal!`
           });
         }
 
@@ -1549,14 +1600,18 @@ function startServer() {
       pendingTickets.forEach((ticket: any) => {
         const pNums = ticket.ticketNumbers;
         let matchCount = 0;
-        if (pNums[0] === d1) matchCount++;
-        if (pNums[1] === d2) matchCount++;
-        if (pNums[2] === d3) matchCount++;
+        if (drawnNumbers.includes(pNums[0])) matchCount++;
+        if (drawnNumbers.includes(pNums[1])) matchCount++;
 
-        let prize = 0;
-        if (matchCount === 3) prize = 10000;
-        else if (matchCount === 2) prize = 1000;
-        else if (matchCount === 1) prize = 150;
+        let multiplier = 0;
+        if (matchCount === 2) {
+          multiplier = 150;
+        } else if (matchCount === 1) {
+          multiplier = 3.5;
+        }
+
+        const ticketStake = ticket.purchasePrice || 200;
+        const prize = Math.round(ticketStake * multiplier);
 
         const status = prize > 0 ? "won" : "lost";
         totalRewardAwarded += prize;
@@ -1584,7 +1639,7 @@ function startServer() {
           type: "bonus" as const,
           status: "success" as const,
           date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: `Won ₦${totalRewardAwarded} Grand Cashpot Lottery Prize!`
+          details: `Lotto Pay-out: Won ₦${totalRewardAwarded.toLocaleString()} inside Brex 2-Sure Gravity Terminal!`
         });
       }
 
@@ -1601,7 +1656,7 @@ function startServer() {
 
     } catch (e: any) {
       console.error(e);
-      res.status(500).json({ error: "Lottery draw execution failed" });
+      res.status(500).json({ error: "Lotto draw simulation halted" });
     }
   });
 
