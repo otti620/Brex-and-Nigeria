@@ -64,6 +64,13 @@ service cloud.firestore {
       allow delete: if isSystemAdmin();
     }
 
+    // User Lottery Tickets subcollection
+    match /users/{userId}/lottery_tickets/{ticketId} {
+      allow read: if isOwner(userId) || isSystemAdmin();
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update, delete: if isSystemAdmin();
+    }
+
     // User Transactions matching (supports collection group queries needed for the admin console)
     match /{path=**}/transactions/{transactionId} {
       allow read: if isSystemAdmin() || (

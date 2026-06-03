@@ -86,6 +86,22 @@
         "date": { "type": "string" }
       }
     },
+    "LotteryTicket": {
+      "title": "Lottery Ticket",
+      "description": "User lottery ticket entries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "ticketNumbers": { "type": "array" },
+        "entryDate": { "type": "string" },
+        "purchasePrice": { "type": "number" },
+        "drawId": { "type": "string" },
+        "status": { "type": "string" },
+        "rewardAmount": { "type": "number" },
+        "drawNumbers": { "type": "array" }
+      }
+    },
     "Config": {
       "title": "Config",
       "description": "Platform global configuration document",
@@ -107,6 +123,10 @@
     "/users/{userId}/transactions/{transactionId}": {
       "schema": "Transaction",
       "description": "User transactions"
+    },
+    "/users/{userId}/lottery_tickets/{ticketId}": {
+      "schema": "LotteryTicket",
+      "description": "User lottery ticket entries"
     },
     "/support_tickets/{ticketId}": {
       "schema": "SupportTicket",

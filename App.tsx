@@ -43,7 +43,10 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
-  Send
+  Send,
+  Sparkles,
+  Trophy,
+  Ticket
 } from 'lucide-react';
 
 const CLIENT_DEFAULT_VIP_PLANS = [
@@ -154,6 +157,197 @@ const App: React.FC = () => {
 
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.Auth);
   const [selectedIntent, setSelectedIntent] = useState<string>('safe');
+
+  // Promotions / Game States
+  const [promoTab, setPromoTab] = useState<'spin' | 'lottery' | 'offers'>('spin');
+  const [spinning, setSpinning] = useState(false);
+  const [wheelRotation, setWheelRotation] = useState(0);
+  const [spinResultModal, setSpinResultModal] = useState<{ show: boolean, reward: number, label: string } | null>(null);
+
+  // Lottery configurations and inputs
+  const [selectedNums, setSelectedNums] = useState<[number, number, number]>([5, 2, 7]);
+  const [userTickets, setUserTickets] = useState<any[]>([]);
+  const [lotteryLoading, setLotteryLoading] = useState(false);
+  const [drawLoading, setDrawLoading] = useState(false);
+  const [drawResult, setDrawResult] = useState<{ show: boolean, numbers: number[], reward: number, matched: any[] } | null>(null);
+  const [nextDrawTime, setNextDrawTime] = useState({ hours: 1, minutes: 42, seconds: 19 });
+
+  const fetchTickets = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch("/api/user/lottery/tickets", {
+        headers: {
+          "Authorization": user.uid
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setUserTickets(data.tickets);
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching tickets:", e);
+    }
+  };
+
+  const handleSpinWheel = async () => {
+    if (spinning || !user) return;
+    setSpinning(true);
+    showToast("Connecting live Fortune Oracle server...");
+    
+    // reset wheel rotation first
+    setWheelRotation(0);
+    
+    try {
+      const res = await fetch("/api/user/spin-wheel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": user.uid
+        }
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        showToast(errData.error || "Fortune spin failed");
+        setSpinning(false);
+        return;
+      }
+      
+      const data = await res.json();
+      
+      // Sectors: 0: ₦50, 1: ₦100, 2: ₦500, 3: Try again, 4: ₦700, 5: ₦2000
+      let targetIndex = 3; // default: try again
+      if (data.reward === 50) targetIndex = 0;
+      else if (data.reward === 100) targetIndex = 1;
+      else if (data.reward === 500) targetIndex = 2;
+      else if (data.reward === 0) targetIndex = 3;
+      else if (data.reward === 700) targetIndex = 4;
+      else if (data.reward === 2000) targetIndex = 5;
+
+      const targetRotationAngle = 360 - (targetIndex * 60 + 30);
+      const spins = 6 * 360; // 6 full spins
+      const finalRotation = spins + targetRotationAngle;
+      
+      // Trigger rotation
+      setWheelRotation(finalRotation);
+      
+      // Wait for animation to finish
+      setTimeout(() => {
+        setSpinning(false);
+        setSpinResultModal({
+          show: true,
+          reward: data.reward,
+          label: data.rewardLabel
+        });
+        refreshProfile(); // refresh headers/wallet balances!
+      }, 4100);
+      
+    } catch (e) {
+      console.error(e);
+      showToast("Network dispatch failed. Re-syncing database.");
+      setSpinning(false);
+    }
+  };
+
+  const handleBuyLottery = async () => {
+    if (lotteryLoading || !user) return;
+    setLotteryLoading(true);
+    showToast("Registering combinations into official Cashpot pool...");
+    try {
+      const res = await fetch("/api/user/lottery/buy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": user.uid
+        },
+        body: JSON.stringify({ ticketNumbers: selectedNums })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        showToast(errData.error || "Lottery registration failed");
+        setLotteryLoading(false);
+        return;
+      }
+
+      await res.json();
+      showToast(`🎟️ Registered combination ${selectedNums.join(", ")} successfully!`);
+      fetchTickets(); // reload lottery tickets
+      refreshProfile(); // reload balances
+      setLotteryLoading(false);
+    } catch (e) {
+      console.error(e);
+      showToast("Network error. Checking ledger logs.");
+      setLotteryLoading(false);
+    }
+  };
+
+  const handleExecuteLotteryDraw = async () => {
+    if (drawLoading || !user) return;
+    setDrawLoading(true);
+    showToast("Spinning Cashpot gravity balls... Standby!");
+    
+    try {
+      const res = await fetch("/api/user/lottery/draw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": user.uid
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        showToast(errData.error || "Drawing failed");
+        setDrawLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+      
+      // suspense delay to simulates bouncing balls!
+      setTimeout(() => {
+        setDrawLoading(false);
+        setDrawResult({
+          show: true,
+          numbers: data.drawnNumbers,
+          reward: data.totalRewardAwarded,
+          matched: data.matchedTickets
+        });
+        fetchTickets(); // reload tickets
+        refreshProfile(); // update overall user state balances
+      }, 3500); // 3.5s of intense suspense bouncing balls animation!
+    } catch (e) {
+      console.error(e);
+      showToast("Drawing failed. Re-syncing system clock.");
+      setDrawLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user && currentScreen === Screen.Promotions) {
+      fetchTickets();
+    }
+  }, [user, currentScreen]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNextDrawTime(prev => {
+        if (prev.seconds > 0) {
+          return { ...prev, seconds: prev.seconds - 1 };
+        } else if (prev.minutes > 0) {
+          return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
+        } else if (prev.hours > 0) {
+          return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
+        } else {
+          return { hours: 4, minutes: 0, seconds: 0 };
+        }
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
   
   // Auth states
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -1394,13 +1588,539 @@ const App: React.FC = () => {
   };
 
   const renderPromotions = () => {
+    const sectors = [
+      { label: "₦50", color: "#6366f1", reward: 50 },
+      { label: "₦100", color: "#3b82f6", reward: 100 },
+      { label: "₦500", color: "#10b981", reward: 500 },
+      { label: "Try again", color: "#64748b", reward: 0 },
+      { label: "₦700", color: "#f59e0b", reward: 700 },
+      { label: "₦2000", color: "#a855f7", reward: 2000 }
+    ];
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const hasFreeSpin = userData?.lastSpinDate !== todayStr;
+
     return (
-      <div className="px-5 pt-8 pb-10 flex flex-col gap-6 bg-[#f8f8f8] min-h-screen">
-        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Promotions</h2>
-        <div className="flex flex-col gap-6">
-          <img src={flyer1} alt="Revenue Stream Plan" className="rounded-3xl shadow-lg w-full" />
-          <img src={flyer2} alt="Wealth Builder Plan" className="rounded-3xl shadow-lg w-full" />
+      <div className="px-5 pt-8 pb-20 flex flex-col gap-5 bg-[#f8f8f8] min-h-screen">
+        {/* Header */}
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <Trophy className="text-amber-500 animate-bounce" size={24} /> Brex Fortune Club
+          </h2>
+          <p className="text-[11px] font-bold text-slate-400 font-mono uppercase tracking-wider mt-0.5">
+            Play standard events, win real instant cash commissions
+          </p>
         </div>
+
+        {/* Dynamic Segmented Navigation Tab */}
+        <div className="bg-white border border-slate-100 p-1 rounded-2xl flex gap-1 shadow-sm">
+          <button
+            onClick={() => setPromoTab('spin')}
+            className={`flex-1 py-3 px-1 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+              promoTab === 'spin' 
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/10' 
+                : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
+            }`}
+          >
+            🎡 Spin Wheel
+          </button>
+          <button
+            onClick={() => setPromoTab('lottery')}
+            className={`flex-1 py-3 px-1 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+              promoTab === 'lottery' 
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/10' 
+                : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
+            }`}
+          >
+            🎟️ Cashpot 3
+          </button>
+          <button
+            onClick={() => setPromoTab('offers')}
+            className={`flex-1 py-3 px-1 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+              promoTab === 'offers' 
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/10' 
+                : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
+            }`}
+          >
+            📌 Specl. Banner
+          </button>
+        </div>
+
+        {/* Tab CONTENT 1: Spin Wheel */}
+        {promoTab === 'spin' && (
+          <div className="flex flex-col items-center gap-6 bg-white border border-slate-100 p-6 rounded-[32px] shadow-sm relative overflow-hidden">
+            {/* Ambient Background Glow */}
+            <div className="absolute w-40 h-40 rounded-full bg-violet-600/5 blur-3xl -top-10 -left-10" />
+            <div className="absolute w-40 h-40 rounded-full bg-indigo-600/5 blur-3xl -bottom-10 -right-10" />
+
+            <div className="text-center">
+              <span className="font-bold text-[9px] uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full font-mono">
+                Spin & Win
+              </span>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight mt-2.5">Circular Fortune Wheel</h3>
+              <p className="text-[10px] text-slate-400 font-extrabold font-mono uppercase tracking-tight mt-1">
+                {hasFreeSpin 
+                  ? "🎉 Daily free spin is active! Grab free rewards" 
+                  : "🎡 Free spin claimed. Extra spin costs only ₦100 NGN"}
+              </p>
+            </div>
+
+            {/* Wheel Canvas Container */}
+            <div className="relative flex flex-col items-center justify-center mt-3 scale-95 select-none">
+              {/* Spinning Arrow Indicator (At Top Center) */}
+              <div className="absolute -top-1.5 z-30 flex flex-col items-center">
+                <div className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[20px] border-t-rose-600 drop-shadow-md" />
+                <div className="w-1.5 h-3 bg-rose-600 rounded-b" />
+              </div>
+
+              {/* Wheel circle */}
+              <motion.div
+                style={{ rotate: wheelRotation }}
+                transition={spinning ? { duration: 4, ease: [0.12, 0.8, 0.15, 1] } : { duration: 0 }}
+                className="relative w-64 h-64 rounded-full border-4 border-slate-950 bg-slate-950 shadow-2xl flex items-center justify-center overflow-hidden"
+              >
+                {sectors.map((sector, index) => {
+                  const angle = index * 60;
+                  return (
+                    <div
+                      key={index}
+                      className="absolute top-0 left-0 w-full h-full flex items-center justify-center origin-center"
+                      style={{ transform: `rotate(${angle}deg)` }}
+                    >
+                      {/* Triangle Wedge segment */}
+                      <div 
+                        className="absolute top-0 w-0 h-0 border-l-[57px] border-l-transparent border-r-[57px] border-r-transparent border-t-[124px]"
+                        style={{ borderTopColor: sector.color }}
+                      />
+                      {/* Text label */}
+                      <span 
+                        className="absolute top-6 font-black text-[10px] text-white select-none whitespace-nowrap transform -translate-y-1 origin-center drop-shadow-md tracking-wider uppercase font-mono"
+                        style={{ transform: `rotate(30deg)` }}
+                      >
+                        {sector.label}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* Concentric center ring/pin */}
+                <div className="absolute w-12 h-12 rounded-full bg-white border-4 border-slate-950 flex items-center justify-center shadow-lg z-10">
+                  <div className="w-3 h-3 rounded-full bg-slate-900" />
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Action controls */}
+            <div className="w-full flex flex-col gap-2 mt-2">
+              <button
+                disabled={spinning}
+                onClick={handleSpinWheel}
+                className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-wider transform active:scale-95 transition-all shadow-lg ${
+                  spinning
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                    : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-950 text-white shadow-slate-950/20 active:shadow-sm'
+                }`}
+              >
+                {spinning ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-slate-400 border-t-white rounded-full animate-spin" />
+                    Calculating Vectors...
+                  </span>
+                ) : hasFreeSpin ? (
+                  "🍀 Spin For Free (Daily)"
+                ) : (
+                  "🎡 Spin Again (Costs ₦100)"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab CONTENT 2: Cashpot Pick3 Lottery */}
+        {promoTab === 'lottery' && (
+          <div className="flex flex-col gap-5 bg-white border border-slate-100 p-5 rounded-[32px] shadow-sm relative overflow-hidden">
+            
+            {/* Headline and Draw variables */}
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <span className="font-bold text-[9px] uppercase tracking-widest text-[#ff9c00] bg-orange-50 border border-orange-100 px-3 py-1 rounded-full font-mono">
+                  Brex Cashpot Pick-3
+                </span>
+                <h3 className="text-md font-black text-slate-900 mt-2.5">Super Jackpot Draw</h3>
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                  Pick-3 numbers matching 0-9. Ticket costs ₦200.
+                </p>
+              </div>
+              <div className="text-right bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-2xl">
+                <p className="text-[8px] text-indigo-600 font-black uppercase font-mono tracking-wider">Estimated Jackpot</p>
+                <p className="text-[13px] font-black font-mono text-indigo-700 mt-0.5">₦20,000.00</p>
+              </div>
+            </div>
+
+            {/* Lucky digit selector widgets */}
+            <div className="flex flex-col gap-3">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono text-center">
+                Configure your 3 Lucky digits:
+              </p>
+
+              <div className="grid grid-cols-3 gap-3 justify-center max-w-xs mx-auto w-full">
+                {selectedNums.map((num, i) => (
+                  <div key={i} className="flex flex-col items-center bg-slate-50 border border-slate-150 p-2.5 rounded-3xl">
+                    {/* Increase button */}
+                    <button
+                      onClick={() => {
+                        const copy = [...selectedNums] as [number, number, number];
+                        copy[i] = (copy[i] + 1) % 10;
+                        setSelectedNums(copy);
+                      }}
+                      className="w-8 h-8 rounded-full bg-white border border-slate-150 flex items-center justify-center font-black text-md text-slate-700 active:scale-95 hover:bg-slate-100 shadow-sm"
+                    >
+                      +
+                    </button>
+                    {/* Big selected Digit */}
+                    <span className="my-2.5 text-3xl font-black font-mono text-slate-900 tracking-tighter">
+                      {num}
+                    </span>
+                    {/* Decrease button */}
+                    <button
+                      onClick={() => {
+                        const copy = [...selectedNums] as [number, number, number];
+                        copy[i] = (copy[i] - 1 + 10) % 10;
+                        setSelectedNums(copy);
+                      }}
+                      className="w-8 h-8 rounded-full bg-white border border-slate-150 flex items-center justify-center font-black text-md text-slate-700 active:scale-95 hover:bg-slate-100 shadow-sm"
+                    >
+                      -
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Instant Action buttons */}
+              <div className="grid grid-cols-2 gap-3 mt-1.5">
+                <button
+                  onClick={() => {
+                    const r1 = Math.floor(Math.random() * 10);
+                    const r2 = Math.floor(Math.random() * 10);
+                    const r3 = Math.floor(Math.random() * 10);
+                    setSelectedNums([r1, r2, r3]);
+                    showToast("⚡ Quick Pick rolled random combination!");
+                  }}
+                  className="py-3.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm flex items-center justify-center gap-1"
+                >
+                  ⚡ Quick Pick
+                </button>
+                <button
+                  disabled={lotteryLoading}
+                  onClick={handleBuyLottery}
+                  className="py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-rose-600/10 flex items-center justify-center gap-1 active:scale-95 transition-all"
+                >
+                  🎟️ Buy Ticket (₦200)
+                </button>
+              </div>
+            </div>
+
+            {/* Drawing simulation block / Live countdown draws */}
+            <div className="mt-4 bg-[#fbfbfe] border border-blue-100/50 rounded-[28px] p-4 flex flex-col gap-3">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-1.5">
+                  <Clock size={14} className="text-indigo-600 animate-pulse" />
+                  <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider font-mono">Next Draw Timer</span>
+                </div>
+                <span className="text-xs font-black text-indigo-950 font-mono tracking-wider">
+                  {String(nextDrawTime.hours).padStart(2, '0')}:{String(nextDrawTime.minutes).padStart(2, '0')}:{String(nextDrawTime.seconds).padStart(2, '0')}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2 mt-1">
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-normal">
+                  You can wait for the official timer, or click the button below to execute a LIVE drawing for all pending combination tickets instantly!
+                </p>
+
+                <button
+                  disabled={drawLoading || userTickets.filter(t => t.status === "pending").length === 0}
+                  onClick={handleExecuteLotteryDraw}
+                  className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                    userTickets.filter(t => t.status === "pending").length === 0
+                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-lg active:scale-95 shadow-indigo-600/15'
+                  }`}
+                >
+                  {drawLoading ? (
+                    <span className="flex items-center gap-2">
+                       <span className="w-3.5 h-3.5 border-2 border-indigo-450 border-t-white rounded-full animate-spin" />
+                       Rolling gravity cages...
+                    </span>
+                  ) : userTickets.filter(t => t.status === "pending").length === 0 ? (
+                    "🎟️ Purchase a ticket first to draw"
+                  ) : (
+                    `☘️ Run Live Prize Draw (${userTickets.filter(t => t.status === "pending").length} Pending)`
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Ticket holdings list */}
+            <div className="mt-4">
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest font-mono mb-3 flex items-center justify-between">
+                <span>📋 Ticket ledger entries</span>
+                <span className="text-[9px] font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono lowercase">
+                  {userTickets.length} registered
+                </span>
+              </h4>
+
+              {userTickets.length === 0 ? (
+                <div className="text-center py-6 border border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
+                  <Ticket size={24} className="text-slate-300 mx-auto mb-2" />
+                  <p className="text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest">No tickets in this ledger</p>
+                  <p className="text-[9px] text-slate-400 mt-1">Your purchased combination numbers list will show up here.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2.5 max-h-56 overflow-y-auto pr-1">
+                  {userTickets.map((tc, idx) => {
+                    const isPending = tc.status === "pending";
+                    const isWon = tc.status === "won";
+                    return (
+                      <div 
+                        key={tc.id || idx} 
+                        className={`flex justify-between items-center p-3 rounded-2xl border ${
+                          isWon 
+                            ? 'bg-emerald-50 border-emerald-100' 
+                            : isPending 
+                              ? 'bg-slate-50/70 border-slate-100' 
+                              : 'bg-slate-50/20 border-slate-100 opacity-75'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Ticket size={16} className={isWon ? 'text-emerald-500' : isPending ? 'text-indigo-400' : 'text-slate-400'} />
+                          <div>
+                            <div className="flex gap-1.5">
+                              {tc.ticketNumbers?.map((n: number, nIdx: number) => (
+                                <span key={nIdx} className="w-5 h-5 rounded-full bg-slate-900 text-white font-mono font-black text-[10px] flex items-center justify-center">
+                                  {n}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-[8px] text-slate-400 font-bold font-mono tracking-wider uppercase mt-1">ID: {tc.id?.slice(-8)} • {tc.entryDate}</p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          {isPending ? (
+                            <span className="text-[8px] font-black uppercase text-indigo-600 bg-indigo-50 border border-indigo-150 px-2.5 py-1 rounded-full font-mono animate-pulse">
+                              Pending
+                            </span>
+                          ) : isWon ? (
+                            <div className="flex flex-col items-end">
+                              <span className="text-[8px] font-black uppercase text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
+                                WON
+                              </span>
+                              <span className="text-[11px] font-black text-emerald-600 font-mono mt-0.5">
+                                +₦{tc.rewardAmount}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-end opacity-60">
+                              <span className="text-[8px] font-black uppercase text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full font-mono">
+                                Lost
+                              </span>
+                              {tc.drawNumbers && (
+                                <span className="text-[8px] font-bold font-mono text-slate-400 mt-1">
+                                  Drawn: [{tc.drawNumbers?.join(",")}]
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab CONTENT 3: Special Banner Flyer offers */}
+        {promoTab === 'offers' && (
+          <div className="flex flex-col gap-6">
+            <div className="text-center bg-white border border-slate-100 p-4 rounded-3xl">
+              <h3 className="text-sm font-black text-slate-800 tracking-tight">Active VIP Portfolio Streams</h3>
+              <p className="text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest mt-0.5">Official Promos & Circular Bulletins</p>
+            </div>
+            <img src={flyer1} alt="Revenue Stream Plan" className="rounded-[32px] shadow-lg w-full border border-slate-100" />
+            <img src={flyer2} alt="Wealth Builder Plan" className="rounded-[32px] shadow-lg w-full border border-slate-100" />
+          </div>
+        )}
+
+        {/* Fortune Wheel Result Modal Dialog Overlay */}
+        {spinResultModal?.show && (
+          <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-5 z-[230] select-none">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-[36px] w-full max-w-sm p-6 flex flex-col items-center justify-center text-center shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute w-40 h-40 rounded-full bg-emerald-500/10 blur-3xl -top-10 -left-10" />
+              <div className="absolute w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl -bottom-10 -right-10" />
+
+              {spinResultModal.reward > 0 ? (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center text-3xl mb-4 shadow-sm animate-bounce">
+                    🎉
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Congratulations Winner!</h3>
+                  <p className="text-[10px] font-extrabold text-slate-400 font-mono uppercase tracking-widest mt-1">
+                    Your vectors aligned on segment color
+                  </p>
+                  <p className="text-4xl font-extrabold font-mono text-emerald-600 tracking-tighter my-5">
+                    {spinResultModal.label}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-bold font-mono uppercase tracking-normal mt-1 max-w-xs leading-relaxed">
+                    Commission reward credited instantly to your available balance wallet ledger. Keep spinning!
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-3xl mb-4 shadow-sm">
+                    🎡
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 tracking-tight">So Close!</h3>
+                  <p className="text-[10px] font-extrabold text-slate-400 font-mono uppercase tracking-widest mt-1">
+                    Keep your circles active
+                  </p>
+                  <p className="text-3xl font-extrabold font-mono text-slate-800 tracking-tighter my-5">
+                    Try Again!
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold font-mono uppercase mt-1 max-w-xs leading-relaxed">
+                    Extra spins cost only ₦100 NGN. Spin again to land standard cashpots!
+                  </p>
+                </>
+              )}
+
+              <button
+                onClick={() => setSpinResultModal(null)}
+                className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-6 active:scale-95 transition-all"
+              >
+                Close Gateway
+              </button>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Lottery Drawing Suspense Overlay Animation */}
+        {drawLoading && (
+          <div className="fixed inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-5 z-[230] select-none text-center">
+            <div className="flex gap-4 justify-center items-center my-6">
+              {[1, 2, 3].map((b) => {
+                const randomDigit = Math.floor(Math.random() * 10);
+                return (
+                  <motion.div
+                    key={b}
+                    animate={{ 
+                      y: [-15, 15, -15],
+                      rotate: [0, 360],
+                      scale: [1, 1.1, 1]
+                    }}
+                    transition={{
+                      duration: 0.6,
+                      repeat: Infinity,
+                      delay: b * 0.15,
+                      ease: "easeInOut"
+                    }}
+                    className="w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-amber-500 to-[#ff9c00] border-4 border-white text-white font-mono font-black text-xl flex items-center justify-center shadow-2xl shadow-yellow-500/30"
+                  >
+                    {randomDigit}
+                  </motion.div>
+                );
+              })}
+            </div>
+            
+            <h3 className="text-lg font-black text-white tracking-tight animate-pulse uppercase tracking-[0.1em]">
+              Drawing Gravity Balls...
+            </h3>
+            <p className="text-[10px] font-mono text-amber-400 uppercase tracking-widest mt-2 max-w-xs leading-relaxed">
+              Matching selected ticket combination digits. Payout matrices are loading...
+            </p>
+          </div>
+        )}
+
+        {/* Lottery Draw Result Modal Dialog Overlay */}
+        {drawResult?.show && (
+          <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-5 z-[230] select-none">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-[36px] w-full max-w-sm p-6 flex flex-col items-center justify-center text-center shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute w-40 h-40 rounded-full bg-yellow-500/10 blur-3xl -top-10 -left-10" />
+              <div className="absolute w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl -bottom-10 -right-10" />
+
+              <div className="w-16 h-16 rounded-full bg-yellow-100 border border-yellow-200 flex items-center justify-center text-3xl mb-4 shadow-sm">
+                🏆
+              </div>
+
+              <h3 className="text-md font-black text-slate-900 tracking-tight">Official Drawing Output</h3>
+              <p className="text-[9px] font-extrabold text-slate-400 font-mono uppercase tracking-widest mt-1">
+                Gravity Cage Drawn Numbers:
+              </p>
+
+              {/* Drawn Winning Balls */}
+              <div className="flex gap-2.5 my-5 justify-center">
+                {drawResult.numbers.map((n, idx) => (
+                  <div key={idx} className="w-10 h-10 rounded-full bg-slate-900 text-white border-2 border-slate-950 text-sm font-black font-mono flex items-center justify-center shadow-md animate-bounce" style={{ animationDelay: `${idx * 0.15}s` }}>
+                    {n}
+                  </div>
+                ))}
+              </div>
+
+              {drawResult.reward > 0 ? (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 w-full mb-3 text-center">
+                  <p className="text-[9px] text-emerald-600 font-black uppercase font-mono tracking-widest">
+                    🎉 You Won Match Prize!
+                  </p>
+                  <p className="text-2xl font-black font-mono text-emerald-700 mt-1">
+                    +₦{drawResult.reward} NGN
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 w-full mb-3 text-center">
+                  <p className="text-[9px] text-slate-500 font-black uppercase font-mono tracking-widest">
+                    No matching combinations
+                  </p>
+                  <p className="text-sm font-bold text-slate-700 mt-1">
+                    Better luck in next drawing!
+                  </p>
+                </div>
+              )}
+
+              {/* Matched Tickets breakdown list */}
+              <div className="w-full text-left mt-1 border-t border-slate-100 pt-3">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono mb-2">
+                  Matching Ledger Summary:
+                </p>
+                <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
+                  {drawResult.matched.map((m, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-[10px] py-1 border-b border-slate-50 last:border-0 font-mono text-slate-600">
+                      <span className="font-bold">Comb: [{m.ticketNumbers.join(",")}]</span>
+                      <span className="font-bold text-slate-400">{m.matchCount} matched indices</span>
+                      <span className={`font-black uppercase ${m.prize > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {m.prize > 0 ? `+₦${m.prize}` : 'Lost'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setDrawResult(null)}
+                className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-5 active:scale-95 transition-all"
+              >
+                Clear Draw Interface
+              </button>
+            </motion.div>
+          </div>
+        )}
       </div>
     );
   };

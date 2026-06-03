@@ -1198,6 +1198,444 @@ function startServer() {
     }
   });
 
+  // 1. Interactive Fortune Spin the wheel
+  app.post("/api/user/spin-wheel", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
+
+      const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+      
+      // Determine prize
+      const randValue = Math.random() * 100;
+      let reward = 0;
+      let label = "Try again";
+
+      if (randValue < 40) {
+        reward = 0;
+        label = "Try again";
+      } else if (randValue < 70) {
+        reward = 50;
+        label = "₦50 NGN";
+      } else if (randValue < 85) {
+        reward = 100;
+        label = "₦100 NGN";
+      } else if (randValue < 93) {
+        reward = 500;
+        label = "₦500 NGN";
+      } else if (randValue < 98.2) {
+        reward = 700;
+        label = "₦700 NGN";
+      } else {
+        reward = 2000;
+        label = "₦2000 NGN";
+      }
+
+      if (serverDb) {
+        const userRef = doc(serverDb, 'users', authHeader);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return res.status(404).json({ error: "User profile not found" });
+
+        const userDataSnapshot = userSnap.data();
+        const lastSpin = userDataSnapshot.lastSpinDate || "";
+        const isFree = lastSpin !== todayStr;
+        const spinCost = isFree ? 0 : 100;
+
+        if (!isFree && (userDataSnapshot.balance || 0) < spinCost) {
+          return res.status(400).json({ error: "Insufficient balance. Extra spins cost ₦100." });
+        }
+
+        const finalBalance = (userDataSnapshot.balance || 0) - spinCost + reward;
+        const finalMonthlyGains = (userDataSnapshot.monthlyGains || 0) + reward;
+
+        const batch = writeBatch(serverDb);
+        batch.update(userRef, {
+          balance: finalBalance,
+          monthlyGains: finalMonthlyGains,
+          lastSpinDate: todayStr
+        });
+
+        // Save transaction
+        const txnId = `txn_spin_${Date.now()}`;
+        const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+        batch.set(txnRef, {
+          id: txnId,
+          userId: authHeader,
+          amount: isFree ? reward : Math.abs(reward - spinCost),
+          type: "bonus",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: isFree 
+            ? `Daily Fortune Circular Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}` 
+            : `Paid Fortune Circular Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+        });
+
+        await batch.commit();
+        return res.json({
+          success: true,
+          reward,
+          rewardLabel: label,
+          isFree,
+          cost: spinCost,
+          balance: finalBalance
+        });
+      }
+
+      // Fallback JSON DB
+      const db = loadDatabase();
+      const idx = db.users.findIndex(u => u.id === authHeader);
+      if (idx === -1) return res.status(404).json({ error: "User session not found" });
+
+      const user = db.users[idx];
+      const lastSpin = (user as any).lastSpinDate || "";
+      const isFree = lastSpin !== todayStr;
+      const spinCost = isFree ? 0 : 100;
+
+      if (!isFree && user.balance < spinCost) {
+        return res.status(400).json({ error: "Insufficient balance. Extra spins cost ₦100." });
+      }
+
+      user.balance = user.balance - spinCost + reward;
+      user.monthlyGains += reward;
+      (user as any).lastSpinDate = todayStr;
+
+      user.transactions.unshift({
+        id: `txn_spin_${Date.now()}`,
+        amount: isFree ? reward : Math.abs(reward - spinCost),
+        type: "bonus" as const,
+        status: "success" as const,
+        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        details: isFree 
+          ? `Daily Fortune Circular Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}` 
+          : `Paid Fortune Circular Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+      });
+
+      saveDatabase(db);
+      const { passwordHash, ...profile } = user;
+      res.json({
+        success: true,
+        reward,
+        rewardLabel: label,
+        isFree,
+        cost: spinCost,
+        balance: user.balance,
+        user: profile
+      });
+
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: "Spin processing failed" });
+    }
+  });
+
+  // 2. Buy Lottery Tickets
+  app.post("/api/user/lottery/buy", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const { ticketNumbers } = req.body; // e.g., [7, 3, 9]
+      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
+      if (!Array.isArray(ticketNumbers) || ticketNumbers.length !== 3) {
+        return res.status(400).json({ error: "Invalid ticket selection. Pick 3 digits." });
+      }
+
+      const ticketCost = 200; // costs ₦200 NGN
+
+      if (serverDb) {
+        const userRef = doc(serverDb, 'users', authHeader);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return res.status(404).json({ error: "User profile not found" });
+
+        const userDataSnapshot = userSnap.data();
+        if ((userDataSnapshot.balance || 0) < ticketCost) {
+          return res.status(400).json({ error: "Insufficient balance. Ticket costs ₦200." });
+        }
+
+        const finalBalance = (userDataSnapshot.balance || 0) - ticketCost;
+        const batch = writeBatch(serverDb);
+
+        batch.update(userRef, {
+          balance: finalBalance
+        });
+
+        const ticketId = `lot_reg_${Date.now()}`;
+        const ticketRef = doc(serverDb, `users/${authHeader}/lottery_tickets/${ticketId}`);
+        const ticketData = {
+          id: ticketId,
+          userId: authHeader,
+          ticketNumbers: ticketNumbers,
+          entryDate: new Date().toISOString().slice(0, 10),
+          purchasePrice: ticketCost,
+          drawId: `draw_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
+          status: "pending",
+          rewardAmount: 0,
+          drawNumbers: null
+        };
+        batch.set(ticketRef, ticketData);
+
+        const txnId = `txn_lot_${Date.now()}`;
+        const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+        batch.set(txnRef, {
+          id: txnId,
+          userId: authHeader,
+          amount: ticketCost,
+          type: "subscribe",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Registered Lottery Cashpot Combination: [${ticketNumbers.join(", ")}]`
+        });
+
+        await batch.commit();
+        return res.json({
+          success: true,
+          ticket: ticketData,
+          balance: finalBalance
+        });
+      }
+
+      // Local Fallback JSON DB
+      const db = loadDatabase();
+      const idx = db.users.findIndex(u => u.id === authHeader);
+      if (idx === -1) return res.status(404).json({ error: "User session not found" });
+
+      const user = db.users[idx];
+      if (user.balance < ticketCost) {
+        return res.status(400).json({ error: "Insufficient balance. Ticket costs ₦200." });
+      }
+
+      user.balance -= ticketCost;
+      const ticketId = `lot_reg_${Date.now()}`;
+      const ticketData = {
+        id: ticketId,
+        userId: authHeader,
+        ticketNumbers: ticketNumbers,
+        entryDate: new Date().toISOString().slice(0, 10),
+        purchasePrice: ticketCost,
+        drawId: `draw_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
+        status: "pending",
+        rewardAmount: 0,
+        drawNumbers: null
+      };
+
+      (user as any).lottery_tickets = (user as any).lottery_tickets || [];
+      (user as any).lottery_tickets.unshift(ticketData);
+
+      user.transactions.unshift({
+        id: `txn_lot_${Date.now()}`,
+        amount: ticketCost,
+        type: "subscribe" as const,
+        status: "success" as const,
+        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        details: `Registered Lottery Cashpot Combination: [${ticketNumbers.join(", ")}]`
+      });
+
+      saveDatabase(db);
+      const { passwordHash, ...profile } = user;
+      res.json({
+        success: true,
+        ticket: ticketData,
+        balance: user.balance,
+        user: profile
+      });
+
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: "Lottery purchase failed" });
+    }
+  });
+
+  // 3. Process outstanding/drawn lottery tickets
+  app.post("/api/user/lottery/draw", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
+
+      const d1 = Math.floor(Math.random() * 10);
+      const d2 = Math.floor(Math.random() * 10);
+      const d3 = Math.floor(Math.random() * 10);
+      const drawnNumbers = [d1, d2, d3];
+
+      let totalRewardAwarded = 0;
+      let matchedTickets: any[] = [];
+
+      if (serverDb) {
+        // Query users' pending tickets
+        const ticketsPath = `users/${authHeader}/lottery_tickets`;
+        const colRef = collection(serverDb, ticketsPath);
+        const q = query(colRef, where("status", "==", "pending"));
+        const qSnap = await getDocs(q);
+
+        const userRef = doc(serverDb, 'users', authHeader);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return res.status(404).json({ error: "User session not found" });
+        const userSnapshotData = userSnap.data();
+
+        const batch = writeBatch(serverDb);
+
+        qSnap.forEach(docSnap => {
+          const ticket = docSnap.data();
+          const pNums = ticket.ticketNumbers; // numbers user picked
+
+          // Calculate matches
+          let matchCount = 0;
+          if (pNums[0] === d1) matchCount++;
+          if (pNums[1] === d2) matchCount++;
+          if (pNums[2] === d3) matchCount++;
+
+          let prize = 0;
+          if (matchCount === 3) prize = 10000;
+          else if (matchCount === 2) prize = 1000;
+          else if (matchCount === 1) prize = 150;
+
+          const status = prize > 0 ? "won" : "lost";
+          totalRewardAwarded += prize;
+
+          batch.update(docSnap.ref, {
+            status,
+            rewardAmount: prize,
+            drawNumbers: drawnNumbers
+          });
+
+          matchedTickets.push({
+            id: ticket.id,
+            ticketNumbers: pNums,
+            matchCount,
+            prize,
+            status
+          });
+        });
+
+        const newBalance = (userSnapshotData.balance || 0) + totalRewardAwarded;
+        const newMonthlyGains = (userSnapshotData.monthlyGains || 0) + totalRewardAwarded;
+
+        batch.update(userRef, {
+          balance: newBalance,
+          monthlyGains: newMonthlyGains
+        });
+
+        if (totalRewardAwarded > 0) {
+          const txnId = `txn_lot_win_${Date.now()}`;
+          const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+          batch.set(txnRef, {
+            id: txnId,
+            userId: authHeader,
+            amount: totalRewardAwarded,
+            type: "bonus",
+            status: "success",
+            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            details: `Won ₦${totalRewardAwarded} Grand Cashpot Lottery Prize!`
+          });
+        }
+
+        await batch.commit();
+
+        return res.json({
+          success: true,
+          drawnNumbers,
+          matchedTickets,
+          totalRewardAwarded,
+          balance: newBalance
+        });
+      }
+
+      // JSON DB fallback paths
+      const db = loadDatabase();
+      const idx = db.users.findIndex(u => u.id === authHeader);
+      if (idx === -1) return res.status(404).json({ error: "User session not found" });
+
+      const user = db.users[idx];
+      const tickets = (user as any).lottery_tickets || [];
+      const pendingTickets = tickets.filter((t: any) => t.status === "pending");
+
+      pendingTickets.forEach((ticket: any) => {
+        const pNums = ticket.ticketNumbers;
+        let matchCount = 0;
+        if (pNums[0] === d1) matchCount++;
+        if (pNums[1] === d2) matchCount++;
+        if (pNums[2] === d3) matchCount++;
+
+        let prize = 0;
+        if (matchCount === 3) prize = 10000;
+        else if (matchCount === 2) prize = 1000;
+        else if (matchCount === 1) prize = 150;
+
+        const status = prize > 0 ? "won" : "lost";
+        totalRewardAwarded += prize;
+
+        ticket.status = status;
+        ticket.rewardAmount = prize;
+        ticket.drawNumbers = drawnNumbers;
+
+        matchedTickets.push({
+          id: ticket.id,
+          ticketNumbers: pNums,
+          matchCount,
+          prize,
+          status
+        });
+      });
+
+      user.balance += totalRewardAwarded;
+      user.monthlyGains += totalRewardAwarded;
+
+      if (totalRewardAwarded > 0) {
+        user.transactions.unshift({
+          id: `txn_lot_win_${Date.now()}`,
+          amount: totalRewardAwarded,
+          type: "bonus" as const,
+          status: "success" as const,
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Won ₦${totalRewardAwarded} Grand Cashpot Lottery Prize!`
+        });
+      }
+
+      saveDatabase(db);
+      const { passwordHash, ...profile } = user;
+      res.json({
+        success: true,
+        drawnNumbers,
+        matchedTickets,
+        totalRewardAwarded,
+        balance: user.balance,
+        user: profile
+      });
+
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: "Lottery draw execution failed" });
+    }
+  });
+
+  // 4. Retrieve users' lottery tickets
+  app.get("/api/user/lottery/tickets", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
+
+      if (serverDb) {
+        const ticketsPath = `users/${authHeader}/lottery_tickets`;
+        const colRef = collection(serverDb, ticketsPath);
+        const qSnap = await getDocs(colRef);
+        const ticketsList: any[] = [];
+        qSnap.forEach(docSnap => {
+          ticketsList.push(docSnap.data());
+        });
+        // sort by newest
+        ticketsList.sort((a, b) => b.id.localeCompare(a.id));
+        return res.json({ success: true, tickets: ticketsList });
+      }
+
+      const db = loadDatabase();
+      const user = db.users.find(u => u.id === authHeader);
+      if (!user) return res.status(404).json({ error: "User profile not found" });
+
+      const ticketsList = (user as any).lottery_tickets || [];
+      return res.json({ success: true, tickets: ticketsList });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Retrieving lottery tickets failed" });
+    }
+  });
+
   // Securely increment referrer stats on signup
   app.post("/api/referrer/increment", async (req, res) => {
     try {
