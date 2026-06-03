@@ -132,9 +132,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             // Sort by balance descending
             setUsers(usersData.sort((a, b) => (b.balance || 0) - (a.balance || 0)));
 
-            // 2. Load all transactions
-            const txnsSnap = await getDocs(query(collectionGroup(db, 'transactions')));
-            const txnsData = txnsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            // 2. Load all transactions (with fallback to avoid Firestore CollectionGroup Index requirements)
+            let txnsData: any[] = [];
+            try {
+                const txnsSnap = await getDocs(query(collectionGroup(db, 'transactions')));
+                txnsData = txnsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            } catch (groupError) {
+                console.warn("CollectionGroup query failed (likely due to missing indexes). Falling back to per-user transaction loading:", groupError);
+                try {
+                    const txnsProms = usersData.map(async (u) => {
+                        try {
+                            const snap = await getDocs(collection(db, 'users', u.id, 'transactions'));
+                            return snap.docs.map(doc => ({ ...doc.data(), id: doc.id, userId: u.id }));
+                        } catch (e) {
+                            return [];
+                        }
+                    });
+                    const txnsArrays = await Promise.all(txnsProms);
+                    txnsData = txnsArrays.flat();
+                } catch (fallbackError) {
+                    console.error("Critical fallback transaction fetch failed too:", fallbackError);
+                }
+            }
             
             const pending = txnsData.filter((t: any) => t.status === 'pending');
             setPendingTxns(pending);
@@ -291,61 +310,83 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             
             if (txn.type === 'recharge') {
                 // Deposit approval: Add the balance to user list
-                await updateDoc(userRef, {
-                    balance: increment(txn.amount),
-                    monthlyGains: increment(Math.floor(txn.amount * 0.05))
-                });
-                await updateDoc(txnRef, {
-                    status: 'success',
-                    details: 'Deposit Reviewed & Approved'
-                });
-                await addSystemLog(`Approved deposit transaction of ₦${txn.amount} for user ${txn.userId}`, 'financial');
-
-                // Crediting 10% referral bonus to the referrer!
+                // We fetch the latest user info first to safely determine if this is their first deposit
+                let isFirstDeposit = true;
                 try {
                     const userSnap = await getDoc(userRef);
                     if (userSnap.exists()) {
                         const uData = userSnap.data();
-                        const referrerCode = uData.referredBy;
-                        const referrerUid = uData.referrerUid;
+                        isFirstDeposit = !uData.firstDepositBonusAwarded;
+                    }
+                } catch (e) {
+                    console.error("Error checking user first deposit status:", e);
+                }
 
-                        if (referrerUid || referrerCode) {
-                            let referrerDocRef: any = null;
-                            if (referrerUid) {
-                                referrerDocRef = doc(db, 'users', referrerUid);
-                            } else if (referrerCode) {
-                                const q = query(collection(db, 'users'), where('invitationCode', '==', referrerCode.trim().toUpperCase()));
-                                const refSnap = await getDocs(q);
-                                if (!refSnap.empty) {
-                                    referrerDocRef = refSnap.docs[0].ref;
+                const userUpdates: any = {
+                    balance: increment(txn.amount),
+                    monthlyGains: increment(Math.floor(txn.amount * 0.05))
+                };
+
+                if (isFirstDeposit) {
+                    userUpdates.firstDepositBonusAwarded = true;
+                }
+
+                await updateDoc(userRef, userUpdates);
+
+                await updateDoc(txnRef, {
+                    status: 'success',
+                    details: isFirstDeposit ? 'First Deposit Completed & Approved' : 'Deposit Reviewed & Approved'
+                });
+                await addSystemLog(`Approved ${isFirstDeposit ? 'first' : 'subsequent'} deposit transaction of ₦${txn.amount} for user ${txn.userId}`, 'financial');
+
+                // Crediting 10% referral bonus to the referrer (Only on First Deposit!)
+                if (isFirstDeposit) {
+                    try {
+                        const userSnap = await getDoc(userRef);
+                        if (userSnap.exists()) {
+                            const uData = userSnap.data();
+                            const referrerCode = uData.referredBy;
+                            const referrerUid = uData.referrerUid;
+
+                            if (referrerUid || referrerCode) {
+                                let referrerDocRef: any = null;
+                                if (referrerUid) {
+                                    referrerDocRef = doc(db, 'users', referrerUid);
+                                } else if (referrerCode) {
+                                    const q = query(collection(db, 'users'), where('invitationCode', '==', referrerCode.trim().toUpperCase()));
+                                    const refSnap = await getDocs(q);
+                                    if (!refSnap.empty) {
+                                        referrerDocRef = refSnap.docs[0].ref;
+                                    }
                                 }
-                            }
 
-                            if (referrerDocRef) {
-                                const bonusAmount = Math.floor(txn.amount * 0.10);
-                                if (bonusAmount > 0) {
-                                    await updateDoc(referrerDocRef, {
-                                        balance: increment(bonusAmount),
-                                        referralBonus: increment(bonusAmount)
-                                    });
+                                if (referrerDocRef) {
+                                    const bonusAmount = Math.floor(txn.amount * 0.10);
+                                    if (bonusAmount > 0) {
+                                        await updateDoc(referrerDocRef, {
+                                            balance: increment(bonusAmount),
+                                            referralBonus: increment(bonusAmount),
+                                            rechargeMembers: increment(1)
+                                        });
 
-                                    const bonusTxnId = `txn_bonus_${txn.id}`;
-                                    await setDoc(doc(db, `users/${referrerDocRef.id}/transactions/${bonusTxnId}`), {
-                                        id: bonusTxnId,
-                                        userId: referrerDocRef.id,
-                                        amount: bonusAmount,
-                                        type: 'bonus',
-                                        status: 'success',
-                                        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                                        details: `Referral Bonus (10% from team recharge of ${uData.name})`
-                                    });
-                                    await addSystemLog(`Credited 10% referral bonus of ₦${bonusAmount} to referrer ${referrerDocRef.id} for team deposit`, 'financial');
+                                        const bonusTxnId = `txn_bonus_${txn.id}`;
+                                        await setDoc(doc(db, `users/${referrerDocRef.id}/transactions/${bonusTxnId}`), {
+                                            id: bonusTxnId,
+                                            userId: referrerDocRef.id,
+                                            amount: bonusAmount,
+                                            type: 'bonus',
+                                            status: 'success',
+                                            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                                            details: `First Deposit Referral Bonus (10% on ${uData.name || 'team member'}'s first deposit of ₦${txn.amount.toLocaleString()})`
+                                        });
+                                        await addSystemLog(`Credited 10% first-deposit referral bonus of ₦${bonusAmount} to referrer ${referrerDocRef.id} for team deposit of ${uData.name}`, 'financial');
+                                    }
                                 }
                             }
                         }
+                    } catch (refErr) {
+                        console.error("Failed to process manual deposit referral bonus:", refErr);
                     }
-                } catch (refErr) {
-                    console.error("Failed to process manual deposit referral bonus:", refErr);
                 }
             } else if (txn.type === 'withdraw') {
                 // Withdrawal approval: Balance is already subtracted on request submission, so just close as success

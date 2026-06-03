@@ -51,6 +51,7 @@ export interface DbUser {
   linkedBankCode?: string;
   linkedBankOwner?: string;
   isAdmin?: boolean;
+  firstDepositBonusAwarded?: boolean;
   investments: UserInvestment[];
   transactions: TransactionRecord[];
 }

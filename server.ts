@@ -328,39 +328,48 @@ function startServer() {
           return { status: "already_processed", amount: amountNGN, email, userId };
         }
 
+        const isFirstDeposit = !db.users[idx].firstDepositBonusAwarded;
+
         db.users[idx].balance += amountNGN;
         db.users[idx].monthlyGains += Math.floor(amountNGN * 0.05);
+        if (isFirstDeposit) {
+          db.users[idx].firstDepositBonusAwarded = true;
+        }
+
         db.users[idx].transactions.unshift({
           id: txnId,
           amount: amountNGN,
           type: "recharge",
           status: "success",
           date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: `Paystack Deposit (Ref: ${reference})`
+          details: isFirstDeposit ? `First Paystack Deposit (Ref: ${reference})` : `Paystack Deposit (Ref: ${reference})`
         });
 
-        // Award referral bonus to the referrer (10%)
-        const referredByUserCode = db.users[idx].referredBy;
-        if (referredByUserCode) {
-          const referrerIdx = db.users.findIndex(u => u.invitationCode.toUpperCase() === referredByUserCode.trim().toUpperCase());
-          if (referrerIdx !== -1) {
-            const bonusAmount = Math.floor(amountNGN * 0.10);
-            db.users[referrerIdx].balance += bonusAmount;
-            db.users[referrerIdx].referralBonus = (db.users[referrerIdx].referralBonus || 0) + bonusAmount;
-            db.users[referrerIdx].transactions.unshift({
-              id: `txn_bonus_${reference}`,
-              amount: bonusAmount,
-              type: "bonus",
-              status: "success",
-              date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-              details: `Referral Bonus (10% from team recharge of ${db.users[idx].name})`
-            });
-            console.log(`[Paystack Verification Local] Credited 10% referral bonus (₦${bonusAmount}) to referrer ${db.users[referrerIdx].id}`);
+        // Award referral bonus to the referrer (10% - ONLY ON FIRST DEPOSIT!)
+        if (isFirstDeposit) {
+          const referredByUserCode = db.users[idx].referredBy;
+          if (referredByUserCode) {
+            const referrerIdx = db.users.findIndex(u => u.invitationCode.toUpperCase() === referredByUserCode.trim().toUpperCase());
+            if (referrerIdx !== -1) {
+              const bonusAmount = Math.floor(amountNGN * 0.10);
+              db.users[referrerIdx].balance += bonusAmount;
+              db.users[referrerIdx].referralBonus = (db.users[referrerIdx].referralBonus || 0) + bonusAmount;
+              db.users[referrerIdx].rechargeMembers = (db.users[referrerIdx].rechargeMembers || 0) + 1;
+              db.users[referrerIdx].transactions.unshift({
+                id: `txn_bonus_${reference}`,
+                amount: bonusAmount,
+                type: "bonus",
+                status: "success",
+                date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                details: `First Deposit Referral Bonus (10% on ${db.users[idx].name || 'team member'}'s first deposit of ₦${amountNGN.toLocaleString()})`
+              });
+              console.log(`[Paystack Verification Local] Credited 10% first-deposit referral bonus (₦${bonusAmount}) to referrer ${db.users[referrerIdx].id}`);
+            }
           }
         }
 
         saveDatabase(db);
-        console.log(`[Paystack Verification] Local account ${userId} credited successfully (₦${amountNGN})`);
+        console.log(`[Paystack Verification] Local account ${userId} credited successfully (₦${amountNGN}, First Deposit: ${isFirstDeposit})`);
         return { status: "success", amount: amountNGN, email, userId };
       }
       throw new Error(`User with email ${email} or metadata userId ${metadataUserId || 'N/A'} not found in local JSON database backup`);
@@ -410,12 +419,18 @@ function startServer() {
       return { status: "already_processed", amount: amountNGN, email, userId };
     }
 
+    const isFirstDeposit = !userData.firstDepositBonusAwarded;
+
     // 4. Batch transaction updates to avoid race conditions and ensure atomicity
     const batch = writeBatch(serverDb);
-    batch.update(doc(serverDb, 'users', userId), {
+    const userUpdates: any = {
       balance: (userData.balance || 0) + amountNGN,
       monthlyGains: (userData.monthlyGains || 0) + Math.floor(amountNGN * 0.05)
-    });
+    };
+    if (isFirstDeposit) {
+      userUpdates.firstDepositBonusAwarded = true;
+    }
+    batch.update(doc(serverDb, 'users', userId), userUpdates);
 
     batch.set(txnRef, {
       id: txnId,
@@ -424,15 +439,15 @@ function startServer() {
       type: "recharge",
       status: "success",
       date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      details: `Paystack Deposit (Ref: ${reference})`
+      details: isFirstDeposit ? `First Paystack Deposit (Ref: ${reference})` : `Paystack Deposit (Ref: ${reference})`
     });
 
-    // Process 10% Referral Bonus
+    // Process 10% Referral Bonus (ONLY ON FIRST DEPOSIT!)
     const referrerCode = userData.referredBy;
     const referrerUid = userData.referrerUid;
 
-    if (referrerUid || referrerCode) {
-      console.log(`[Paystack Verification] Referral found. Code: ${referrerCode}, Uid: ${referrerUid}`);
+    if (isFirstDeposit && (referrerUid || referrerCode)) {
+      console.log(`[Paystack Verification] First Deposit Referral found. Code: ${referrerCode}, Uid: ${referrerUid}`);
       try {
         let referrerDoc: any = null;
         let referrerId: string = "";
@@ -461,6 +476,7 @@ function startServer() {
           batch.update(doc(serverDb, 'users', referrerId), {
             balance: (referrerData.balance || 0) + bonusAmount,
             referralBonus: (referrerData.referralBonus || 0) + bonusAmount,
+            rechargeMembers: (referrerData.rechargeMembers || 0) + 1,
           });
 
           const bonusTxnId = `txn_bonus_${reference}`;
@@ -471,7 +487,7 @@ function startServer() {
             type: "bonus",
             status: "success",
             date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            details: `Referral Bonus (10% from team recharge of ${userData.name})`
+            details: `First Deposit Referral Bonus (10% on ${userData.name || 'team member'}'s first deposit of ₦${amountNGN.toLocaleString()})`
           });
           
           console.log(`[Paystack Verification] Credited 10% referral bonus (₦${bonusAmount}) to referrer ${referrerId}`);
@@ -482,7 +498,7 @@ function startServer() {
         console.error("[Paystack Verification] Failed to process referral bonus:", refErr);
       }
     } else {
-      console.log(`[Paystack Verification] No referrer found for customer: ${email}`);
+      console.log(`[Paystack Verification] First Deposit skip or No Referrer found for customer: ${email}. First deposit: ${isFirstDeposit}`);
     }
 
     await batch.commit();
@@ -570,6 +586,33 @@ function startServer() {
   // -------------------------
   // CUSTOM AUTH & ACCOUNT APIS
   // -------------------------
+
+  // Secure referral verification route
+  app.get("/api/referrer/lookup/:code", async (req, res) => {
+    try {
+      const code = req.params.code.trim().toUpperCase();
+      if (!serverDb) {
+        // Fallback to local DB list lookup
+        const db = loadDatabase();
+        const user = db.users.find(u => u.invitationCode && u.invitationCode.toUpperCase() === code);
+        if (user) {
+          return res.json({ found: true, id: user.id });
+        }
+        return res.json({ found: false });
+      }
+
+      const usersCol = collection(serverDb, "users");
+      const q = query(usersCol, where("invitationCode", "==", code));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return res.json({ found: true, id: snap.docs[0].id });
+      }
+      return res.json({ found: false });
+    } catch (e: any) {
+      console.error("[Referrer Lookup Error]", e);
+      return res.status(500).json({ error: e.message || "Failed to lookup referrer" });
+    }
+  });
 
   // Secure user registration
   app.post("/api/auth/register", (req, res) => {

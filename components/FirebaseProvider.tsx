@@ -308,13 +308,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const searchCode = payload.invitationCode ? payload.invitationCode.trim().toUpperCase() : "";
       if (searchCode) {
         try {
-          const q = query(collection(db, 'users'), where('invitationCode', '==', searchCode));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            referrerUid = snap.docs[0].id;
+          const res = await fetch(`/api/referrer/lookup/${encodeURIComponent(searchCode)}`);
+          if (res.ok) {
+            const resData = await res.json();
+            if (resData.found) {
+              referrerUid = resData.id;
+            }
           }
         } catch (e) {
-          console.error("Referrer lookup failed:", e);
+          console.error("Referrer lookup via secure API failed:", e);
         }
       }
       
@@ -698,16 +700,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       // Level 2 (Referred by Level 1 members)
       if (l1Codes.length > 0) {
-        // Firestore 'in' queries are limited to 10-30 items depending on version, chunking if over 10
-        const chunks = [];
-        for (let i = 0; i < l1Codes.length; i += 10) {
-          chunks.push(l1Codes.slice(i, i + 10));
-        }
-        
-        for (const chunk of chunks) {
-          const q2 = query(collection(db, path), where('referredBy', 'in', chunk));
-          const snap2 = await getDocs(q2);
-          processSnap(snap2, 2);
+        try {
+          // Firestore 'in' queries are limited to 10-30 items depending on version, chunking if over 10
+          const chunks = [];
+          for (let i = 0; i < l1Codes.length; i += 10) {
+            chunks.push(l1Codes.slice(i, i + 10));
+          }
+          
+          for (const chunk of chunks) {
+            const q2 = query(collection(db, path), where('referredBy', 'in', chunk));
+            const snap2 = await getDocs(q2);
+            processSnap(snap2, 2);
+          }
+        } catch (l2Error) {
+          console.warn("Could not query deep Level 2 referrals due to role constraints:", l2Error);
         }
       }
 

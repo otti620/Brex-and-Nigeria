@@ -1878,7 +1878,8 @@ const App: React.FC = () => {
                               {t.type === 'recharge' ? '📥' : t.type === 'withdraw' ? '📤' : t.type === 'subscribe' ? '💼' : '🎁'}
                            </div>
                            <div>
-                              <p className="text-[11px] font-black uppercase text-slate-900 font-mono group-hover:text-blue-600 transition-colors uppercase">{t.type}</p>
+                              <p className="text-[11px] font-black uppercase text-slate-900 font-mono group-hover:text-blue-600 transition-colors">{t.type}</p>
+                              {t.details && <p className="text-[10px] text-slate-500 font-semibold leading-relaxed my-0.5">{t.details}</p>}
                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 font-mono">{t.date}</p>
                            </div>
                         </div>
