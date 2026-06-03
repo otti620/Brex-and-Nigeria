@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./server-db";
 import { initializeApp as initFirebaseServer, getApps, getApp } from "firebase/app";
-import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch } from "firebase/firestore";
+import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch, increment, updateDoc } from "firebase/firestore";
 import { getAuth as getAuthServer, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 
 function startServer() {
@@ -918,12 +918,114 @@ function startServer() {
   });
 
   // Subscribe to VIP plan
-  app.post("/api/user/subscribe", (req, res) => {
+  app.post("/api/user/subscribe", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       const { planId } = req.body;
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
+      if (serverDb) {
+        // Firestore active path
+        const userRef = doc(serverDb, 'users', authHeader);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return res.status(444).json({ error: "Session expired" });
+
+        const userDataSnapshot = userSnap.data();
+        let userInvestments = userDataSnapshot.investments || [];
+        if (userInvestments.length === 0) {
+          userInvestments = createInitialInvestments();
+        }
+
+        const planIndex = userInvestments.findIndex((p: any) => p.id === planId);
+        if (planIndex === -1) return res.status(400).json({ error: "Selected plan level does not exist" });
+
+        const plan = { ...userInvestments[planIndex] };
+        
+        let globalPlan = plan;
+        try {
+          const configDoc = await getDoc(doc(serverDb, "config", "global_vip_plans"));
+          if (configDoc.exists() && configDoc.data()?.plans) {
+            const matched = configDoc.data().plans.find((gp: any) => gp.id === planId);
+            if (matched) globalPlan = matched;
+          }
+        } catch (e) {
+          console.warn("Could not retrieve latest globalPlans from config", e);
+        }
+
+        const userBalance = userDataSnapshot.balance || 0;
+        if (userBalance < globalPlan.cost) {
+          return res.status(400).json({ error: `Insufficient balance. Deposit at least ₦${(globalPlan.cost - userBalance).toLocaleString()} NGN additional.` });
+        }
+
+        plan.joined = true;
+        plan.balance = (plan.balance || 0) + globalPlan.cost;
+        userInvestments[planIndex] = plan;
+
+        const batch = writeBatch(serverDb);
+        batch.update(userRef, {
+          balance: increment(-globalPlan.cost),
+          investments: userInvestments
+        });
+
+        const txnId = `txn_${Date.now()}`;
+        const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+        batch.set(txnRef, {
+          id: txnId,
+          userId: authHeader,
+          amount: globalPlan.cost,
+          type: "subscribe",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Subscribed and activated ${globalPlan.name} Pool`
+        });
+
+        const otherActiveInvestments = userInvestments.filter((p: any) => p.joined && p.id !== planId);
+        const isFirstPortfolioActivation = otherActiveInvestments.length === 0;
+
+        if (isFirstPortfolioActivation && (userDataSnapshot.referrerUid || userDataSnapshot.referredBy)) {
+          try {
+            let referrerDocRef: any = null;
+            if (userDataSnapshot.referrerUid) {
+              referrerDocRef = doc(serverDb, 'users', userDataSnapshot.referrerUid);
+            } else if (userDataSnapshot.referredBy) {
+              const q = query(collection(serverDb, 'users'), where('invitationCode', '==', userDataSnapshot.referredBy.trim().toUpperCase()));
+              const refSnap = await getDocs(q);
+              if (!refSnap.empty) {
+                referrerDocRef = refSnap.docs[0].ref;
+              }
+            }
+
+            if (referrerDocRef) {
+              const refSnap = await getDoc(referrerDocRef);
+              if (refSnap.exists()) {
+                batch.update(referrerDocRef, {
+                  balance: increment(2500),
+                  rechargeMembers: increment(1)
+                });
+
+                const refTxnId = `txn_ref_${Date.now()}`;
+                batch.set(doc(serverDb, `users/${referrerDocRef.id}/transactions/${refTxnId}`), {
+                  id: refTxnId,
+                  userId: referrerDocRef.id,
+                  amount: 2500,
+                  type: "bonus",
+                  status: "success",
+                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                  details: `First Deposit Active Reward: ${userDataSnapshot.name}`
+                });
+                console.log(`[Firestore API Subscribe] Added 2500 active referral reward to referrer ${referrerDocRef.id}`);
+              }
+            }
+          } catch (refErr) {
+            console.error("[Firestore API Subscribe] Failed to process active referral reward:", refErr);
+          }
+        }
+
+        await batch.commit();
+        return res.json({ message: "Subscription activated!" });
+      }
+
+      // JSON DB fallback path code
       const db = loadDatabase();
       const idx = db.users.findIndex((u) => u.id === authHeader);
       if (idx === -1) return res.status(444).json({ error: "Session expired" });
@@ -975,17 +1077,82 @@ function startServer() {
       const { passwordHash, ...profile } = user;
       res.json({ message: "Subscription activated!", user: profile });
     } catch (err: any) {
+      console.error(err);
       res.status(500).json({ error: "Portfolio allocation failed" });
     }
   });
 
   // Claim VIP Daily yield
-  app.post("/api/user/accrue-yield", (req, res) => {
+  app.post("/api/user/accrue-yield", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       const { planId } = req.body;
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
+      if (serverDb) {
+        const userRef = doc(serverDb, 'users', authHeader);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return res.status(404).json({ error: "User session not found" });
+
+        const userDataSnapshot = userSnap.data();
+        let userInvestments = userDataSnapshot.investments || [];
+        
+        const planIndex = userInvestments.findIndex((p: any) => p.id === planId);
+        if (planIndex === -1) return res.status(400).json({ error: "Investment plan not found" });
+
+        const plan = { ...userInvestments[planIndex] };
+        if (!plan.joined) {
+          return res.status(400).json({ error: "You must allocate funds to this plan before accruing yield." });
+        }
+
+        const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+        if (plan.lastClaimedDate === todayStr) {
+          return res.status(400).json({ error: "This yield cycle has already been accrued for today." });
+        }
+
+        let globalPlan = plan;
+        try {
+          const configDoc = await getDoc(doc(serverDb, "config", "global_vip_plans"));
+          if (configDoc.exists() && configDoc.data()?.plans) {
+            const matched = configDoc.data().plans.find((gp: any) => gp.id === planId);
+            if (matched) globalPlan = matched;
+          }
+        } catch (e) {
+          console.warn("Accrue yield API: failed match global plan:", e);
+        }
+
+        const yieldAmount = globalPlan.dailyProfit || plan.dailyProfit || 0;
+
+        plan.earnYesterday = yieldAmount;
+        plan.earnTotal = (plan.earnTotal || 0) + yieldAmount;
+        plan.workingDays = (plan.workingDays || 0) + 1;
+        plan.lastClaimedDate = todayStr;
+        userInvestments[planIndex] = plan;
+
+        const batch = writeBatch(serverDb);
+        batch.update(userRef, {
+          balance: increment(yieldAmount),
+          monthlyGains: increment(yieldAmount),
+          investments: userInvestments
+        });
+
+        const txnId = `txn_${Date.now()}`;
+        const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+        batch.set(txnRef, {
+          id: txnId,
+          userId: authHeader,
+          amount: yieldAmount,
+          type: "claim",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Daily Claim: interest profit from ${globalPlan.name || plan.name}`
+        });
+
+        await batch.commit();
+        return res.json({ message: "Yield successfully claimed into available balance!" });
+      }
+
+      // JSON DB fallback path code
       const db = loadDatabase();
       const idx = db.users.findIndex((u) => u.id === authHeader);
       if (idx === -1) return res.status(404).json({ error: "User session not found" });
@@ -1026,7 +1193,138 @@ function startServer() {
       const { passwordHash, ...profile } = user;
       res.json({ message: "Yield successfully claimed into available balance!", user: profile });
     } catch (err) {
+      console.error(err);
       res.status(500).json({ error: "Yield accrual calculation failed" });
+    }
+  });
+
+  // Securely increment referrer stats on signup
+  app.post("/api/referrer/increment", async (req, res) => {
+    try {
+      const { referrerUid } = req.body;
+      if (!referrerUid) return res.status(400).json({ error: "Missing referrer UID" });
+
+      if (serverDb) {
+        const refRef = doc(serverDb, 'users', referrerUid);
+        await updateDoc(refRef, {
+          teamSize: increment(1),
+          teamSizeToday: increment(1)
+        });
+        console.log(`[Server Referrer Increment] Incremented team size for parent ${referrerUid}`);
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("[Server Referrer Increment] Error:", e);
+      res.status(500).json({ error: e.message || "Referrer increment failed" });
+    }
+  });
+
+  // Securely simulate a downline invite on server
+  app.post("/api/referrer/simulate", async (req, res) => {
+    try {
+      const { parentUid, parentInvitationCode } = req.body;
+      if (!parentUid || !parentInvitationCode) return res.status(400).json({ error: "Missing simulation options" });
+
+      const randomNgs = ['703', '813', '906', '802', '915', '701', '805'];
+      const randomPrefix = randomNgs[Math.floor(Math.random() * randomNgs.length)];
+      const randomNumStr = Math.floor(1000000 + Math.random() * 9000000).toString();
+      const cleanPhone = `+234 ${randomPrefix} ${randomNumStr.slice(0, 3)} ${randomNumStr.slice(-4)}`;
+
+      const firstNames = ["Sade", "Kunle", "Temitope", "Nnamdi", "Chidi", "Akin", "Chioma", "Ibrahim", "Tunde", "Ayo"];
+      const lastNames = ["Oluaseun", "Jinadu", "Faroq", "Ebere", "Kolawole", "Nwachukwu", "Okoro", "Adeleke"];
+      const randomName = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+      const fakeMail = `${randomName.toLowerCase().replace(" ", "")}_${Math.floor(100 + Math.random() * 900)}@brex.internal`;
+
+      const possibleRecharges = [3000, 15000, 50000, 150000];
+      const amountChosen = possibleRecharges[Math.floor(Math.random() * possibleRecharges.length)];
+
+      const defaultPlans = createInitialInvestments();
+      const freshInvestments = defaultPlans.map(p => {
+        if (p.cost === amountChosen) {
+          return {
+            ...p,
+            joined: true,
+            balance: amountChosen,
+            workingDays: Math.floor(1 + Math.random() * 5),
+            earnTotal: p.dailyProfit * Math.floor(1 + Math.random() * 5),
+            earnYesterday: p.dailyProfit
+          };
+        }
+        return p;
+      });
+
+      const simulatedUid = `user_sim_${Date.now()}`;
+      const generatedCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const simulatedUserProfile = {
+        id: simulatedUid,
+        name: randomName,
+        email: fakeMail,
+        phoneNumber: cleanPhone,
+        kycLevel: 3,
+        balance: 3000,
+        monthlyGains: freshInvestments.find(p => p.cost === amountChosen)?.earnTotal || 0,
+        streak: 1,
+        badges: ["First Brex 💧"],
+        memojiState: "Happy",
+        selectedIntent: "safe",
+        teamSize: 0,
+        rechargeMembers: 0,
+        effectiveSizeToday: 0,
+        teamSizeToday: 0,
+        invitationCode: generatedCode,
+        referredBy: parentInvitationCode,
+        referrerUid: parentUid,
+        isAdmin: false,
+        investments: freshInvestments
+      };
+
+      const directReferralBonus = Math.floor(amountChosen * 0.10);
+      const activeReferralBonus = 2500;
+      const totalAwardedBonus = directReferralBonus + activeReferralBonus;
+
+      if (serverDb) {
+        const batch = writeBatch(serverDb);
+        const simUserRef = doc(serverDb, 'users', simulatedUid);
+        batch.set(simUserRef, simulatedUserProfile);
+
+        const parentRef = doc(serverDb, 'users', parentUid);
+        batch.update(parentRef, {
+          balance: increment(totalAwardedBonus),
+          rechargeMembers: increment(1),
+          teamSize: increment(1),
+          teamSizeToday: increment(1)
+        });
+
+        const dBonusTxnId = `txn_bonus_dir_${Date.now()}`;
+        batch.set(doc(serverDb, `users/${parentUid}/transactions/${dBonusTxnId}`), {
+          id: dBonusTxnId,
+          userId: parentUid,
+          amount: directReferralBonus,
+          type: "earning",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Referral Bonus (10% on registration & deposit of ${randomName})`
+        });
+
+        const aBonusTxnId = `txn_bonus_act_${Date.now()}`;
+        batch.set(doc(serverDb, `users/${parentUid}/transactions/${aBonusTxnId}`), {
+          id: aBonusTxnId,
+          userId: parentUid,
+          amount: activeReferralBonus,
+          type: "bonus",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Active Invited Friend Pool Reward: ${randomName}`
+        });
+
+        await batch.commit();
+        console.log(`[Platform Simulation Server] Successfully registered virtual seed ${simulatedUid} and credited parent ${parentUid}`);
+      }
+      res.json({ success: true, simulatedName: randomName, amount: amountChosen });
+    } catch (e: any) {
+      console.error("[Platform Simulation Server] Error:", e);
+      res.status(500).json({ error: e.message || "Simulation execution failed" });
     }
   });
 
