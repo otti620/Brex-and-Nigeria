@@ -53,14 +53,17 @@ import {
 } from 'lucide-react';
 
 const CLIENT_DEFAULT_VIP_PLANS = [
-  { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 150 },
-  { id: 'vip-2', name: 'Wealth Builder', period: '365 Days', workingDays: 0, cost: 15000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '📈', dailyProfit: 900 },
-  { id: 'vip-3', name: 'Revenue Stream', period: '365 Days', workingDays: 0, cost: 50000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '💧', dailyProfit: 3500 },
-  { id: 'vip-4', name: 'Asset Reserve', period: '365 Days', workingDays: 0, cost: 150000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '🏦', dailyProfit: 12000 },
-  { id: 'vip-5', name: 'Capital Fortress', period: '365 Days', workingDays: 0, cost: 300000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '🏰', dailyProfit: 27000 },
-  { id: 'vip-6', name: 'Executive Portfolio', period: '365 Days', workingDays: 0, cost: 500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: '💼', dailyProfit: 50000 },
-  { id: 'vip-7', name: 'Royal Sovereign', period: '365 Days', workingDays: 0, cost: 1000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '👑', dailyProfit: 110000 },
-  { id: 'vip-8', name: 'Diamond Infinity', period: '365 Days', workingDays: 0, cost: 2500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '💎', dailyProfit: 300000 }
+  { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 180 },
+  { id: 'vip-2', name: 'Starter Compound', period: '365 Days', workingDays: 0, cost: 7500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '🪴', dailyProfit: 420 },
+  { id: 'vip-3', name: 'Wealth Builder', period: '365 Days', workingDays: 0, cost: 16000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '📈', dailyProfit: 960 },
+  { id: 'vip-4', name: 'Micro Venture', period: '365 Days', workingDays: 0, cost: 30000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '💰', dailyProfit: 2000 },
+  { id: 'vip-5', name: 'Revenue Stream', period: '365 Days', workingDays: 0, cost: 55000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '💧', dailyProfit: 3950 },
+  { id: 'vip-6', name: 'Capital Shield', period: '365 Days', workingDays: 0, cost: 110000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: '🛡️', dailyProfit: 8800 },
+  { id: 'vip-7', name: 'Asset Reserve', period: '365 Days', workingDays: 0, cost: 220000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '🏦', dailyProfit: 19000 },
+  { id: 'vip-8', name: 'Capital Fortress', period: '365 Days', workingDays: 0, cost: 450000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '🏰', dailyProfit: 42000 },
+  { id: 'vip-9', name: 'Executive Portfolio', period: '365 Days', workingDays: 0, cost: 800000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 9, avatar: '💼', dailyProfit: 82000 },
+  { id: 'vip-10', name: 'Royal Sovereign', period: '365 Days', workingDays: 0, cost: 1500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 10, avatar: '👑', dailyProfit: 165000 },
+  { id: 'vip-11', name: 'Diamond Infinity', period: '365 Days', workingDays: 0, cost: 3000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 11, avatar: '💎', dailyProfit: 360000 }
 ];
 
 const App: React.FC = () => {
@@ -1420,10 +1423,10 @@ const App: React.FC = () => {
         {/* Floating Telegram Button */}
         <button 
           onClick={() => setShowTelegramModal(true)} 
-          className="fixed bottom-24 right-6 z-[200] bg-sky-600 text-white rounded-full p-4 shadow-[0_0_20px_rgba(2,132,199,0.5)] flex flex-col items-center gap-1 hover:bg-sky-700 transition-all border-4 border-white animate-bounce"
+          className="fixed bottom-24 right-5 z-[200] w-12 h-12 bg-sky-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-sky-500/30 hover:bg-sky-600 hover:scale-105 active:scale-95 transition-all border-2 border-white cursor-pointer"
+          title="Join Telegram"
         >
-          <Send size={32} />
-          <span className="text-[12px] font-black uppercase text-center w-24">Join our telegram channel</span>
+          <Send size={20} />
         </button>
 
         {/* Improved Broadcast banner - triggers Modal */}
@@ -1452,10 +1455,10 @@ const App: React.FC = () => {
 
         {/* Balance block */}
         <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-[32px] p-6 relative overflow-hidden shadow-xl shadow-indigo-600/20">
-          <p className="text-black/60 text-[10px] font-bold tracking-widest uppercase mb-1 font-mono">Available Balance</p>
+          <p className="text-white/70 text-[10px] font-bold tracking-widest uppercase mb-1 font-mono">Available Balance</p>
           <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-3xl font-black text-black font-mono">₦{userData.balance.toLocaleString()}</span>
-            <div className="flex items-center gap-0.5 text-[9px] bg-white/30 text-black px-2 py-0.5 rounded-full font-bold">
+            <span className="text-3xl font-black text-white font-mono">₦{userData.balance.toLocaleString()}</span>
+            <div className="flex items-center gap-0.5 text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">
               <TrendingUp size={10} /> +14.5% Daily Interest
             </div>
           </div>
@@ -1619,7 +1622,7 @@ const App: React.FC = () => {
             <h3 className="text-slate-900 font-black text-xs mb-1">Profit Calculator</h3>
             <p className="text-slate-500 font-mono text-[9px] mb-4 font-bold">Drag slider to preview yield potential</p>
             <div className="flex flex-col gap-3">
-              <input type="range" min="1" max="8" defaultValue="3" className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" onChange={(e) => {
+              <input type="range" min="1" max="11" defaultValue="3" className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" onChange={(e) => {
                 const el = document.getElementById('vip-tier-preview');
                 const val = parseInt(e.target.value);
                 const plan = (userData?.investments || CLIENT_DEFAULT_VIP_PLANS)[val-1];
@@ -1894,7 +1897,7 @@ const App: React.FC = () => {
             
             {userData?.spinBalance && userData.spinBalance > 0 ? (
               <div className="w-full bg-amber-50 border border-amber-200 p-4 rounded-2xl text-[9px] font-mono leading-relaxed text-amber-700 font-bold mt-2">
-                🔒 Locked Spin Wallet: ₦{userData.spinBalance.toLocaleString()} NGN. Complete Level 2/3 savings package activation (₦15,000) to release spin funds under NDIC compliance audits.
+                🔒 Locked Spin Wallet: ₦{userData.spinBalance.toLocaleString()} NGN. Complete Level 3 savings package activation (Wealth Builder - ₦16,000) or higher to release spin funds under NDIC compliance audits.
               </div>
             ) : null}
           </div>
@@ -2774,7 +2777,7 @@ const App: React.FC = () => {
                        <p className="text-xl font-black text-amber-600 font-mono italic">₦{userData.spinBalance.toLocaleString()}</p>
                      </div>
                      <p className="text-[9px] font-medium leading-relaxed font-mono text-amber-700/80">
-                       ⚠️ Dynamic Spin winnings have been segmented. Withdrawals from this promotional fund (or any transfer over ₦5,000) require activating a Standard Level 2 (Wealth Builder - ₦15,000) or Level 3 (Revenue Stream - ₦50,000) package to verify local NDIC KYC standards.
+                       ⚠️ Dynamic Spin winnings have been segmented. Withdrawals from this promotional fund (or any transfer over ₦5,000) require activating a Standard Level 3 (Wealth Builder - ₦16,000) or Level 4 (Micro Venture - ₦30,000) package to verify local NDIC KYC standards.
                      </p>
                   </div>
                 ) : null}
@@ -3175,51 +3178,10 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Telegram Channel Modal */}
-      <AnimatePresence>
-        {showTelegramModal && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[250] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              className="bg-white w-full max-w-sm rounded-[32px] p-8 text-center shadow-2xl"
-            >
-              <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-lg shadow-blue-500/20">
-                📢
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 mb-2">Join Our Community</h3>
-              <p className="text-slate-500 font-medium mb-8 leading-relaxed">
-                Stay updated with live payment proofs and the latest app developments in our official Telegram channel.
-              </p>
-              <div className="flex flex-col gap-3">
-                <a 
-                  href="https://t.me/brexgroup6" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all text-sm"
-                  onClick={() => setShowTelegramModal(false)}
-                >
-                  Join Telegram Channel
-                </a>
-                <button 
-                  onClick={() => setShowTelegramModal(false)}
-                  className="w-full bg-slate-100 text-slate-500 font-black py-3 rounded-2xl text-[11px] uppercase tracking-widest transition-all"
-                >
-                  Skip for now
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <FlyerPopup isOpen={showFlyerModal} onClose={() => setShowFlyerModal(false)} />
-      <TelegramModal isOpen={showTelegramModal} onClose={() => setShowTelegramModal(false)} />
+      <TelegramModal isOpen={showTelegramModal} onClose={() => {
+        setShowTelegramModal(false);
+      }} />
 
       {/* Broadcast Notice Modal */}
       <AnimatePresence>

