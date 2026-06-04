@@ -1206,46 +1206,11 @@ function startServer() {
 
       const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
       
-      // Determine prize based on 8 colorful segments selection with elevated success rates:
-      // Index 0: ₦200, 1: ₦500, 2: ₦1,000, 3: Try again, 4: ₦2,500, 5: ₦5,000, 6: ₦10,000, 7: ₦500
-      const randValue = Math.random() * 100;
-      let targetIndex = 3; // default: Try again
-      let reward = 0;
-      let label = "Try again";
-
-      if (randValue < 18) {
-        targetIndex = 0;
-        reward = 200;
-        label = "₦200 NGN";
-      } else if (randValue < 38) {
-        targetIndex = 1;
-        reward = 500;
-        label = "₦500 NGN";
-      } else if (randValue < 58) {
-        targetIndex = 2;
-        reward = 1000;
-        label = "₦1,000 NGN";
-      } else if (randValue < 68) {
-        targetIndex = 3;
-        reward = 0;
-        label = "Try again";
-      } else if (randValue < 83) {
-        targetIndex = 4;
-        reward = 2500;
-        label = "₦2,500 NGN";
-      } else if (randValue < 93) {
-        targetIndex = 5;
-        reward = 5000;
-        label = "₦5,000 NGN";
-      } else if (randValue < 95) {
-        targetIndex = 6;
-        reward = 10000;
-        label = "₦10,000 NGN";
-      } else {
-        targetIndex = 7;
-        reward = 500;
-        label = "₦500 NGN";
-      }
+      // Determine prize based on 8 colorful segments selection:
+      // Rigged: Spin Wheel is permanently shut down from winning - users always land on segment 3 ("Try again" with 0 reward)
+      const targetIndex = 3;
+      const reward = 0;
+      const label = "Try again";
 
       if (serverDb) {
         const userRef = doc(serverDb, 'users', authHeader);
@@ -2129,6 +2094,139 @@ function startServer() {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   }
+
+  // Audit function to parse previous spin wins and adjust balances
+  const extractAmountFromDetails = (details: string): number => {
+    const cleanStr = details.replace(/,/g, '');
+    const match = cleanStr.match(/Won\s+₦?(\d+)/i);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  const runAuditDeductions = async () => {
+    console.log("[Audit Deduction] Starting spin-to-win adjustment audit...");
+    
+    // Ensure Firebase auth resolves if applicable 
+    if (loginPromise) {
+      try {
+        await loginPromise;
+      } catch (authErr) {
+        console.error("[Audit Deduction] Auth promise error:", authErr);
+      }
+    }
+
+    // 1. Audit local JSON fallback database
+    try {
+      const db = loadDatabase();
+      let localDbChanged = false;
+      
+      for (const user of db.users) {
+        if (!user.transactions) user.transactions = [];
+        
+        const spinWins = user.transactions.filter(txn => {
+          const details = txn.details || "";
+          const isSpin = txn.id?.startsWith("txn_spin_") || details.toLowerCase().includes("spin");
+          const isWin = details.toLowerCase().includes("won");
+          return isSpin && isWin && txn.status === "success";
+        });
+        
+        for (const winTxn of spinWins) {
+          const deductId = `txn_deduct_spin_${winTxn.id}`;
+          const alreadyDeducted = user.transactions.some(t => t.id === deductId);
+          
+          if (!alreadyDeducted) {
+            const winAmount = extractAmountFromDetails(winTxn.details);
+            if (winAmount > 0) {
+              console.log(`[Audit Deduction - Local] Deducting ₦${winAmount} from ${user.name} for spin win ${winTxn.id}`);
+              user.balance = Math.max(0, user.balance - winAmount);
+              
+              user.transactions.unshift({
+                id: deductId,
+                amount: winAmount,
+                type: "withdraw",
+                status: "success",
+                date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                details: `Audit Adjustment: Deduction of previous Fortune Spin winnings (Ref: ${winTxn.id.substring(0, 12)})`
+              });
+              localDbChanged = true;
+            }
+          }
+        }
+      }
+      
+      if (localDbChanged) {
+        saveDatabase(db);
+        console.log("[Audit Deduction - Local] Local database updated and saved successfully.");
+      }
+    } catch (err) {
+      console.error("[Audit Deduction - Local] Error auditing local database:", err);
+    }
+    
+    // 2. Audit Firebase Firestore database (if connected)
+    if (serverDb) {
+      try {
+        const usersCol = collection(serverDb, "users");
+        const usersSnap = await getDocs(usersCol);
+        
+        for (const userDoc of usersSnap.docs) {
+          const userId = userDoc.id;
+          const userData = userDoc.data();
+          
+          const txnsCol = collection(serverDb, `users/${userId}/transactions`);
+          const txnsSnap = await getDocs(txnsCol);
+          const transactions = txnsSnap.docs.map(doc => doc.data());
+          
+          const spinWins = transactions.filter((txn: any) => {
+            const details = txn.details || "";
+            const isSpin = txn.id?.startsWith("txn_spin_") || details.toLowerCase().includes("spin");
+            const isWin = details.toLowerCase().includes("won");
+            return isSpin && isWin && txn.status === "success";
+          });
+          
+          let userBalanceAdjusted = false;
+          let finalBalance = userData.balance || 0;
+          const batch = writeBatch(serverDb);
+          
+          for (const winTxn of spinWins) {
+            const deductId = `txn_deduct_spin_${winTxn.id}`;
+            const alreadyDeducted = transactions.some((t: any) => t.id === deductId);
+            
+            if (!alreadyDeducted) {
+              const winAmount = extractAmountFromDetails(winTxn.details || "");
+              if (winAmount > 0) {
+                console.log(`[Audit Deduction - Firestore] Deducting ₦${winAmount} from Firestore user ${userData.name || userId} for spin win ${winTxn.id}`);
+                finalBalance = Math.max(0, finalBalance - winAmount);
+                
+                const txnRef = doc(serverDb, `users/${userId}/transactions/${deductId}`);
+                batch.set(txnRef, {
+                  id: deductId,
+                  userId: userId,
+                  amount: winAmount,
+                  type: "withdraw",
+                  status: "success",
+                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                  details: `Audit Adjustment: Deduction of previous Fortune Spin winnings (Ref: ${winTxn.id.substring(0, 12)})`
+                });
+                userBalanceAdjusted = true;
+              }
+            }
+          }
+          
+          if (userBalanceAdjusted) {
+            batch.update(doc(serverDb, "users", userId), {
+              balance: finalBalance
+            });
+            await batch.commit();
+            console.log(`[Audit Deduction - Firestore] Committed adjustment for user ${userData.name || userId}. New balance: ₦${finalBalance}`);
+          }
+        }
+      } catch (err) {
+        console.error("[Audit Deduction - Firestore] Error auditing Firestore database:", err);
+      }
+    }
+  };
+
+  // Schedule task shortly after server setup
+  setTimeout(runAuditDeductions, 1500);
 
   return app;
 }
