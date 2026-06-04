@@ -63,14 +63,17 @@ export const normalizePhoneNumber = (phone: string): string => {
 };
 
 const CLIENT_DEFAULT_VIP_PLANS = [
-  { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 150 },
-  { id: 'vip-2', name: 'Wealth Builder', period: '365 Days', workingDays: 0, cost: 15000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '📈', dailyProfit: 900 },
-  { id: 'vip-3', name: 'Revenue Stream', period: '365 Days', workingDays: 0, cost: 50000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '💧', dailyProfit: 3500 },
-  { id: 'vip-4', name: 'Asset Reserve', period: '365 Days', workingDays: 0, cost: 150000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '🏦', dailyProfit: 12000 },
-  { id: 'vip-5', name: 'Capital Fortress', period: '365 Days', workingDays: 0, cost: 300000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '🏰', dailyProfit: 27000 },
-  { id: 'vip-6', name: 'Executive Portfolio', period: '365 Days', workingDays: 0, cost: 500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: ' briefcase', dailyProfit: 50000 },
-  { id: 'vip-7', name: 'Royal Sovereign', period: '365 Days', workingDays: 0, cost: 1000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '👑', dailyProfit: 110000 },
-  { id: 'vip-8', name: 'Diamond Infinity', period: '365 Days', workingDays: 0, cost: 2500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '💎', dailyProfit: 300000 }
+  { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 180 },
+  { id: 'vip-2', name: 'Starter Compound', period: '365 Days', workingDays: 0, cost: 7500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '🪴', dailyProfit: 420 },
+  { id: 'vip-3', name: 'Wealth Builder', period: '365 Days', workingDays: 0, cost: 16000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '📈', dailyProfit: 960 },
+  { id: 'vip-4', name: 'Micro Venture', period: '365 Days', workingDays: 0, cost: 30000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 4, avatar: '💰', dailyProfit: 2000 },
+  { id: 'vip-5', name: 'Revenue Stream', period: '365 Days', workingDays: 0, cost: 55000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 5, avatar: '💧', dailyProfit: 3950 },
+  { id: 'vip-6', name: 'Capital Shield', period: '365 Days', workingDays: 0, cost: 110000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 6, avatar: '🛡️', dailyProfit: 8800 },
+  { id: 'vip-7', name: 'Asset Reserve', period: '365 Days', workingDays: 0, cost: 220000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 7, avatar: '🏦', dailyProfit: 19000 },
+  { id: 'vip-8', name: 'Capital Fortress', period: '365 Days', workingDays: 0, cost: 450000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 8, avatar: '🏰', dailyProfit: 42000 },
+  { id: 'vip-9', name: 'Executive Portfolio', period: '365 Days', workingDays: 0, cost: 800000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 9, avatar: '💼', dailyProfit: 82000 },
+  { id: 'vip-10', name: 'Royal Sovereign', period: '365 Days', workingDays: 0, cost: 1500000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 10, avatar: '👑', dailyProfit: 165000 },
+  { id: 'vip-11', name: 'Diamond Infinity', period: '365 Days', workingDays: 0, cost: 3000000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 11, avatar: '💎', dailyProfit: 360000 }
 ];
 
 enum OperationType {
@@ -153,6 +156,26 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return () => unsubGlobal();
   }, []);
+
+  useEffect(() => {
+    if (userData?.isAdmin && globalPlans) {
+      const needsSync = globalPlans.length !== CLIENT_DEFAULT_VIP_PLANS.length ||
+        globalPlans.some((gp: any, idx: number) => {
+          const local = CLIENT_DEFAULT_VIP_PLANS[idx];
+          return !local || gp.id !== local.id || gp.cost !== local.cost || gp.dailyProfit !== local.dailyProfit || gp.name !== local.name;
+        });
+
+      if (needsSync) {
+        console.log("Admin syncing global plans to Firestore...");
+        setDoc(doc(db, 'config', 'global_vip_plans'), { plans: CLIENT_DEFAULT_VIP_PLANS })
+          .then(() => {
+            console.log("Global plans synced successfully!");
+            setGlobalPlans(CLIENT_DEFAULT_VIP_PLANS);
+          })
+          .catch(e => console.error("Admin failed to sync global plans:", e));
+      }
+    }
+  }, [userData?.isAdmin, globalPlans]);
 
   useEffect(() => {
     let unsubDoc: () => void;
