@@ -163,6 +163,7 @@ const App: React.FC = () => {
 
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.Auth);
   const [selectedIntent, setSelectedIntent] = useState<string>('safe');
+  const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
 
   // Promotions / Game States
   const [promoTab, setPromoTab] = useState<'spin' | 'lottery' | 'offers'>('spin');
@@ -1116,6 +1117,7 @@ const App: React.FC = () => {
 
   // Subscribe / Invest in yield plans
   const handleSubscribeInvestmentPlan = async (planId: string, cost: number) => {
+    if (isSubscribing) return;
     if (!userData || userData.balance < cost) {
       showToast(`Insufficient balance. You need at least ₦${cost.toLocaleString()} to activate this pool.`);
       navigate(Screen.Fund);
@@ -1124,11 +1126,14 @@ const App: React.FC = () => {
       return;
     }
 
+    setIsSubscribing(true);
     try {
       await subscribeToPlan(planId);
       showToast(`Successfully joined plan! Daily yield starts immediately.`);
     } catch (err: any) {
       showToast(err.message || "Subscription failed. Try again.");
+    } finally {
+      setIsSubscribing(false);
     }
   };
 

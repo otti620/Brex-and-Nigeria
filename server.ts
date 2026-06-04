@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { loadDatabase, saveDatabase, DbUser, createInitialInvestments } from "./server-db";
 import { initializeApp as initFirebaseServer, getApps, getApp } from "firebase/app";
-import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch, increment, updateDoc } from "firebase/firestore";
+import { getFirestore as getFirestoreServer, collection, query, where, getDocs, doc, getDoc, writeBatch, increment, updateDoc, runTransaction } from "firebase/firestore";
 import { getAuth as getAuthServer, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 
 function startServer() {
@@ -950,104 +950,131 @@ function startServer() {
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
       if (serverDb) {
-        // Firestore active path
+        // Firestore active path with Transaction to prevent race conditions (double spend / click spamming)
         const userRef = doc(serverDb, 'users', authHeader);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) return res.status(444).json({ error: "Session expired" });
+        let errorMsg = null;
 
-        const userDataSnapshot = userSnap.data();
-        let userInvestments = userDataSnapshot.investments || [];
-        if (userInvestments.length === 0) {
-          userInvestments = createInitialInvestments();
-        }
-
-        const planIndex = userInvestments.findIndex((p: any) => p.id === planId);
-        if (planIndex === -1) return res.status(400).json({ error: "Selected plan level does not exist" });
-
-        const plan = { ...userInvestments[planIndex] };
-        
-        let globalPlan = plan;
         try {
-          const configDoc = await getDoc(doc(serverDb, "config", "global_vip_plans"));
-          if (configDoc.exists() && configDoc.data()?.plans) {
-            const matched = configDoc.data().plans.find((gp: any) => gp.id === planId);
-            if (matched) globalPlan = matched;
-          }
-        } catch (e) {
-          console.warn("Could not retrieve latest globalPlans from config", e);
-        }
-
-        const userBalance = userDataSnapshot.balance || 0;
-        if (userBalance < globalPlan.cost) {
-          return res.status(400).json({ error: `Insufficient balance. Deposit at least ₦${(globalPlan.cost - userBalance).toLocaleString()} NGN additional.` });
-        }
-
-        plan.joined = true;
-        plan.balance = (plan.balance || 0) + globalPlan.cost;
-        userInvestments[planIndex] = plan;
-
-        const batch = writeBatch(serverDb);
-        batch.update(userRef, {
-          balance: increment(-globalPlan.cost),
-          investments: userInvestments
-        });
-
-        const txnId = `txn_${Date.now()}`;
-        const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
-        batch.set(txnRef, {
-          id: txnId,
-          userId: authHeader,
-          amount: globalPlan.cost,
-          type: "subscribe",
-          status: "success",
-          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: `Subscribed and activated ${globalPlan.name} Pool`
-        });
-
-        const otherActiveInvestments = userInvestments.filter((p: any) => p.joined && p.id !== planId);
-        const isFirstPortfolioActivation = otherActiveInvestments.length === 0;
-
-        if (isFirstPortfolioActivation && (userDataSnapshot.referrerUid || userDataSnapshot.referredBy)) {
-          try {
-            let referrerDocRef: any = null;
-            if (userDataSnapshot.referrerUid) {
-              referrerDocRef = doc(serverDb, 'users', userDataSnapshot.referrerUid);
-            } else if (userDataSnapshot.referredBy) {
-              const q = query(collection(serverDb, 'users'), where('invitationCode', '==', userDataSnapshot.referredBy.trim().toUpperCase()));
-              const refSnap = await getDocs(q);
-              if (!refSnap.empty) {
-                referrerDocRef = refSnap.docs[0].ref;
-              }
+          await runTransaction(serverDb, async (transaction) => {
+            const userSnap = await transaction.get(userRef);
+            if (!userSnap.exists()) {
+              errorMsg = "Session expired";
+              return;
             }
 
-            if (referrerDocRef) {
-              const refSnap = await getDoc(referrerDocRef);
-              if (refSnap.exists()) {
-                batch.update(referrerDocRef, {
-                  balance: increment(2500),
-                  rechargeMembers: increment(1)
-                });
+            const userDataSnapshot = userSnap.data();
+            let userInvestments = userDataSnapshot.investments || [];
+            if (userInvestments.length === 0) {
+              userInvestments = createInitialInvestments();
+            }
 
-                const refTxnId = `txn_ref_${Date.now()}`;
-                batch.set(doc(serverDb, `users/${referrerDocRef.id}/transactions/${refTxnId}`), {
-                  id: refTxnId,
-                  userId: referrerDocRef.id,
-                  amount: 2500,
-                  type: "bonus",
-                  status: "success",
-                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                  details: `First Deposit Active Reward: ${userDataSnapshot.name}`
-                });
-                console.log(`[Firestore API Subscribe] Added 2500 active referral reward to referrer ${referrerDocRef.id}`);
+            const planIndex = userInvestments.findIndex((p: any) => p.id === planId);
+            if (planIndex === -1) {
+              errorMsg = "Selected plan level does not exist";
+              return;
+            }
+
+            const plan = { ...userInvestments[planIndex] };
+            let globalPlan = plan;
+
+            try {
+              const configRef = doc(serverDb, "config", "global_vip_plans");
+              const configDoc = await transaction.get(configRef);
+              if (configDoc.exists() && configDoc.data()?.plans) {
+                const matched = configDoc.data().plans.find((gp: any) => gp.id === planId);
+                if (matched) globalPlan = matched;
+              }
+            } catch (configErr) {
+              console.warn("Could not retrieve latest globalPlans from transaction", configErr);
+            }
+
+            const userBalance = userDataSnapshot.balance || 0;
+            if (userBalance < globalPlan.cost) {
+              errorMsg = `Insufficient balance. Deposit at least ₦${(globalPlan.cost - userBalance).toLocaleString()} NGN additional.`;
+              return;
+            }
+
+            plan.joined = true;
+            plan.balance = (plan.balance || 0) + globalPlan.cost;
+            userInvestments[planIndex] = plan;
+
+            transaction.update(userRef, {
+              balance: increment(-globalPlan.cost),
+              investments: userInvestments
+            });
+
+            const txnId = `txn_${Date.now()}`;
+            const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+            transaction.set(txnRef, {
+              id: txnId,
+              userId: authHeader,
+              amount: globalPlan.cost,
+              type: "subscribe",
+              status: "success",
+              date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+              details: `Subscribed and activated ${globalPlan.name} Pool`
+            });
+          });
+
+          if (errorMsg) {
+            return res.status(400).json({ error: errorMsg });
+          }
+
+          // Trigger Referral Bonus in the background (Post-Transaction)
+          const finalUserSnap = await getDoc(userRef);
+          if (finalUserSnap.exists()) {
+            const finalUserData = finalUserSnap.data();
+            const activeInv = finalUserData.investments || [];
+            const otherActive = activeInv.filter((p: any) => p.joined && p.id !== planId);
+            const isFirst = otherActive.length === 0;
+
+            if (isFirst && (finalUserData.referrerUid || finalUserData.referredBy)) {
+              try {
+                let referrerDocRef: any = null;
+                if (finalUserData.referrerUid) {
+                  referrerDocRef = doc(serverDb, 'users', finalUserData.referrerUid);
+                } else if (finalUserData.referredBy) {
+                  const q = query(collection(serverDb, 'users'), where('invitationCode', '==', finalUserData.referredBy.trim().toUpperCase()));
+                  const refSnap = await getDocs(q);
+                  if (!refSnap.empty) {
+                    referrerDocRef = refSnap.docs[0].ref;
+                  }
+                }
+
+                if (referrerDocRef) {
+                  const refSnap = await getDoc(referrerDocRef);
+                  if (refSnap.exists()) {
+                    const batch = writeBatch(serverDb);
+                    batch.update(referrerDocRef, {
+                      balance: increment(2500),
+                      rechargeMembers: increment(1)
+                    });
+
+                    const refTxnId = `txn_ref_${Date.now()}`;
+                    batch.set(doc(serverDb, `users/${referrerDocRef.id}/transactions/${refTxnId}`), {
+                      id: refTxnId,
+                      userId: referrerDocRef.id,
+                      amount: 2500,
+                      type: "bonus",
+                      status: "success",
+                      date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                      details: `First Deposit Active Reward: ${finalUserData.name}`
+                    });
+                    await batch.commit();
+                    console.log(`[Firestore API Subscribe - Post-Transaction] Handed referral active bonus to ${referrerDocRef.id}`);
+                  }
+                }
+              } catch (bgErr) {
+                console.error("[Firestore API Subscribe] Background referral processing exception:", bgErr);
               }
             }
-          } catch (refErr) {
-            console.error("[Firestore API Subscribe] Failed to process active referral reward:", refErr);
           }
-        }
 
-        await batch.commit();
-        return res.json({ message: "Subscription activated!" });
+          return res.json({ message: "Subscription activated!" });
+        } catch (txnErr: any) {
+          console.error("Firestore Transaction Subscription failed:", txnErr);
+          return res.status(500).json({ error: "Failed to activate subscription atomically." });
+        }
       }
 
       // JSON DB fallback path code
@@ -2250,8 +2277,148 @@ function startServer() {
     }
   };
 
-  // Schedule task shortly after server setup
-  setTimeout(runAuditDeductions, 1500);
+  const reverseNegativeBalances = async () => {
+    console.log("[Auto-Audit Reversal] Scanning for accounts with negative balances to normalize...");
+    
+    // 1. Local Database Reversal
+    try {
+      const db = loadDatabase();
+      let localDbChanged = false;
+      
+      for (const user of db.users) {
+        if ((user.balance || 0) < 0) {
+          console.log(`[Auto-Audit Reversal - Local] Found user with negative balance: ${user.name} (${user.id}) = ₦${user.balance}. Deactivating investments to restore balance...`);
+          
+          let activeInvestments = (user.investments || []).filter((inv: any) => inv.joined);
+          // Sort active investments by cost descending to reverse the most expensive or appropriate plan
+          activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
+          
+          for (const inv of activeInvestments) {
+            if (user.balance >= 0) break;
+            
+            const refundAmt = inv.balance || inv.cost || 0;
+            if (refundAmt > 0) {
+              user.balance += refundAmt;
+              inv.joined = false;
+              inv.balance = 0;
+              inv.earnYesterday = 0;
+              
+              if (!user.transactions) user.transactions = [];
+              const revTxnId = `rev_${Date.now()}_${inv.id}`;
+              user.transactions.unshift({
+                id: revTxnId,
+                amount: refundAmt,
+                type: "bonus",
+                status: "success",
+                date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                details: `Regulatory Reversal Refund: ${inv.name} deactivated & returned to correct negative balance.`
+              });
+              
+              console.log(`[Auto-Audit Reversal - Local] Reversed ${inv.name}, refunded ₦${refundAmt}. New user balance: ₦${user.balance}`);
+              localDbChanged = true;
+            }
+          }
+        }
+      }
+      
+      if (localDbChanged) {
+        saveDatabase(db);
+        console.log("[Auto-Audit Reversal - Local] Saved changes to database.");
+      }
+    } catch (err) {
+      console.error("[Auto-Audit Reversal - Local] Error running reversal audit:", err);
+    }
+    
+    // 2. Firestore Reversal
+    if (serverDb) {
+      try {
+        const usersCol = collection(serverDb, "users");
+        const usersSnap = await getDocs(usersCol);
+        
+        for (const userDoc of usersSnap.docs) {
+          const userId = userDoc.id;
+          const userData = userDoc.data();
+          let currentBalance = userData.balance || 0;
+          
+          if (currentBalance < 0) {
+            console.log(`[Auto-Audit Reversal - Firestore] Found Firestore user with negative balance: ${userData.name || userId} = ₦${currentBalance}`);
+            
+            const userInvestments = userData.investments || [];
+            let activeInvestments = userInvestments.filter((inv: any) => inv.joined);
+            activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
+            
+            let investmentsChanged = false;
+            const batch = writeBatch(serverDb);
+            
+            for (const inv of activeInvestments) {
+              if (currentBalance >= 0) break;
+              
+              const refundAmt = inv.balance || inv.cost || 0;
+              if (refundAmt > 0) {
+                currentBalance += refundAmt;
+                
+                // Find and update item in userInvestments array
+                const targetIdx = userInvestments.findIndex((p: any) => p.id === inv.id);
+                if (targetIdx !== -1) {
+                  userInvestments[targetIdx].joined = false;
+                  userInvestments[targetIdx].balance = 0;
+                  userInvestments[targetIdx].earnYesterday = 0;
+                  investmentsChanged = true;
+                }
+                
+                // Add transaction record
+                const revId = `rev_${Date.now()}_${inv.id}`;
+                const txnRef = doc(serverDb, `users/${userId}/transactions/${revId}`);
+                batch.set(txnRef, {
+                  id: revId,
+                  userId: userId,
+                  amount: refundAmt,
+                  type: "bonus",
+                  status: "success",
+                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                  details: `Regulatory Reversal Refund: ${inv.name} deactivated & returned to correct negative balance.`
+                });
+                
+                console.log(`[Auto-Audit Reversal - Firestore] Reversed ${inv.name} for ${userData.name || userId}, refunded ₦${refundAmt}. Target balance is now ₦${currentBalance}`);
+              }
+            }
+            
+            if (investmentsChanged) {
+              batch.update(doc(serverDb, "users", userId), {
+                balance: currentBalance,
+                investments: userInvestments
+              });
+              await batch.commit();
+              console.log(`[Auto-Audit Reversal - Firestore] Successfully committed reversals for ${userData.name || userId}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[Auto-Audit Reversal - Firestore] Error running reversal audit:", err);
+      }
+    }
+  };
+
+  // Schedule tasks shortly after server setup
+  setTimeout(async () => {
+    try {
+      await runAuditDeductions();
+    } catch (e) {
+      console.error("runAuditDeductions failed initially:", e);
+    }
+    try {
+      await reverseNegativeBalances();
+    } catch (e) {
+      console.error("reverseNegativeBalances failed initially:", e);
+    }
+  }, 1500);
+
+  // Set background interval to continuously scan and fix negative balances
+  setInterval(() => {
+    reverseNegativeBalances().catch(err => {
+      console.error("Continuous reverseNegativeBalances background error:", err);
+    });
+  }, 15000);
 
   return app;
 }
