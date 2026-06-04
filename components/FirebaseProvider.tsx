@@ -185,9 +185,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               };
             });
 
+            const isUserAdmin = data.isAdmin || fbUser.email?.toLowerCase() === "ottigospel@gmail.com";
+            if (isUserAdmin && !data.isAdmin) {
+              updateDoc(doc(db, 'users', fbUser.uid), { isAdmin: true }).catch(err => console.error("Could not sync admin status", err));
+            }
+
             setUserData(prev => ({ 
               ...(prev || {}), 
-              ...data, 
+              ...data,
+              isAdmin: isUserAdmin,
               investments: mergedInvestments, 
               transactions: prev?.transactions || [],
               isLoggedIn: true 
@@ -277,7 +283,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       if (!isEmail) {
         const digits = loginId.replace(/[^0-9]/g, '');
-        loginEmail = `${digits}@brex.internal`;
+        const normalized = digits.length >= 10 ? digits.slice(-10) : digits;
+        loginEmail = `${normalized}@brex.internal`;
       }
       
       await signInWithEmailAndPassword(auth, loginEmail, securityKey);
@@ -292,14 +299,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       // Use phone number as the primary identifier if email isn't provided or preferred
       const phoneDigits = payload.phoneNumber.replace(/[^0-9]/g, '');
-      const loginEmail = payload.email || `${phoneDigits}@brex.internal`;
+      const normalizedPhone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : phoneDigits;
+      const loginEmail = payload.email || `${normalizedPhone}@brex.internal`;
       
       const userCred = await createUserWithEmailAndPassword(auth, loginEmail, payload.password);
       
       const ourOwnCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
       
       // Admin check for specified phone number
-      const normalizedPhone = phoneDigits.slice(-10); // get last 10 digits
       const isAdminPhone = normalizedPhone === '7077599057';
       const isAdminEmail = loginEmail === "ottigospel@gmail.com";
       

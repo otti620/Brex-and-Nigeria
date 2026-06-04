@@ -897,8 +897,7 @@ const App: React.FC = () => {
 
   const refreshTeamData = async () => {
     try {
-      const sessionId = localStorage.getItem('brex_session_id');
-      if (!sessionId) return;
+      if (!user) return;
       const team = await loadTeamData();
       if (team && team.members) {
         setTeamMembers(team.members);
@@ -977,6 +976,11 @@ const App: React.FC = () => {
 
   const handleSignOut = async () => {
     await logout();
+    setPhoneNumber('');
+    setPassword('');
+    setConfirmPassword('');
+    setUserName('');
+    setAuthError('');
     navigate(Screen.Auth);
     showToast('Session logged out successfully.');
   };

@@ -337,6 +337,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                     status: 'success',
                     details: isFirstDeposit ? 'First Deposit Completed & Approved' : 'Deposit Reviewed & Approved'
                 });
+                try {
+                    await updateDoc(doc(db, 'admin_recharges', txn.id), { status: 'success' });
+                } catch (e) {
+                    console.warn("Global admin_recharges sync skipped:", e);
+                }
+                
                 await addSystemLog(`Approved ${isFirstDeposit ? 'first' : 'subsequent'} deposit transaction of ₦${txn.amount} for user ${txn.userId}`, 'financial');
 
                 // Crediting 10% referral bonus to the referrer (Only on First Deposit!)
@@ -394,6 +400,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                     status: 'success',
                     details: 'Withdrawal successfully approved and sent'
                 });
+                try {
+                    await updateDoc(doc(db, 'admin_withdrawals', txn.id), { status: 'success' });
+                } catch (e) {
+                    console.warn("Global admin_withdrawals sync skipped:", e);
+                }
                 await addSystemLog(`Approved payout transaction of ₦${txn.amount} for user ${txn.userId}`, 'financial');
             }
 
@@ -421,12 +432,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                     status: 'failed',
                     details: 'Payout Rejected by admin. Balance refunded.'
                 });
+                try {
+                    await updateDoc(doc(db, 'admin_withdrawals', txn.id), { status: 'failed' });
+                } catch (e) {
+                    console.warn("Global admin_withdrawals rejection sync skipped:", e);
+                }
                 await addSystemLog(`Rejected payout of ₦${txn.amount} for user ${txn.userId} (Refunded)`, 'financial');
             } else {
                 await updateDoc(txnRef, {
                     status: 'failed',
                     details: 'Deposit verification failed'
                 });
+                try {
+                    await updateDoc(doc(db, 'admin_recharges', txn.id), { status: 'failed' });
+                } catch (e) {
+                    console.warn("Global admin_recharges rejection sync skipped:", e);
+                }
                 await addSystemLog(`Rejected deposit of ₦${txn.amount} for user ${txn.userId}`, 'financial');
             }
 
@@ -804,8 +825,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="text-[9px] text-gray-500 font-bold uppercase font-mono">PORTFOLIO VALUE</p>
-                                                    <p className="text-sm font-black text-black font-mono">₦{(u.balance || 0).toLocaleString()}</p>
+                                                    {(() => {
+                                                        const investedAmt = (u.investments || []).reduce((sum: number, inv: any) => sum + (inv.joined ? (Number(inv.balance) || 0) : 0), 0);
+                                                        const totalVal = (Number(u.balance) || 0) + investedAmt;
+                                                        return (
+                                                            <>
+                                                                <p className="text-[9px] text-[#4f46e5] font-black uppercase font-mono">PORTFOLIO VALUE</p>
+                                                                <p className="text-sm font-black text-slate-900 font-mono">₦{totalVal.toLocaleString()}</p>
+                                                                <p className="text-[8px] text-slate-400 font-black font-mono mt-0.5">Wallet: ₦{(u.balance || 0).toLocaleString()} | Int: ₦{investedAmt.toLocaleString()}</p>
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
 
