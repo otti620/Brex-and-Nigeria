@@ -1891,6 +1891,12 @@ const App: React.FC = () => {
                 )}
               </button>
             </div>
+            
+            {userData?.spinBalance && userData.spinBalance > 0 ? (
+              <div className="w-full bg-amber-50 border border-amber-200 p-4 rounded-2xl text-[9px] font-mono leading-relaxed text-amber-700 font-bold mt-2">
+                🔒 Locked Spin Wallet: ₦{userData.spinBalance.toLocaleString()} NGN. Complete Level 2/3 savings package activation (₦15,000) to release spin funds under NDIC compliance audits.
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -2760,6 +2766,18 @@ const App: React.FC = () => {
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono">Available Balance</p>
                    <p className="text-xl font-black text-blue-600 font-mono italic">₦{userData.balance.toLocaleString()}</p>
                 </div>
+
+                {userData.spinBalance && userData.spinBalance > 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 p-6 rounded-[32px] flex flex-col gap-2.5 shadow-sm text-left">
+                     <div className="flex justify-between items-center">
+                       <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest font-mono">Segmented Spin Earnings Balance (Locked)</p>
+                       <p className="text-xl font-black text-amber-600 font-mono italic">₦{userData.spinBalance.toLocaleString()}</p>
+                     </div>
+                     <p className="text-[9px] font-medium leading-relaxed font-mono text-amber-700/80">
+                       ⚠️ Dynamic Spin winnings have been segmented. Withdrawals from this promotional fund (or any transfer over ₦5,000) require activating a Standard Level 2 (Wealth Builder - ₦15,000) or Level 3 (Revenue Stream - ₦50,000) package to verify local NDIC KYC standards.
+                     </p>
+                  </div>
+                ) : null}
 
                 <div className="flex flex-col gap-2.5">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono ml-2">Withdrawal Amount (₦)</label>

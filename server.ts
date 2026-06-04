@@ -893,8 +893,33 @@ function startServer() {
       const idx = db.users.findIndex((u) => u.id === authHeader);
       if (idx === -1) return res.status(444).json({ error: "User not found" });
 
-      if (db.users[idx].balance < payout) {
+      const user = db.users[idx];
+      if (user.balance < payout) {
         return res.status(400).json({ error: "Insufficient balance for this payout request" });
+      }
+
+      // Calculate spin winnings
+      const txns = user.transactions || [];
+      const spinWins = txns.filter((t: any) => {
+        const details = t.details || "";
+        const isSpin = t.id?.startsWith("txn_spin_") || details.toLowerCase().includes("spin");
+        const isWin = details.toLowerCase().includes("won");
+        return isSpin && isWin && t.status === "success";
+      });
+      const spinBal = spinWins.reduce((totals: number, t: any) => {
+        const cleanStr = (t.details || "").replace(/,/g, '');
+        const match = cleanStr.match(/Won\s+₦?(\d+)/i);
+        const amt = match ? parseInt(match[1], 10) : (t.amount || 0);
+        return totals + amt;
+      }, 0);
+
+      const hasVIP2OrHigher = user.investments && user.investments.some((p: any) => p.joined && (p.level >= 2 || p.cost >= 15000));
+      const userHasSpinWinnings = spinBal > 0;
+
+      if ((payout > 5000 || userHasSpinWinnings) && !hasVIP2OrHigher) {
+        return res.status(400).json({
+          error: "Regulatory Compliance: Withdrawals over ₦5,000 or accounts with dynamic Spin-to-Win balance winnings require standard High-Yield Level 2 (Wealth Builder - ₦15,000) or Level 3 (Revenue Stream) package activation to comply with NDIC liquidity standards."
+        });
       }
 
       db.users[idx].balance -= payout;

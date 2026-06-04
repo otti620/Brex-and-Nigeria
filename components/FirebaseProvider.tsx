@@ -108,6 +108,23 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+export const calculateSpinBalance = (txns?: any[]): number => {
+  if (!txns) return 0;
+  return txns
+    .filter((t: any) => {
+      const details = t.details || "";
+      const isSpin = t.id?.startsWith("txn_spin_") || details.toLowerCase().includes("spin");
+      const isWin = details.toLowerCase().includes("won");
+      return isSpin && isWin && t.status === "success";
+    })
+    .reduce((totals: number, t: any) => {
+      const cleanStr = (t.details || "").replace(/,/g, '');
+      const match = cleanStr.match(/Won\s+₦?(\d+)/i);
+      const amt = match ? parseInt(match[1], 10) : (t.amount || 0);
+      return totals + amt;
+    }, 0);
+};
+
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<{ uid: string; email: string; name: string } | null>(null);
   const [userData, setUserData] = useState<UserState | null>(null);
@@ -167,7 +184,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           
           setUserData(prev => {
             if (!prev) return prev;
-            return { ...prev, transactions: txns };
+            const spinBal = calculateSpinBalance(txns);
+            return { ...prev, transactions: txns as any[], spinBalance: spinBal };
           });
         }, (err) => {
           console.warn("Firestore: unable to load user transactions.", err.message);
@@ -202,14 +220,19 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               updateDoc(doc(db, 'users', fbUser.uid), { isAdmin: true }).catch(err => console.error("Could not sync admin status", err));
             }
 
-            setUserData(prev => ({ 
-              ...(prev || {}), 
-              ...data,
-              isAdmin: isUserAdmin,
-              investments: mergedInvestments, 
-              transactions: prev?.transactions || [],
-              isLoggedIn: true 
-            }) as UserState);
+            setUserData(prev => {
+              const txns = prev?.transactions || [];
+              const spinBal = calculateSpinBalance(txns);
+              return { 
+                ...(prev || {}), 
+                ...data,
+                isAdmin: isUserAdmin,
+                investments: mergedInvestments, 
+                transactions: txns as any[],
+                spinBalance: spinBal,
+                isLoggedIn: true 
+              } as UserState;
+            });
             setLoading(false);
           } else {
             // Document missing (often during active registration or test account refresh).
@@ -551,6 +574,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const hasJoinedPlan = userData.investments && userData.investments.some((p: any) => p.joined);
     if (!hasJoinedPlan) {
       throw new Error("You must have an active investment to unlock withdrawals.");
+    }
+
+    const hasVIP2OrHigher = userData.investments && userData.investments.some((p: any) => p.joined && (p.level >= 2 || p.cost >= 15000));
+    const userHasSpinWinnings = (userData.spinBalance || 0) > 0;
+    
+    if ((amount > 5000 || userHasSpinWinnings) && !hasVIP2OrHigher) {
+      throw new Error("Regulatory Compliance: Withdrawals over ₦5,000 or accounts with dynamic Spin-to-Win balance winnings require standard High-Yield Level 2 (Wealth Builder - ₦15,000) or Level 3 (Revenue Stream) package activation to comply with NDIC liquidity standards.");
     }
 
     try {

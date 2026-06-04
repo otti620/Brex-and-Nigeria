@@ -91,4 +91,5 @@ export interface UserState {
   teamSizeToday?: number;
   investments?: UserInvestment[];
   transactions?: TransactionRecord[];
+  spinBalance?: number;
 }
