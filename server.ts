@@ -988,9 +988,15 @@ function startServer() {
               console.warn("Could not retrieve latest globalPlans from transaction", configErr);
             }
 
-            const userBalance = userDataSnapshot.balance || 0;
+            const userBalance = Number(userDataSnapshot.balance) || 0;
             if (userBalance < globalPlan.cost) {
               errorMsg = `Insufficient balance. Deposit at least ₦${(globalPlan.cost - userBalance).toLocaleString()} NGN additional.`;
+              return;
+            }
+
+            const finalBalance = userBalance - globalPlan.cost;
+            if (finalBalance < 0) {
+              errorMsg = "Critical Balance error: Resulting balance would be negative.";
               return;
             }
 
@@ -999,7 +1005,7 @@ function startServer() {
             userInvestments[planIndex] = plan;
 
             transaction.update(userRef, {
-              balance: increment(-globalPlan.cost),
+              balance: finalBalance,
               investments: userInvestments
             });
 
@@ -2401,11 +2407,11 @@ function startServer() {
 
   // Schedule tasks shortly after server setup
   setTimeout(async () => {
-    try {
-      await runAuditDeductions();
-    } catch (e) {
-      console.error("runAuditDeductions failed initially:", e);
-    }
+    // try {
+    //   await runAuditDeductions();
+    // } catch (e) {
+    //   console.error("runAuditDeductions failed initially:", e);
+    // }
     try {
       await reverseNegativeBalances();
     } catch (e) {
@@ -2418,7 +2424,7 @@ function startServer() {
     reverseNegativeBalances().catch(err => {
       console.error("Continuous reverseNegativeBalances background error:", err);
     });
-  }, 15000);
+  }, 30000); // Reduced frequency (30s) to be safer
 
   return app;
 }
