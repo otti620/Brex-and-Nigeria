@@ -287,8 +287,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const login = async (loginId: string, securityKey: string) => {
     setLoading(true);
     try {
-      // Priority 1: Check if input is a phone number (mostly digits)
-      // Priority 2: Use mapping to internal domain if it looks like a phone
       const isEmail = loginId.includes('@');
       let loginEmail = loginId;
       
@@ -297,7 +295,35 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loginEmail = `${normalized}@brex.internal`;
       }
       
-      await signInWithEmailAndPassword(auth, loginEmail, securityKey);
+      try {
+        await signInWithEmailAndPassword(auth, loginEmail, securityKey);
+      } catch (firstErr: any) {
+        if (!isEmail) {
+          console.log("Primary login failed. Attempting robust phone number format fallbacks...");
+          const digits = loginId.replace(/[^0-9]/g, '');
+          const fallbackEmail1 = `${digits}@brex.internal`; // with leading 0/234
+          const last10 = digits.length >= 10 ? digits.slice(-10) : digits;
+          const fallbackEmail2 = `${last10}@brex.internal`; // last 10 digits fallback
+          
+          if (fallbackEmail1 !== loginEmail) {
+            try {
+              await signInWithEmailAndPassword(auth, fallbackEmail1, securityKey);
+              return;
+            } catch (e1) {
+              console.log("Fallback 1 with full digits failed:", fallbackEmail1);
+            }
+          }
+          if (fallbackEmail2 !== loginEmail && fallbackEmail2 !== fallbackEmail1) {
+            try {
+              await signInWithEmailAndPassword(auth, fallbackEmail2, securityKey);
+              return;
+            } catch (e2) {
+              console.log("Fallback 2 with 10 digits failed:", fallbackEmail2);
+            }
+          }
+        }
+        throw firstErr;
+      }
     } catch (err: any) {
       setLoading(false);
       console.error("[Firebase Sign-In Error Details]", err);

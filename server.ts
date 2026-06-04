@@ -1202,57 +1202,49 @@ function startServer() {
   app.post("/api/user/spin-wheel", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const { spinType } = req.body; // "regular" | "mega"
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
       const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
-      const isMega = spinType === "mega";
       
-      // Determine prize based on spin type
+      // Determine prize based on 8 colorful segments selection with elevated success rates:
+      // Index 0: ₦200, 1: ₦500, 2: ₦1,000, 3: Try again, 4: ₦2,500, 5: ₦5,000, 6: ₦10,000, 7: ₦500
       const randValue = Math.random() * 100;
+      let targetIndex = 3; // default: Try again
       let reward = 0;
       let label = "Try again";
 
-      if (isMega) {
-        if (randValue < 45) {
-          reward = 0;
-          label = "Try again";
-        } else if (randValue < 68) {
-          reward = 200;
-          label = "₦200 NGN";
-        } else if (randValue < 85) {
-          reward = 500;
-          label = "₦500 NGN";
-        } else if (randValue < 93) {
-          reward = 1500;
-          label = "₦1,500 NGN";
-        } else if (randValue < 98) {
-          reward = 3500;
-          label = "₦3,500 NGN";
-        } else {
-          reward = 15000;
-          label = "₦15,000 NGN"; // Ultra reward with 2% success rate!
-        }
+      if (randValue < 18) {
+        targetIndex = 0;
+        reward = 200;
+        label = "₦200 NGN";
+      } else if (randValue < 38) {
+        targetIndex = 1;
+        reward = 500;
+        label = "₦500 NGN";
+      } else if (randValue < 58) {
+        targetIndex = 2;
+        reward = 1000;
+        label = "₦1,000 NGN";
+      } else if (randValue < 68) {
+        targetIndex = 3;
+        reward = 0;
+        label = "Try again";
+      } else if (randValue < 83) {
+        targetIndex = 4;
+        reward = 2500;
+        label = "₦2,500 NGN";
+      } else if (randValue < 93) {
+        targetIndex = 5;
+        reward = 5000;
+        label = "₦5,000 NGN";
+      } else if (randValue < 95) {
+        targetIndex = 6;
+        reward = 10000;
+        label = "₦10,000 NGN";
       } else {
-        if (randValue < 40) {
-          reward = 0;
-          label = "Try again";
-        } else if (randValue < 70) {
-          reward = 50;
-          label = "₦50 NGN";
-        } else if (randValue < 85) {
-          reward = 100;
-          label = "₦100 NGN";
-        } else if (randValue < 93) {
-          reward = 500;
-          label = "₦500 NGN";
-        } else if (randValue < 98.2) {
-          reward = 700;
-          label = "₦700 NGN";
-        } else {
-          reward = 2000;
-          label = "₦2,000 NGN";
-        }
+        targetIndex = 7;
+        reward = 500;
+        label = "₦500 NGN";
       }
 
       if (serverDb) {
@@ -1262,8 +1254,8 @@ function startServer() {
 
         const userDataSnapshot = userSnap.data();
         const lastSpin = userDataSnapshot.lastSpinDate || "";
-        const isFree = !isMega && lastSpin !== todayStr;
-        const spinCost = isMega ? 1000 : (isFree ? 0 : 100);
+        const isFree = lastSpin !== todayStr;
+        const spinCost = isFree ? 0 : 100;
 
         if ((userDataSnapshot.balance || 0) < spinCost) {
           return res.status(400).json({ error: `Insufficient wallet balance. Spin costs ₦${spinCost}.` });
@@ -1275,11 +1267,9 @@ function startServer() {
         const batch = writeBatch(serverDb);
         const updateFields: any = {
           balance: finalBalance,
-          monthlyGains: finalMonthlyGains
+          monthlyGains: finalMonthlyGains,
+          lastSpinDate: todayStr
         };
-        if (!isMega) {
-          updateFields.lastSpinDate = todayStr;
-        }
         batch.update(userRef, updateFields);
 
         // Save transaction
@@ -1292,11 +1282,9 @@ function startServer() {
           type: "bonus",
           status: "success",
           date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: isMega
-            ? `Mega VIP Fortune Spin (Stake: ₦1,000): ${reward > 0 ? `Won ${label}` : 'Try again'}`
-            : (isFree 
-                ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
-                : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`)
+          details: isFree 
+            ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
+            : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
         });
 
         await batch.commit();
@@ -1304,6 +1292,7 @@ function startServer() {
           success: true,
           reward,
           rewardLabel: label,
+          targetIndex,
           isFree,
           cost: spinCost,
           balance: finalBalance
@@ -1317,8 +1306,8 @@ function startServer() {
 
       const user = db.users[idx];
       const lastSpin = (user as any).lastSpinDate || "";
-      const isFree = !isMega && lastSpin !== todayStr;
-      const spinCost = isMega ? 1000 : (isFree ? 0 : 100);
+      const isFree = lastSpin !== todayStr;
+      const spinCost = isFree ? 0 : 100;
 
       if (user.balance < spinCost) {
         return res.status(400).json({ error: `Insufficient wallet balance. Spin costs ₦${spinCost}.` });
@@ -1326,9 +1315,7 @@ function startServer() {
 
       user.balance = user.balance - spinCost + reward;
       user.monthlyGains += reward;
-      if (!isMega) {
-        (user as any).lastSpinDate = todayStr;
-      }
+      (user as any).lastSpinDate = todayStr;
 
       user.transactions.unshift({
         id: `txn_spin_${Date.now()}`,
@@ -1336,11 +1323,9 @@ function startServer() {
         type: "bonus" as const,
         status: "success" as const,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: isMega
-          ? `Mega VIP Fortune Spin (Stake: ₦1,000): ${reward > 0 ? `Won ${label}` : 'Try again'}`
-          : (isFree 
-              ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
-              : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`)
+        details: isFree 
+          ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
+          : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
       });
 
       saveDatabase(db);
@@ -1349,6 +1334,7 @@ function startServer() {
         success: true,
         reward,
         rewardLabel: label,
+        targetIndex,
         isFree,
         cost: spinCost,
         balance: user.balance,

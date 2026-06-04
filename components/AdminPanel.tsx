@@ -69,7 +69,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
     const [faqData, setFaqData] = useState<any[]>([]);
     const [plans, setPlans] = useState<any[]>([]);
     
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'transactions' | 'plans' | 'broadcasts' | 'tickets' | 'cms' | 'referrals' | 'logs'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'transactions' | 'plans' | 'tickets'>('dashboard');
     const [loading, setLoading] = useState(true);
     const [operationMsg, setOperationMsg] = useState('');
     const [operationError, setOperationError] = useState('');
@@ -153,6 +153,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 } catch (fallbackError) {
                     console.error("Critical fallback transaction fetch failed too:", fallbackError);
                 }
+            }
+            
+            // Fail-safe backup: Query 'admin_withdrawals' collection directly to ensure withdrawals with bank details and amounts are always retrieved!
+            try {
+                const globalWithdrawalsSnap = await getDocs(collection(db, 'admin_withdrawals'));
+                globalWithdrawalsSnap.docs.forEach(doc => {
+                    const d = doc.data();
+                    const existingIdx = txnsData.findIndex((t: any) => t.id === doc.id);
+                    let formattedDate = d.date;
+                    if (d.date && typeof d.date.toDate === 'function') {
+                        formattedDate = d.date.toDate().toISOString().slice(0, 19).replace('T', ' ');
+                    }
+                    const completeWithdrawal = {
+                        ...d,
+                        id: doc.id,
+                        userId: d.userId || d.uid || '',
+                        type: 'withdraw',
+                        date: formattedDate || d.dateStr || ''
+                    };
+                    if (existingIdx !== -1) {
+                        txnsData[existingIdx] = { ...txnsData[existingIdx], ...completeWithdrawal };
+                    } else {
+                        txnsData.push(completeWithdrawal);
+                    }
+                });
+            } catch (globalErr) {
+                console.warn("Failed to query global admin_withdrawals collection straight:", globalErr);
             }
             
             const pending = txnsData.filter((t: any) => t.status === 'pending');
@@ -668,17 +695,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             )}
 
             {/* Visual Glassmorphic Grid Sidebar and Tab buttons */}
-            <div className="grid grid-cols-3 gap-1 bg-white rounded-2xl p-1 mb-6 border border-slate-200 shadow-sm md:grid-cols-9 md:text-[10px]">
+            <div className="grid grid-cols-2 gap-1 bg-white rounded-2xl p-1 mb-6 border border-slate-200 shadow-sm md:grid-cols-5 md:text-[10px]">
                 {[
                     { id: 'dashboard', label: 'Overview', icon: Activity },
-                    { id: 'users', label: 'Users', icon: Users },
-                    { id: 'transactions', label: 'Review', icon: Landmark },
-                    { id: 'plans', label: 'Packages', icon: Percent },
-                    { id: 'broadcasts', label: 'Broadcasts', icon: Megaphone },
-                    { id: 'tickets', label: 'Tickets', icon: FileText },
-                    { id: 'cms', label: 'CMS', icon: Sliders },
-                    { id: 'referrals', label: 'Referrals', icon: UserCheck },
-                    { id: 'logs', label: 'Security', icon: KeyRound },
+                    { id: 'users', label: 'Users & Teams', icon: Users },
+                    { id: 'transactions', label: 'Transactions & Bank Info', icon: Landmark },
+                    { id: 'plans', label: 'Packages & News', icon: Percent },
+                    { id: 'tickets', label: 'Support & Logs', icon: FileText },
                 ].map(item => {
                     const Icon = item.icon;
                     return (
@@ -944,6 +967,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                 })
                             )}
                         </div>
+
+                        {/* Integrated Team Referral Section */}
+                        <div className="mt-8 pt-8 border-t border-slate-150 flex flex-col gap-4">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono mb-1">Team Linkages & Referral Hierarchy</h3>
+                            
+                            <div className="space-y-3">
+                                {users.filter(u => u.referredBy).length === 0 ? (
+                                    <p className="text-xs text-slate-500 italic font-mono text-center py-6">No referral linkages recorded in system yet.</p>
+                                ) : (
+                                    users.filter(u => u.referredBy).map(u => {
+                                        const referrer = users.find(ref => ref.invitationCode === u.referredBy);
+                                        return (
+                                            <div key={u.id} className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200 flex flex-col gap-2">
+                                                <div className="flex justify-between items-center text-xs text-slate-900">
+                                                    <span className="font-extrabold">{u.name} ({u.invitationCode})</span>
+                                                    <span className="text-slate-500 text-[10px]">Invite Partner:</span>
+                                                    <span className="text-indigo-600 font-black">{referrer ? referrer.name : 'Invalid/Deleted'} ({u.referredBy})</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 font-semibold font-mono flex justify-between">
+                                                    <span>User Balance: ₦{(u.balance || 0).toLocaleString()}</span>
+                                                    <span>Referrer Balance: ₦{(referrer?.balance || 0).toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -991,9 +1042,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                 {isWithdrawal ? (
                                                     <div className="space-y-1">
                                                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Bank Details</p>
-                                                        <p className="font-bold">{txn.bank || 'Standard Bank'}</p>
-                                                        <p className="font-black text-blue-600 font-mono tracking-widest text-[11px]">{txn.code || txn.accountCode || 'N/A'}</p>
-                                                        <p className="text-[10px] font-bold uppercase opacity-60">Holder: {txn.owner || associatedUser?.name}</p>
+                                                        <p className="font-extrabold text-indigo-600 font-sans text-xs">{txn.bank || associatedUser?.linkedBankName || associatedUser?.withdrawBank || 'Standard Bank'}</p>
+                                                        <p className="font-black text-slate-800 font-mono tracking-widest text-xs">A/C: {txn.code || txn.accountCode || txn.account || associatedUser?.linkedBankCode || associatedUser?.payeeAccount || 'N/A'}</p>
+                                                        <p className="text-[10px] font-bold uppercase opacity-70">Holder: {txn.owner || associatedUser?.linkedBankOwner || associatedUser?.name || 'N/A'}</p>
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-1">
@@ -1023,6 +1074,85 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                 })}
                             </div>
                         )}
+
+                        {/* Embedded content management bank settings */}
+                        <div className="mt-8 pt-8 border-t border-slate-150 flex flex-col gap-4">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono mb-1">Content Management Settings</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* General platform credentials */}
+                                <div className="bg-slate-50 p-5 rounded-[28px] border border-slate-200 flex flex-col gap-3">
+                                    <h4 className="text-xs font-black uppercase text-slate-800 mb-2">Platform Bank Credentials Config</h4>
+                                    
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 font-mono">OPAY ADMIN ACCOUNT NUMBER</label>
+                                        <input 
+                                            type="text" 
+                                            value={opayAccount} 
+                                            onChange={(e) => setOpayAccount(e.target.value)}
+                                            className="bg-white border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-mono font-black outline-none text-slate-800" 
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 font-mono">KUDA ADMIN ACCOUNT NUMBER</label>
+                                        <input 
+                                            type="text" 
+                                            value={kudaAccount} 
+                                            onChange={(e) => setKudaAccount(e.target.value)}
+                                            className="bg-white border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-mono font-black outline-none text-slate-800" 
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-100">
+                                        <label className="text-[9px] font-bold text-purple-700 font-mono flex gap-2">PAYSTACK LIVE SECRET KEY</label>
+                                        <input 
+                                            type="password" 
+                                            value={paystackKey} 
+                                            onChange={(e) => setPaystackKey(e.target.value)}
+                                            placeholder="sk_live_xxxxxxxxx"
+                                            className="bg-white border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-mono font-black outline-none text-slate-800 focus:border-purple-500" 
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1 mt-2">
+                                        <label className="text-[9px] font-bold text-teal-700 font-mono flex gap-2">PAYSTACK LIVE PUBLIC KEY</label>
+                                        <input 
+                                            type="text" 
+                                            value={paystackPublicKey} 
+                                            onChange={(e) => setPaystackPublicKey(e.target.value)}
+                                            placeholder="pk_live_xxxxxxxxx"
+                                            className="bg-white border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-mono font-black outline-none text-slate-800 focus:border-teal-500" 
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 font-mono">SUPPORT PHONE CONTACT LINE</label>
+                                        <input 
+                                            type="text" 
+                                            value={contactLine} 
+                                            onChange={(e) => setContactLine(e.target.value)}
+                                            className="bg-white border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-mono font-black outline-none text-slate-800" 
+                                        />
+                                    </div>
+
+                                    <button 
+                                        onClick={handleSaveCMS}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase py-2.5 rounded-xl mt-2 cursor-pointer"
+                                    >
+                                        Save Config Parameters
+                                    </button>
+                                </div>
+
+                                {/* Standard support FAQ config info */}
+                                <div className="bg-slate-50 p-5 rounded-[28px] border border-slate-200 flex flex-col gap-3 text-xs opacity-80 leading-relaxed font-semibold text-slate-700">
+                                    <h4 className="text-xs font-black uppercase text-slate-800 mb-2 select-text">Static FAQ Reference Definitions</h4>
+                                    <p>• To ensure security and absolute runtime stability, general static pages are bundled locally.</p>
+                                    <p>• Recharges undergo multi-tier encryption before reaching the HPay gateways.</p>
+                                    <p>• Referral commissions credit automatically to Level 1 invitees on matching subscriptions.</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -1101,90 +1231,90 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
 
-                {/* 5. APP-WIDE BROADCAST SYSTEM */}
-                {activeTab === 'broadcasts' && (
-                    <div className="flex flex-col gap-5">
-                        <div className="bg-[#131926] p-4.5 rounded-[28px] border border-[#1E293B] flex flex-col gap-3">
-                            <h4 className="text-xs font-black uppercase text-white">Issue System-wide Notice</h4>
+                        {/* App-wide notice publisher */}
+                        <div className="mt-8 pt-8 border-t border-slate-200/80 flex flex-col gap-5">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono mb-1">System News Notices & Announcement Publisher</h3>
                             
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[9px] font-bold text-slate-500">NOTIFICATION TITLE</label>
-                                <input 
-                                    type="text"
-                                    placeholder="e.g. Server Software System Upgrade complete!"
-                                    value={newMsgTitle}
-                                    onChange={(e) => setNewMsgTitle(e.target.value)}
-                                    className="bg-slate-900 border border-[#1E293B] px-3.5 py-2 rounded-xl text-white outline-none text-xs font-bold"
-                                />
-                            </div>
-
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[9px] font-bold text-slate-500">CONTENT MESSAGE BODY</label>
-                                <textarea 
-                                    placeholder="e.g. To celebrate, a 10% cash rebate on VIP subscriptions is running for the next 48 hrs..."
-                                    value={newMsgContent}
-                                    onChange={(e) => setNewMsgContent(e.target.value)}
-                                    rows={3}
-                                    className="bg-slate-900 border border-[#1E293B] px-3.5 py-2 rounded-xl text-white outline-none text-xs leading-relaxed font-semibold resize-none"
-                                />
-                            </div>
-
-                            <div className="flex gap-4">
-                                <div className="flex-1 flex flex-col gap-1">
-                                    <label className="text-[9px] font-bold text-slate-500">TAG ALIGNMENT</label>
-                                    <select 
-                                        value={newMsgType}
-                                        onChange={(e: any) => setNewMsgType(e.target.value)}
-                                        className="bg-slate-900 border border-[#1E293B] px-3 py-1.5 rounded-xl text-white outline-none text-xs font-bold"
-                                    >
-                                        <option value="normal">🟢 NORMAL NEWS</option>
-                                        <option value="urgent">🔴 URGENT BROADCAST</option>
-                                        <option value="promo">🟡 PROMO ALERT</option>
-                                    </select>
+                            <div className="bg-slate-50 p-5 rounded-[28px] border border-slate-200 flex flex-col gap-3">
+                                <h4 className="text-xs font-black uppercase text-slate-800">Issue System-wide Notice</h4>
+                                
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-bold text-slate-500">NOTIFICATION TITLE</label>
+                                    <input 
+                                        type="text"
+                                        placeholder="e.g. Server Software System Upgrade complete!"
+                                        value={newMsgTitle}
+                                        onChange={(e) => setNewMsgTitle(e.target.value)}
+                                        className="bg-white border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 outline-none text-xs font-bold"
+                                    />
                                 </div>
-                                <button 
-                                    onClick={handleCreateBroadcast}
-                                    className="bg-[#8CEE47] hover:bg-[#7BE13A] text-slate-900 px-6 h-10 mt-auto rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                                >
-                                    <Megaphone size={14} /> Send Broadcast
-                                </button>
-                            </div>
-                        </div>
 
-                        {/* Existing Announcements */}
-                        <div className="space-y-3">
-                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest font-mono">Global Announcements Hub</h4>
-                            {broadcasts.length === 0 ? (
-                                <p className="text-xs text-slate-600 italic font-mono py-6 text-center">No system notifications are currently posted.</p>
-                            ) : (
-                                broadcasts.map(b => (
-                                    <div key={b.id} className="bg-slate-900/60 p-4.5 rounded-2xl border border-[#1E293B] flex items-start justify-between">
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className={`text-[8px] font-black uppercase font-mono px-1.5 py-0.5 rounded ${
-                                                    b.type === 'urgent' ? 'bg-red-500/20 text-red-400' :
-                                                    b.type === 'promo' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                    'bg-blue-500/20 text-blue-400'
-                                                }`}>
-                                                    {b.type}
-                                                </span>
-                                                <h5 className="font-extrabold text-sm text-white leading-none">{b.title}</h5>
-                                            </div>
-                                            <p className="text-xs text-slate-400 mt-1.5 font-medium leading-relaxed">{b.content}</p>
-                                            <p className="text-[8px] text-slate-600 font-mono mt-2">Posted on: {b.date}</p>
-                                        </div>
-                                        <button 
-                                            onClick={() => handleDeleteBroadcast(b.id)}
-                                            className="text-slate-500 hover:text-red-400 shrink-0 cursor-pointer"
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-bold text-slate-500">CONTENT MESSAGE BODY</label>
+                                    <textarea 
+                                        placeholder="e.g. To celebrate, a 10% cash rebate on VIP subscriptions is running..."
+                                        value={newMsgContent}
+                                        onChange={(e) => setNewMsgContent(e.target.value)}
+                                        rows={3}
+                                        className="bg-white border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 outline-none text-xs leading-relaxed font-semibold resize-none"
+                                    />
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="flex-1 flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500">TAG ALIGNMENT</label>
+                                        <select 
+                                            value={newMsgType}
+                                            onChange={(e: any) => setNewMsgType(e.target.value)}
+                                            className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-slate-800 outline-none text-xs font-bold"
                                         >
-                                            <Trash2 size={13} />
-                                        </button>
+                                            <option value="normal">🟢 NORMAL NEWS</option>
+                                            <option value="urgent">🔴 URGENT BROADCAST</option>
+                                            <option value="promo">🟡 PROMO ALERT</option>
+                                        </select>
                                     </div>
-                                ))
-                            )}
+                                    <button 
+                                        onClick={handleCreateBroadcast}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 h-10 mt-auto rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-600/10"
+                                    >
+                                        <Megaphone size={14} /> Send Broadcast
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Existing Announcements */}
+                            <div className="space-y-3">
+                                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest font-mono">Global Announcements Hub</h4>
+                                {broadcasts.length === 0 ? (
+                                    <p className="text-xs text-slate-500 italic font-mono py-6 text-center bg-slate-50 border border-slate-200 border-dashed rounded-2xl">No system notifications are currently posted.</p>
+                                ) : (
+                                    broadcasts.map(b => (
+                                        <div key={b.id} className="bg-white p-4.5 rounded-2xl border border-slate-200 flex items-start justify-between shadow-sm">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`text-[8px] font-black uppercase font-mono px-1.5 py-0.5 rounded ${
+                                                        b.type === 'urgent' ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
+                                                        b.type === 'promo' ? 'bg-amber-500/10 text-amber-600 border border-slate-200' :
+                                                        'bg-indigo-50/50 text-indigo-600 border border-indigo-100'
+                                                    }`}>
+                                                        {b.type}
+                                                    </span>
+                                                    <h5 className="font-extrabold text-xs text-slate-800 leading-none">{b.title}</h5>
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-1.5 font-medium leading-relaxed">{b.content}</p>
+                                                <p className="text-[8px] text-slate-450 font-mono mt-2">Posted on: {b.date}</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleDeleteBroadcast(b.id)}
+                                                className="text-slate-400 hover:text-rose-600 shrink-0 cursor-pointer"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1259,147 +1389,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                 ))}
                             </div>
                         )}
-                    </div>
-                )}
 
-                {/* 7. CONTENT MANAGEMENT SYSTEM (CMS) */}
-                {activeTab === 'cms' && (
-                    <div className="flex flex-col gap-4">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono mb-1">Content Management Settings</h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* General platform credentials */}
-                            <div className="bg-[#131926] p-4.5 rounded-[28px] border border-[#1E293B] flex flex-col gap-3">
-                                <h4 className="text-xs font-black uppercase text-white mb-2">Platform Bank Credentials Config</h4>
-                                
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] font-bold text-slate-500 font-mono">OPAY ADMIN ACCOUNT NUMBER</label>
-                                    <input 
-                                        type="text" 
-                                        value={opayAccount} 
-                                        onChange={(e) => setOpayAccount(e.target.value)}
-                                        className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white" 
-                                    />
-                                </div>
-
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] font-bold text-slate-500 font-mono">KUDA ADMIN ACCOUNT NUMBER</label>
-                                    <input 
-                                        type="text" 
-                                        value={kudaAccount} 
-                                        onChange={(e) => setKudaAccount(e.target.value)}
-                                        className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white" 
-                                    />
-                                </div>
-
-                                <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-800">
-                                    <label className="text-[9px] font-bold text-purple-400 font-mono flex gap-2">PAYSTACK LIVE SECRET KEY</label>
-                                    <input 
-                                        type="password" 
-                                        value={paystackKey} 
-                                        onChange={(e) => setPaystackKey(e.target.value)}
-                                        placeholder="sk_live_xxxxxxxxx"
-                                        className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white focus:border-purple-500" 
-                                    />
-                                </div>
-
-                                <div className="flex flex-col gap-1 mt-2">
-                                    <label className="text-[9px] font-bold text-teal-400 font-mono flex gap-2">PAYSTACK LIVE PUBLIC KEY (FOR PLATFORM / INLINE CHECKOUT)</label>
-                                    <input 
-                                        type="text" 
-                                        value={paystackPublicKey} 
-                                        onChange={(e) => setPaystackPublicKey(e.target.value)}
-                                        placeholder="pk_live_xxxxxxxxx"
-                                        className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white focus:border-teal-500" 
-                                    />
-                                </div>
-
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] font-bold text-slate-500 font-mono">SUPPORT PHONE CONTACT LINE</label>
-                                    <input 
-                                        type="text" 
-                                        value={contactLine} 
-                                        onChange={(e) => setContactLine(e.target.value)}
-                                        className="bg-slate-900 border border-[#1E293B] p-2.5 rounded-xl text-xs font-mono font-black outline-none text-white" 
-                                    />
-                                </div>
-
+                        {/* Integrated Live Activity & Security Audit logs stream */}
+                        <div className="mt-8 pt-8 border-t border-slate-150 flex flex-col gap-4">
+                            <div className="flex justify-between items-center mb-1">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono">Live Security & Activity Logs</h3>
                                 <button 
-                                    onClick={handleSaveCMS}
-                                    className="bg-[#8CEE47] hover:bg-[#7BE13A] text-slate-900 text-xs font-black uppercase py-2.5 rounded-xl mt-2 cursor-pointer"
+                                    onClick={() => setSystemLogs([
+                                        { id: '4', event: 'Log stream cleared', type: 'audit', user: 'admin', date: 'Just now' }
+                                    ])} 
+                                    className="text-slate-500 hover:text-indigo-600 text-[9px] font-black uppercase tracking-wider"
                                 >
-                                    Save Config Parameters
+                                    Clear History
                                 </button>
                             </div>
 
-                            {/* Standard support FAQ config info */}
-                            <div className="bg-[#131926] p-4.5 rounded-[28px] border border-[#1E293B] flex flex-col gap-3 text-xs opacity-80 leading-relaxed font-semibold">
-                                <h4 className="text-xs font-black uppercase text-white mb-2 select-text">Static FAQ Reference Definitions</h4>
-                                <p>• To ensure security and absolute runtime stability, general static pages are bundled locally.</p>
-                                <p>• Recharges undergo multi-tier encryption before reaching the HPay gateways.</p>
-                                <p>• Referral commissions credit automatically to Level 1 invitees on matching subscriptions.</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* 8. REFERRAL CHAIN AUDIT */}
-                {activeTab === 'referrals' && (
-                    <div className="flex flex-col gap-4">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono mb-1">Referral Hierarchy Audit</h3>
-                        
-                        <div className="space-y-3">
-                            {users.filter(u => u.referredBy).length === 0 ? (
-                                <p className="text-xs text-slate-500 italic font-mono text-center py-6">No referral linkages recorded in system yet.</p>
-                            ) : (
-                                users.filter(u => u.referredBy).map(u => {
-                                    const referrer = users.find(ref => ref.invitationCode === u.referredBy);
-                                    return (
-                                        <div key={u.id} className="bg-slate-900/60 p-4.5 rounded-2xl border border-[#1E293B] flex flex-col gap-2">
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="text-white font-extrabold">{u.name} ({u.invitationCode})</span>
-                                                <span className="text-slate-500 text-[10px]">Referred By:</span>
-                                                <span className="text-indigo-600 font-black">{referrer ? referrer.name : 'Invalid/Deleted referral'} ({u.referredBy})</span>
-                                            </div>
-                                            <div className="text-[10px] text-slate-500 font-semibold font-mono flex justify-between">
-                                                <span>User Balance: ₦{(u.balance || 0).toLocaleString()}</span>
-                                                <span>Referrer Balance: ₦{(referrer?.balance || 0).toLocaleString()}</span>
-                                            </div>
+                            <div className="space-y-2 select-text">
+                                {systemLogs.map(lg => (
+                                    <div key={lg.id} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between font-mono text-[9px]">
+                                        <div className="flex items-center gap-2.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${
+                                                lg.type === 'auth' ? 'bg-purple-500' :
+                                                lg.type === 'financial' ? 'bg-emerald-500' :
+                                                lg.type === 'audit' ? 'bg-indigo-600' : 'bg-slate-500'
+                                            }`} />
+                                            <span className="text-slate-400 font-extrabold">[{lg.type.toUpperCase()}]</span>
+                                            <span className="text-slate-800 font-semibold">{lg.event}</span>
                                         </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* 9. SECURITY & ACTIVITY AUDIT LOGS */}
-                {activeTab === 'logs' && (
-                    <div className="flex flex-col gap-3">
-                        <div className="flex justify-between items-center mb-1">
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono">Live Activity Logs Ledger</h3>
-                            <button onClick={() => setSystemLogs([
-                                { id: '4', event: 'Log stream cleared', type: 'audit', user: 'admin', date: 'Just now' }
-                            ])} className="text-slate-500 text-[10px] font-black uppercase">Clear History</button>
-                        </div>
-
-                        <div className="space-y-2 select-text">
-                            {systemLogs.map(lg => (
-                                <div key={lg.id} className="bg-slate-900/70 p-3.5 rounded-xl border border-[#1E293B] flex items-center justify-between font-mono text-[9.5px]">
-                                    <div className="flex items-center gap-2.5">
-                                        <span className={`w-2 h-2 rounded-full ${
-                                            lg.type === 'auth' ? 'bg-purple-500' :
-                                            lg.type === 'financial' ? 'bg-emerald-500' :
-                                            lg.type === 'audit' ? 'bg-indigo-600' : 'bg-slate-500'
-                                        }`} />
-                                        <span className="text-slate-400 font-black">[{lg.type.toUpperCase()}]</span>
-                                        <span className="text-white font-medium">{lg.event}</span>
+                                        <div className="text-right shrink-0 ml-4 font-bold text-slate-400">
+                                            <span>{lg.user} • {lg.date}</span>
+                                        </div>
                                     </div>
-                                    <div className="text-right shrink-0 ml-4 font-bold text-slate-500">
-                                        <span>{lg.user} • {lg.date}</span>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}

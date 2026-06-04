@@ -277,7 +277,7 @@ const App: React.FC = () => {
   const handleSpinWheel = async () => {
     if (spinning || !user) return;
     setSpinning(true);
-    showToast(`Connecting live ${spinWheelType === 'mega' ? 'VIP Mega' : 'Standard'} Fortune server...`);
+    showToast("Connecting live Brex Fortune server...");
     
     // reset wheel rotation first
     setWheelRotation(0);
@@ -288,8 +288,7 @@ const App: React.FC = () => {
         headers: {
           "Content-Type": "application/json",
           "Authorization": user.uid
-        },
-        body: JSON.stringify({ spinType: spinWheelType })
+        }
       });
       
       if (!res.ok) {
@@ -301,27 +300,10 @@ const App: React.FC = () => {
       
       const data = await res.json();
       
-      // Select wedge indices depending on model
-      let targetIndex = 3; // default: try again
-      if (spinWheelType === 'mega') {
-        // Mega sectors: 0: ₦200, 1: ₦500, 2: ₦1500, 3: Try again, 4: ₦3500, 5: ₦15000
-        if (data.reward === 200) targetIndex = 0;
-        else if (data.reward === 500) targetIndex = 1;
-        else if (data.reward === 1500) targetIndex = 2;
-        else if (data.reward === 0) targetIndex = 3;
-        else if (data.reward === 3500) targetIndex = 4;
-        else if (data.reward === 15000) targetIndex = 5;
-      } else {
-        // Regular sectors: 0: ₦50, 1: ₦100, 2: ₦500, 3: Try again, 4: ₦700, 5: ₦2000
-        if (data.reward === 50) targetIndex = 0;
-        else if (data.reward === 100) targetIndex = 1;
-        else if (data.reward === 500) targetIndex = 2;
-        else if (data.reward === 0) targetIndex = 3;
-        else if (data.reward === 700) targetIndex = 4;
-        else if (data.reward === 2000) targetIndex = 5;
-      }
+      // Select wedge index from server response
+      const targetIndex = typeof data.targetIndex === 'number' ? data.targetIndex : 3;
 
-      const targetRotationAngle = 360 - (targetIndex * 60 + 30);
+      const targetRotationAngle = 360 - (targetIndex * 45 + 22.5);
       const spins = 6 * 360; // 6 full spins
       const finalRotation = spins + targetRotationAngle;
       
@@ -491,6 +473,21 @@ const App: React.FC = () => {
       isSunday,
       isWithinHours,
       canWithdraw: !isSunday && isWithinHours
+    };
+  };
+
+  const getWithdrawalFeeInfo = () => {
+    const now = new Date();
+    const utcTimestamp = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const watDate = new Date(utcTimestamp + 3600000);
+    const dayOfMonth = watDate.getDate(); // 1 to 31
+    const freeDays = [5, 20, 29];
+    const isFreeDay = freeDays.includes(dayOfMonth);
+    const feePercent = isFreeDay ? 0 : 10;
+    return {
+      feePercent,
+      isFreeDay,
+      multiplier: (100 - feePercent) / 100
     };
   };
 
@@ -1079,7 +1076,8 @@ const App: React.FC = () => {
     try {
       await withdraw(withdrawAmt, activeBank, activeAccount, activeOwner);
       
-      const expectedPayout = withdrawAmt * 0.96;
+      const { multiplier } = getWithdrawalFeeInfo();
+      const expectedPayout = withdrawAmt * multiplier;
       const receipt = {
         amount: withdrawAmt,
         netAmount: expectedPayout,
@@ -1690,20 +1688,15 @@ const App: React.FC = () => {
   };
 
   const renderPromotions = () => {
-    const sectors = spinWheelType === 'mega' ? [
+    const sectors = [
       { label: "₦200", color: "#6366f1", reward: 200 },
       { label: "₦500", color: "#3b82f6", reward: 500 },
-      { label: "₦1,500", color: "#10b981", reward: 1500 },
+      { label: "₦1,000", color: "#10b981", reward: 1000 },
       { label: "Try again", color: "#64748b", reward: 0 },
-      { label: "₦3,500", color: "#f59e0b", reward: 3550 }, // slight edge multiplier
-      { label: "₦15,000", color: "#ec4899", reward: 15000 }
-    ] : [
-      { label: "₦50", color: "#6366f1", reward: 50 },
-      { label: "₦100", color: "#3b82f6", reward: 100 },
-      { label: "₦500", color: "#10b981", reward: 500 },
-      { label: "Try again", color: "#64748b", reward: 0 },
-      { label: "₦700", color: "#f59e0b", reward: 700 },
-      { label: "₦2000", color: "#a855f7", reward: 2000 }
+      { label: "₦2,500", color: "#f59e0b", reward: 2500 },
+      { label: "₦5,000", color: "#a855f7", reward: 5000 },
+      { label: "₦10,000", color: "#ec4899", reward: 10000 },
+      { label: "₦500+", color: "#14b8a6", reward: 500 }
     ];
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -1768,40 +1761,12 @@ const App: React.FC = () => {
               </span>
               <h3 className="text-lg font-black text-slate-900 tracking-tight mt-2.5">Circular Fortune Wheel</h3>
               <p className="text-[10px] text-slate-400 font-extrabold font-mono uppercase tracking-tight mt-1">
-                {spinWheelType === 'mega' ? (
-                  <span className="text-pink-600 animate-pulse">🔥 MEGA VIP ACTIVE: Spin costs ₦1,000. Win up to ₦15,000!</span>
-                ) : hasFreeSpin ? (
+                {hasFreeSpin ? (
                   "🎉 Daily free spin is active! Grab free rewards" 
                 ) : (
                   "🎡 Free spin claimed. Extra spin costs only ₦100 NGN"
                 )}
               </p>
-            </div>
-
-            {/* VIP/Regular Selector pill */}
-            <div className="bg-slate-100 p-1 rounded-2xl flex gap-1 w-full max-w-[280px] border border-slate-200">
-              <button
-                disabled={spinning}
-                onClick={() => setSpinWheelType('regular')}
-                className={`flex-1 py-2 px-1 rounded-xl font-bold text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer ${
-                  spinWheelType === 'regular'
-                    ? 'bg-slate-950 text-white shadow-md'
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                 Regular (₦100)
-              </button>
-              <button
-                disabled={spinning}
-                onClick={() => setSpinWheelType('mega')}
-                className={`flex-1 py-2 px-1 rounded-xl font-black text-[10px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                  spinWheelType === 'mega'
-                    ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-md'
-                    : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'
-                }`}
-              >
-                🔥 MEGA VIP (₦1k)
-              </button>
             </div>
 
             {/* Wheel Canvas Container */}
@@ -1818,10 +1783,10 @@ const App: React.FC = () => {
                 transition={spinning ? { duration: 4, ease: [0.12, 0.8, 0.15, 1] } : { duration: 0 }}
                 className={`relative w-64 h-64 rounded-full border-4 shadow-2xl flex items-center justify-center overflow-hidden transition-all ${
                   spinning ? 'animate-pulse' : ''
-                } ${spinWheelType === 'mega' ? 'border-amber-400 bg-slate-950' : 'border-slate-950 bg-slate-950'}`}
+                } border-slate-950 bg-slate-950`}
               >
                 {sectors.map((sector, index) => {
-                  const angle = index * 60;
+                  const angle = index * 45;
                   return (
                     <div
                       key={index}
@@ -1830,13 +1795,13 @@ const App: React.FC = () => {
                     >
                       {/* Triangle Wedge segment */}
                       <div 
-                        className="absolute top-0 w-0 h-0 border-l-[57px] border-l-transparent border-r-[57px] border-r-transparent border-t-[124px]"
+                        className="absolute top-0 w-0 h-0 border-l-[49px] border-l-transparent border-r-[49px] border-r-transparent border-t-[128px]"
                         style={{ borderTopColor: sector.color }}
                       />
                       {/* Text label */}
                       <span 
-                        className="absolute top-6 font-black text-[10px] text-white select-none whitespace-nowrap transform -translate-y-1 origin-center drop-shadow-md tracking-wider uppercase font-mono"
-                        style={{ transform: `rotate(30deg)` }}
+                        className="absolute top-6 font-black text-[9px] text-white select-none whitespace-nowrap transform -translate-y-1 origin-center drop-shadow-md tracking-wider uppercase font-mono"
+                        style={{ transform: `rotate(22.5deg)` }}
                       >
                         {sector.label}
                       </span>
@@ -1859,9 +1824,7 @@ const App: React.FC = () => {
                 className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-wider transform active:scale-95 transition-all shadow-lg ${
                   spinning
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
-                    : spinWheelType === 'mega'
-                      ? 'bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 text-white shadow-orange-500/20 shadow-lg'
-                      : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-950 text-white shadow-slate-950/20 active:shadow-sm'
+                    : 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 text-white shadow-indigo-600/20 active:shadow-sm'
                 }`}
               >
                 {spinning ? (
@@ -1869,8 +1832,6 @@ const App: React.FC = () => {
                     <span className="w-4 h-4 border-2 border-slate-400 border-t-white rounded-full animate-spin" />
                     Calculating Vectors...
                   </span>
-                ) : spinWheelType === 'mega' ? (
-                  "🔥 Spin VIP Mega (Costs ₦1,000)"
                 ) : hasFreeSpin ? (
                   "🍀 Spin For Free (Daily)"
                 ) : (
@@ -2763,13 +2724,25 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="bg-white border border-slate-200 p-6 rounded-[32px] space-y-3 shadow-sm font-semibold">
-                   <div className="flex justify-between text-[10px] font-mono text-slate-400 uppercase tracking-widest">
-                      <span>Service Fee (4%)</span>
-                      <span className="text-rose-500">-₦{(withdrawAmt * 0.04).toLocaleString()}</span>
+                   <div className={`p-4 rounded-2xl text-[10px] font-mono leading-relaxed font-bold border ${
+                     getWithdrawalFeeInfo().isFreeDay
+                       ? 'bg-emerald-50 text-emerald-800 border-emerald-200 animate-pulse'
+                       : 'bg-indigo-50/50 text-indigo-900 border-indigo-100'
+                   }`}>
+                     {getWithdrawalFeeInfo().isFreeDay ? (
+                       <span>🎉 Today is standard <b>FREE WITHDRAWAL DAY</b> (5, 20, 29 of the month)! Your fee rate is 0%! No service fee applied.</span>
+                     ) : (
+                       <span>📢 Withdrawal fee is 10%. Save money with our monthly <b>Free Withdrawal Days</b> on the <b>5th, 20th, and 29th</b> of each month (0% fees)!</span>
+                     )}
+                   </div>
+
+                   <div className="flex justify-between text-[10px] font-mono text-slate-400 uppercase tracking-widest pt-2">
+                      <span>Service Fee ({getWithdrawalFeeInfo().feePercent}%)</span>
+                      <span className="text-rose-500">-₦{(withdrawAmt * (getWithdrawalFeeInfo().feePercent / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                    </div>
                    <div className="flex justify-between text-base font-sans pt-3 border-t border-slate-50">
                       <span className="text-slate-500 font-black uppercase text-[10px] tracking-widest">You will receive</span>
-                      <span className="text-blue-600 font-black font-mono">₦{(withdrawAmt * 0.96).toLocaleString()}</span>
+                      <span className="text-blue-600 font-black font-mono">₦{(withdrawAmt * getWithdrawalFeeInfo().multiplier).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                    </div>
                 </div>
 
