@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserState, UserInvestment, TransactionRecord } from '../types';
 import { auth, db, isConfigured, config } from '../lib/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, updatePassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, addDoc, onSnapshot, query, where, orderBy, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
 
 interface FirebaseContextType {
@@ -49,6 +49,18 @@ const FirebaseContext = createContext<FirebaseContextType>({
 });
 
 export const useFirebase = () => useContext(FirebaseContext);
+
+export const normalizePhoneNumber = (phone: string): string => {
+  if (!phone) return "";
+  let digits = phone.replace(/[^0-9]/g, '');
+  if (digits.startsWith('234')) {
+    digits = digits.slice(3);
+  }
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  return digits;
+};
 
 const CLIENT_DEFAULT_VIP_PLANS = [
   { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 150 },
@@ -218,8 +230,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             // If still missing, automatically provision a default user profile to heal account state
             console.log("No user data found, auto-creating standard profile...");
             const ourOwnCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
-            const phoneDigits = (fbUser.phoneNumber || '').replace(/[^0-9]/g, '');
-            const isAdminPhone = phoneDigits.slice(-10) === '7077599057';
+            const isAdminPhone = normalizePhoneNumber(fbUser.phoneNumber || '') === '7077599057';
             const isAdminEmail = fbUser.email === "ottigospel@gmail.com";
 
             const defaultProfile = {
@@ -282,15 +293,23 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       let loginEmail = loginId;
       
       if (!isEmail) {
-        const digits = loginId.replace(/[^0-9]/g, '');
-        const normalized = digits.length >= 10 ? digits.slice(-10) : digits;
+        const normalized = normalizePhoneNumber(loginId);
         loginEmail = `${normalized}@brex.internal`;
       }
       
       await signInWithEmailAndPassword(auth, loginEmail, securityKey);
     } catch (err: any) {
       setLoading(false);
-      throw new Error("Invalid phone number or password. Please verify and try again.");
+      console.error("[Firebase Sign-In Error Details]", err);
+      let errMsg = "Invalid phone number or password. Please verify your details and try again.";
+      if (err.code === "auth/invalid-credential" || err.message?.includes("invalid-credential") || err.code === "auth/wrong-password") {
+        errMsg = "Incorrect password or credentials. Please verify your details and try again.";
+      } else if (err.code === "auth/user-not-found" || err.message?.includes("user-not-found")) {
+        errMsg = "Phone number is not registered. Please sign up for an account.";
+      } else if (err.message) {
+        errMsg = `${errMsg} (${err.message})`;
+      }
+      throw new Error(errMsg);
     }
   };
 
@@ -298,8 +317,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLoading(true);
     try {
       // Use phone number as the primary identifier if email isn't provided or preferred
-      const phoneDigits = payload.phoneNumber.replace(/[^0-9]/g, '');
-      const normalizedPhone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : phoneDigits;
+      const normalizedPhone = normalizePhoneNumber(payload.phoneNumber);
       const loginEmail = payload.email || `${normalizedPhone}@brex.internal`;
       
       const userCred = await createUserWithEmailAndPassword(auth, loginEmail, payload.password);
@@ -443,8 +461,19 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateSecurity = async (password: string) => {
-    // Transaction PIN removal requested, so this is just a placeholder for pass updates
-    throw new Error("Security updates limited in preview mode");
+    if (!auth.currentUser) throw new Error("No active authenticated session found");
+    try {
+      setLoading(true);
+      await updatePassword(auth.currentUser, password);
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+        passwordUpdateHint: new Date().toISOString()
+      });
+      setLoading(false);
+    } catch (err: any) {
+      setLoading(false);
+      console.error("[updateSecurity Error]", err);
+      throw new Error(err.message || "Failed to update security password");
+    }
   };
 
   const recharge = async (amount: number, senderName: string) => {
