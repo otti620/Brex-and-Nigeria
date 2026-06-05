@@ -1629,7 +1629,7 @@ const App: React.FC = () => {
             const isClaimable = isJoined && plan.lastClaimedDate !== new Date().toISOString().slice(0, 10);
 
             return (
-              <div key={plan.id} className="bg-white border border-slate-200 p-5 rounded-[32px] shadow-sm flex flex-col gap-4 relative overflow-hidden group">
+              <div key={plan.id} className="bg-white border border-slate-200 p-8 rounded-[40px] shadow-sm flex flex-col gap-6 relative overflow-hidden group">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl shadow-sm">
                     {plan.avatar}

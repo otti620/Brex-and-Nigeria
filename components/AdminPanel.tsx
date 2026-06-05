@@ -832,19 +832,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                     const isSelf = u.email === userData?.email;
                                     const isSubAdmin = u.isAdmin;
                                     return (
-                                        <div key={u.id} className="bg-white border border-gray-100 p-4 rounded-[28px] flex flex-col gap-3 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-sm">
+                                        <div key={u.id} className="bg-white border border-gray-100 p-6 rounded-[32px] flex flex-col gap-4 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-md">
                                             <div className="flex justify-between items-start">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-sm font-black text-indigo-600 uppercase">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-base font-black text-indigo-600 uppercase">
                                                         {u.name?.[0]?.toUpperCase() || 'U'}
                                                     </div>
                                                     <div>
                                                         <div className="flex items-center gap-2">
-                                                            <p className="font-extrabold text-sm text-black">{u.name}</p>
-                                                            {isSubAdmin && <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded font-mono">OWNER ADMIN</span>}
-                                                            {u.isSuspended && <span className="bg-red-500/20 text-red-500 border border-red-500/30 text-[8px] font-black px-1.5 py-0.5 rounded font-mono">SUSPENDED</span>}
+                                                            <p className="font-extrabold text-base text-black">{u.name}</p>
+                                                            {isSubAdmin && <span className="bg-indigo-600 text-white text-[8px] font-black px-2 py-0.5 rounded font-mono">OWNER ADMIN</span>}
+                                                            {u.isSuspended && <span className="bg-red-500/20 text-red-500 border border-red-500/30 text-[9px] font-black px-2 py-0.5 rounded font-mono">SUSPENDED</span>}
                                                         </div>
-                                                        <p className="text-[10px] text-gray-500 font-mono font-bold mt-0.5">{u.email} | {u.phoneNumber || 'No phone'}</p>
+                                                        <p className="text-[11px] text-gray-500 font-mono font-bold mt-0.5">{u.email} | {u.phoneNumber || 'No phone'}</p>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
@@ -853,9 +853,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                         const totalVal = (Number(u.balance) || 0) + investedAmt;
                                                         return (
                                                             <>
-                                                                <p className="text-[9px] text-[#4f46e5] font-black uppercase font-mono">PORTFOLIO VALUE</p>
-                                                                <p className="text-sm font-black text-slate-900 font-mono">₦{totalVal.toLocaleString()}</p>
-                                                                <p className="text-[8px] text-slate-400 font-black font-mono mt-0.5">Wallet: ₦{(u.balance || 0).toLocaleString()} | Int: ₦{investedAmt.toLocaleString()}</p>
+                                                                <p className="text-[10px] text-[#4f46e5] font-black uppercase font-mono">PORTFOLIO VALUE</p>
+                                                                <p className="text-base font-black text-slate-900 font-mono">₦{totalVal.toLocaleString()}</p>
+                                                                <p className="text-[9px] text-slate-400 font-black font-mono mt-0.5">Wallet: ₦{(u.balance || 0).toLocaleString()} | Int: ₦{investedAmt.toLocaleString()}</p>
                                                             </>
                                                         );
                                                     })()}
@@ -863,7 +863,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                             </div>
 
                                             {/* Subactions block */}
-                                            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
+                                            <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-100">
                                                 {/* Suspension */}
                                                 {!isSelf && (
                                                     <button

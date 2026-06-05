@@ -1,0 +1,18 @@
+810:            const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+1627:          {(userData?.investments || CLIENT_DEFAULT_VIP_PLANS).map((plan: any) => {
+1797:                {sectors.map((sector, index) => {
+1930:                {[100, 200, 500, 1000, 2000, 5000].map((amt) => (
+1986:                  bidHistory.map((bid) => (
+2182:            {[1, 2, 3].map(lvl => {
+2231:            currentLevelUsers.map((p, pidx) => (
+2337:              {[2000, 10000, 30000, 50000, 100000, 250000, 500000, 1000000].map((val) => (
+2564:                   {[1000, 5000, 10000, 30000, 50000, 100000, 250000, 500000].map(v => (
+2624:                  userData.transactions.map((t: any) => {
+2784:          ].filter(item => item.show).map((item, i) => (
+2836:                ].map((txt, ti) => (
+2848:            chatMessages.map((msg, idx) => (
+3027:                    {[1,2,3,4,5,6].map(i => <div key={i} className="w-5 h-5 bg-black/80 rounded-full" />)}
+3030:                    {[1,2,3,4,5,6].map(i => <div key={i} className="w-5 h-5 bg-black/80 rounded-full" />)}
+3117:              {yieldLog.map((log, logIdx) => (
+3484:                          teamMembers.map((m: any, idx: number) => (
+3525:                          activityLogs.map((log: any) => (
