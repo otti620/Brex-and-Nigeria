@@ -1265,10 +1265,39 @@ function startServer() {
       const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
       
       // Determine prize based on 8 colorful segments selection:
-      // Rigged: Spin Wheel is permanently shut down from winning - users always land on segment 3 ("Try again" with 0 reward)
-      const targetIndex = 3;
-      const reward = 0;
-      const label = "Try again";
+      // Weighting: ~40% Win rate for small amounts, 60% Try again/Smallest
+      const rng = Math.random() * 100;
+      let targetIndex = 3; // Default "Try again"
+      let reward = 0;
+      let label = "Try again";
+
+      if (rng < 15) {
+        targetIndex = 0; // Segment 1: ₦50
+        reward = 50;
+        label = "₦50";
+      } else if (rng < 25) {
+        targetIndex = 2; // Segment 3: ₦100
+        reward = 100;
+        label = "₦100";
+      } else if (rng < 35) {
+        targetIndex = 4; // Segment 5: ₦200
+        reward = 200;
+        label = "₦200";
+      } else if (rng < 40) {
+        targetIndex = 6; // Segment 7: ₦500
+        reward = 500;
+        label = "₦500";
+      } else if (rng < 42) {
+        targetIndex = 7; // Segment 8: ₦1,000 (Rare 2%)
+        reward = 1000;
+        label = "₦1,000";
+      } else {
+        // 58% Chance to land on 0 or Try Again slots
+        const loserSlots = [1, 3, 5];
+        targetIndex = loserSlots[Math.floor(Math.random() * loserSlots.length)];
+        reward = 0;
+        label = targetIndex === 1 ? "Small Gift" : "Try again";
+      }
 
       if (serverDb) {
         const userRef = doc(serverDb, 'users', authHeader);
@@ -1280,11 +1309,12 @@ function startServer() {
         const isFree = lastSpin !== todayStr;
         const spinCost = isFree ? 0 : 100;
 
-        if ((userDataSnapshot.balance || 0) < spinCost) {
+        const currentBalance = Number(userDataSnapshot.balance) || 0;
+        if (currentBalance < spinCost) {
           return res.status(400).json({ error: `Insufficient wallet balance. Spin costs ₦${spinCost}.` });
         }
 
-        const finalBalance = (userDataSnapshot.balance || 0) - spinCost + reward;
+        const finalBalance = currentBalance - spinCost + reward;
         const finalMonthlyGains = (userDataSnapshot.monthlyGains || 0) + reward;
 
         const batch = writeBatch(serverDb);
@@ -1301,13 +1331,13 @@ function startServer() {
         batch.set(txnRef, {
           id: txnId,
           userId: authHeader,
-          amount: spinCost,
+          amount: reward > 0 ? reward : spinCost,
           type: "bonus",
           status: "success",
           date: new Date().toISOString().slice(0, 19).replace('T', ' '),
           details: isFree 
-            ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
-            : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+            ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label} (Added to Wallet)` : 'Try again'}`
+            : `Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label} (Added to Wallet)` : 'Try again'}`
         });
 
         await batch.commit();
@@ -1342,13 +1372,13 @@ function startServer() {
 
       user.transactions.unshift({
         id: `txn_spin_${Date.now()}`,
-        amount: spinCost,
+        amount: reward > 0 ? reward : spinCost,
         type: "bonus" as const,
         status: "success" as const,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
         details: isFree 
-          ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label}` : 'Try again'}`
-          : `Regular Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label}` : 'Try again'}`
+          ? `Daily Free Fortune Spin: ${reward > 0 ? `Won ${label} (Added to Wallet)` : 'Try again'}`
+          : `Paid Fortune Spin (Cost: ₦100): ${reward > 0 ? `Won ${label} (Added to Wallet)` : 'Try again'}`
       });
 
       saveDatabase(db);
@@ -1370,333 +1400,151 @@ function startServer() {
     }
   });
 
-  // 2. Buy Brex 2-Sure Lotto Tickets
-  app.post("/api/user/lottery/buy", async (req, res) => {
+  // 2. Live Bids Simulation (Replacing Lottery)
+  app.post("/api/user/bids/place", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const { ticketNumbers, stake } = req.body; // e.g., [17, 88], stake: 500
+      const { choice, stake } = req.body; // choice: "high" | "low", stake: number
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
       
-      if (!Array.isArray(ticketNumbers) || ticketNumbers.length !== 2) {
-        return res.status(400).json({ error: "Invalid selection: Pick exactly 2 lucky numbers for 2-Sure Lotto." });
+      const bidStake = Math.max(100, Math.min(50000, Number(stake) || 200));
+      if (!["high", "low"].includes(choice)) {
+        return res.status(400).json({ error: "Invalid bid choice. Selection must be 'High' or 'Low'." });
       }
 
-      const n1 = parseInt(ticketNumbers[0]);
-      const n2 = parseInt(ticketNumbers[1]);
-      if (isNaN(n1) || isNaN(n2) || n1 < 1 || n1 > 90 || n2 < 1 || n2 > 90) {
-        return res.status(400).json({ error: "Numbers must be integers between 1 and 90." });
-      }
-      if (n1 === n2) {
-        return res.status(400).json({ error: "Please choose two unique numbers. Duplicate entries are invalid." });
-      }
-
-      const betStake = Math.max(50, Math.min(10000, parseInt(stake) || 200));
+      // Simulated Market Result (0.00 to 10.00)
+      const marketResult = Number((Math.random() * 10).toFixed(2));
+      const isHigh = marketResult > 5.00;
+      const won = (choice === "high" && isHigh) || (choice === "low" && !isHigh);
+      
+      const multiplier = 1.9; // 90% profit on win
+      const reward = won ? Math.floor(bidStake * multiplier) : 0;
 
       if (serverDb) {
         const userRef = doc(serverDb, 'users', authHeader);
         const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) return res.status(404).json({ error: "User profile not found" });
+        if (!userSnap.exists()) return res.status(404).json({ error: "User session expired" });
 
-        const userDataSnapshot = userSnap.data();
-        if ((userDataSnapshot.balance || 0) < betStake) {
-          return res.status(400).json({ error: `Insufficient wallet balance. Redeposit or adjust your stake (Min: ₦50).` });
+        const userData = userSnap.data();
+        const currentBalance = Number(userData.balance) || 0;
+
+        if (currentBalance < bidStake) {
+          return res.status(400).json({ error: `Insufficient balance for this ₦${bidStake.toLocaleString()} bid.` });
         }
 
-        const finalBalance = (userDataSnapshot.balance || 0) - betStake;
+        const finalBalance = currentBalance - bidStake + reward;
         const batch = writeBatch(serverDb);
-
+        
         batch.update(userRef, {
-          balance: finalBalance
+          balance: finalBalance,
+          monthlyGains: increment(won ? (reward - bidStake) : 0)
         });
 
-        const ticketId = `lot_reg_${Date.now()}`;
-        const ticketRef = doc(serverDb, `users/${authHeader}/lottery_tickets/${ticketId}`);
-        const ticketData = {
-          id: ticketId,
+        // Log Bid in specialized collection
+        const bidId = `bid_${Date.now()}`;
+        const bidRef = doc(serverDb, `users/${authHeader}/live_bids/${bidId}`);
+        const bidData = {
+          id: bidId,
           userId: authHeader,
-          ticketNumbers: [n1, n2],
-          entryDate: new Date().toISOString().slice(0, 10),
-          purchasePrice: betStake,
-          drawId: `draw_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
-          status: "pending",
-          rewardAmount: 0,
-          drawNumbers: null
+          choice,
+          stake: bidStake,
+          result: marketResult,
+          won,
+          reward,
+          date: new Date().toISOString()
         };
-        batch.set(ticketRef, ticketData);
+        batch.set(bidRef, bidData);
 
-        const txnId = `txn_lot_${Date.now()}`;
+        // Also add to transactions for ledger
+        const txnId = `txn_bid_${Date.now()}`;
         const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
         batch.set(txnRef, {
           id: txnId,
           userId: authHeader,
-          amount: betStake,
-          type: "subscribe",
-          status: "success",
+          amount: won ? reward : bidStake,
+          type: "bonus",
+          status: won ? "success" : "failed",
           date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: `Staked ₦${betStake} on 2-Sure Lotto Combination: [${n1}, ${n2}]`
+          details: `Live Market Bid (${choice.toUpperCase()}): Result ${marketResult} - ${won ? `WON ₦${reward.toLocaleString()}` : 'LOST'}`
         });
 
         await batch.commit();
         return res.json({
           success: true,
-          ticket: ticketData,
+          won,
+          result: marketResult,
+          choice,
+          reward,
           balance: finalBalance
         });
       }
 
-      // Local Fallback JSON DB
+      // JSON DB Fallback
       const db = loadDatabase();
-      const idx = db.users.findIndex(u => u.id === authHeader);
-      if (idx === -1) return res.status(404).json({ error: "User session not found" });
+      const user = db.users.find(u => u.id === authHeader);
+      if (!user) return res.status(404).json({ error: "User session not found" });
 
-      const user = db.users[idx];
-      if (user.balance < betStake) {
-        return res.status(400).json({ error: `Insufficient wallet balance. Redeposit or adjust your stake (Min: ₦50).` });
+      if (user.balance < bidStake) {
+        return res.status(400).json({ error: "Insufficient balance" });
       }
 
-      user.balance -= betStake;
-      const ticketId = `lot_reg_${Date.now()}`;
-      const ticketData = {
-        id: ticketId,
-        userId: authHeader,
-        ticketNumbers: [n1, n2],
-        entryDate: new Date().toISOString().slice(0, 10),
-        purchasePrice: betStake,
-        drawId: `draw_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
-        status: "pending",
-        rewardAmount: 0,
-        drawNumbers: null
+      const bidId = `bid_${Date.now()}`;
+      const bidData = {
+        id: bidId,
+        choice,
+        stake: bidStake,
+        result: marketResult,
+        won,
+        reward,
+        date: new Date().toISOString()
       };
+      (user as any).live_bids = (user as any).live_bids || [];
+      (user as any).live_bids.unshift(bidData);
 
-      (user as any).lottery_tickets = (user as any).lottery_tickets || [];
-      (user as any).lottery_tickets.unshift(ticketData);
-
+      user.balance = user.balance - bidStake + reward;
       user.transactions.unshift({
-        id: `txn_lot_${Date.now()}`,
-        amount: betStake,
-        type: "subscribe" as const,
-        status: "success" as const,
+        id: `txn_bid_${Date.now()}`,
+        amount: won ? reward : bidStake,
+        type: "bonus" as const,
+        status: won ? "success" as const : "failed" as const,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: `Staked ₦${betStake} on 2-Sure Lotto Combination: [${n1}, ${n2}]`
+        details: `Live Market Bid (${choice.toUpperCase()}): Result ${marketResult} - ${won ? `WON ₦${reward.toLocaleString()}` : 'LOST'}`
       });
 
       saveDatabase(db);
-      const { passwordHash, ...profile } = user;
-      res.json({
-        success: true,
-        ticket: ticketData,
-        balance: user.balance,
-        user: profile
-      });
+      res.json({ success: true, won, result: marketResult, choice, reward, balance: user.balance });
 
-    } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: "2-Sure Lotto ticket staking failed" });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Bid processing failed" });
     }
   });
 
-  // 3. Process outstanding/drawn 2-Sure Lotto tickets
-  app.post("/api/user/lottery/draw", async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
-
-      // Generate 5 unique drawn numbers out of 1-90
-      const pool = Array.from({ length: 90 }, (_, i) => i + 1);
-      const drawnNumbers: number[] = [];
-      for (let i = 0; i < 5; i++) {
-        const randIndex = Math.floor(Math.random() * pool.length);
-        drawnNumbers.push(pool.splice(randIndex, 1)[0]);
-      }
-      drawnNumbers.sort((a, b) => a - b);
-
-      let totalRewardAwarded = 0;
-      let matchedTickets: any[] = [];
-
-      if (serverDb) {
-        // Query users' pending tickets
-        const ticketsPath = `users/${authHeader}/lottery_tickets`;
-        const colRef = collection(serverDb, ticketsPath);
-        const q = query(colRef, where("status", "==", "pending"));
-        const qSnap = await getDocs(q);
-
-        const userRef = doc(serverDb, 'users', authHeader);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) return res.status(404).json({ error: "User session not found" });
-        const userSnapshotData = userSnap.data();
-
-        const batch = writeBatch(serverDb);
-
-        qSnap.forEach(docSnap => {
-          const ticket = docSnap.data();
-          const pNums = ticket.ticketNumbers; // user's 2 selected numbers
-
-          // Calculate matches
-          let matchCount = 0;
-          if (drawnNumbers.includes(pNums[0])) matchCount++;
-          if (drawnNumbers.includes(pNums[1])) matchCount++;
-
-          let multiplier = 0;
-          if (matchCount === 2) {
-            multiplier = 150; // Match both = 150x return (Huge win!)
-          } else if (matchCount === 1) {
-            multiplier = 3.5; // Match 1 = 3.5x return (Easy back comfort reward!)
-          }
-
-          const ticketStake = ticket.purchasePrice || 200;
-          const prize = Math.round(ticketStake * multiplier);
-
-          const status = prize > 0 ? "won" : "lost";
-          totalRewardAwarded += prize;
-
-          batch.update(docSnap.ref, {
-            status,
-            rewardAmount: prize,
-            drawNumbers: drawnNumbers
-          });
-
-          matchedTickets.push({
-            id: ticket.id,
-            ticketNumbers: pNums,
-            matchCount,
-            prize,
-            status
-          });
-        });
-
-        const newBalance = (userSnapshotData.balance || 0) + totalRewardAwarded;
-        const newMonthlyGains = (userSnapshotData.monthlyGains || 0) + totalRewardAwarded;
-
-        batch.update(userRef, {
-          balance: newBalance,
-          monthlyGains: newMonthlyGains
-        });
-
-        if (totalRewardAwarded > 0) {
-          const txnId = `txn_lot_win_${Date.now()}`;
-          const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
-          batch.set(txnRef, {
-            id: txnId,
-            userId: authHeader,
-            amount: totalRewardAwarded,
-            type: "bonus",
-            status: "success",
-            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            details: `Lotto Pay-out: Won ₦${totalRewardAwarded.toLocaleString()} inside Brex 2-Sure Gravity Terminal!`
-          });
-        }
-
-        await batch.commit();
-
-        return res.json({
-          success: true,
-          drawnNumbers,
-          matchedTickets,
-          totalRewardAwarded,
-          balance: newBalance
-        });
-      }
-
-      // JSON DB fallback paths
-      const db = loadDatabase();
-      const idx = db.users.findIndex(u => u.id === authHeader);
-      if (idx === -1) return res.status(404).json({ error: "User session not found" });
-
-      const user = db.users[idx];
-      const tickets = (user as any).lottery_tickets || [];
-      const pendingTickets = tickets.filter((t: any) => t.status === "pending");
-
-      pendingTickets.forEach((ticket: any) => {
-        const pNums = ticket.ticketNumbers;
-        let matchCount = 0;
-        if (drawnNumbers.includes(pNums[0])) matchCount++;
-        if (drawnNumbers.includes(pNums[1])) matchCount++;
-
-        let multiplier = 0;
-        if (matchCount === 2) {
-          multiplier = 150;
-        } else if (matchCount === 1) {
-          multiplier = 3.5;
-        }
-
-        const ticketStake = ticket.purchasePrice || 200;
-        const prize = Math.round(ticketStake * multiplier);
-
-        const status = prize > 0 ? "won" : "lost";
-        totalRewardAwarded += prize;
-
-        ticket.status = status;
-        ticket.rewardAmount = prize;
-        ticket.drawNumbers = drawnNumbers;
-
-        matchedTickets.push({
-          id: ticket.id,
-          ticketNumbers: pNums,
-          matchCount,
-          prize,
-          status
-        });
-      });
-
-      user.balance += totalRewardAwarded;
-      user.monthlyGains += totalRewardAwarded;
-
-      if (totalRewardAwarded > 0) {
-        user.transactions.unshift({
-          id: `txn_lot_win_${Date.now()}`,
-          amount: totalRewardAwarded,
-          type: "bonus" as const,
-          status: "success" as const,
-          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          details: `Lotto Pay-out: Won ₦${totalRewardAwarded.toLocaleString()} inside Brex 2-Sure Gravity Terminal!`
-        });
-      }
-
-      saveDatabase(db);
-      const { passwordHash, ...profile } = user;
-      res.json({
-        success: true,
-        drawnNumbers,
-        matchedTickets,
-        totalRewardAwarded,
-        balance: user.balance,
-        user: profile
-      });
-
-    } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: "Lotto draw simulation halted" });
-    }
-  });
-
-  // 4. Retrieve users' lottery tickets
-  app.get("/api/user/lottery/tickets", async (req, res) => {
+  // Retrieve user bid history
+  app.get("/api/user/bids/history", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
       if (serverDb) {
-        const ticketsPath = `users/${authHeader}/lottery_tickets`;
-        const colRef = collection(serverDb, ticketsPath);
+        const bidsPath = `users/${authHeader}/live_bids`;
+        const colRef = collection(serverDb, bidsPath);
         const qSnap = await getDocs(colRef);
-        const ticketsList: any[] = [];
+        const bidsList: any[] = [];
         qSnap.forEach(docSnap => {
-          ticketsList.push(docSnap.data());
+          bidsList.push(docSnap.data());
         });
-        // sort by newest
-        ticketsList.sort((a, b) => b.id.localeCompare(a.id));
-        return res.json({ success: true, tickets: ticketsList });
+        bidsList.sort((a, b) => b.date.localeCompare(a.date));
+        return res.json({ success: true, bids: bidsList });
       }
 
       const db = loadDatabase();
       const user = db.users.find(u => u.id === authHeader);
-      if (!user) return res.status(404).json({ error: "User profile not found" });
-
-      const ticketsList = (user as any).lottery_tickets || [];
-      return res.json({ success: true, tickets: ticketsList });
-    } catch (err: any) {
-      console.error(err);
-      res.status(500).json({ error: "Retrieving lottery tickets failed" });
+      if (!user) return res.status(404).json({ error: "User session not found" });
+      const bidsList = (user as any).live_bids || [];
+      res.json({ success: true, bids: bidsList });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to retrieve bid history" });
     }
   });
 
@@ -2153,138 +2001,8 @@ function startServer() {
     });
   }
 
-  // Audit function to parse previous spin wins and adjust balances
-  const extractAmountFromDetails = (details: string): number => {
-    const cleanStr = details.replace(/,/g, '');
-    const match = cleanStr.match(/Won\s+₦?(\d+)/i);
-    return match ? parseInt(match[1], 10) : 0;
-  };
-
-  const runAuditDeductions = async () => {
-    console.log("[Audit Deduction] Starting spin-to-win adjustment audit...");
-    
-    // Ensure Firebase auth resolves if applicable 
-    if (loginPromise) {
-      try {
-        await loginPromise;
-      } catch (authErr) {
-        console.error("[Audit Deduction] Auth promise error:", authErr);
-      }
-    }
-
-    // 1. Audit local JSON fallback database
-    try {
-      const db = loadDatabase();
-      let localDbChanged = false;
-      
-      for (const user of db.users) {
-        if (!user.transactions) user.transactions = [];
-        
-        const spinWins = user.transactions.filter(txn => {
-          const details = txn.details || "";
-          const isSpin = txn.id?.startsWith("txn_spin_") || details.toLowerCase().includes("spin");
-          const isWin = details.toLowerCase().includes("won");
-          return isSpin && isWin && txn.status === "success";
-        });
-        
-        for (const winTxn of spinWins) {
-          const deductId = `txn_deduct_spin_${winTxn.id}`;
-          const alreadyDeducted = user.transactions.some(t => t.id === deductId);
-          
-          if (!alreadyDeducted) {
-            const winAmount = extractAmountFromDetails(winTxn.details);
-            if (winAmount > 0) {
-              console.log(`[Audit Deduction - Local] Deducting ₦${winAmount} from ${user.name} for spin win ${winTxn.id}`);
-              user.balance = Math.max(0, user.balance - winAmount);
-              
-              user.transactions.unshift({
-                id: deductId,
-                amount: winAmount,
-                type: "withdraw",
-                status: "success",
-                date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                details: `Audit Adjustment: Deduction of previous Fortune Spin winnings (Ref: ${winTxn.id.substring(0, 12)})`
-              });
-              localDbChanged = true;
-            }
-          }
-        }
-      }
-      
-      if (localDbChanged) {
-        saveDatabase(db);
-        console.log("[Audit Deduction - Local] Local database updated and saved successfully.");
-      }
-    } catch (err) {
-      console.error("[Audit Deduction - Local] Error auditing local database:", err);
-    }
-    
-    // 2. Audit Firebase Firestore database (if connected)
-    if (serverDb) {
-      try {
-        const usersCol = collection(serverDb, "users");
-        const usersSnap = await getDocs(usersCol);
-        
-        for (const userDoc of usersSnap.docs) {
-          const userId = userDoc.id;
-          const userData = userDoc.data();
-          
-          const txnsCol = collection(serverDb, `users/${userId}/transactions`);
-          const txnsSnap = await getDocs(txnsCol);
-          const transactions = txnsSnap.docs.map(doc => doc.data());
-          
-          const spinWins = transactions.filter((txn: any) => {
-            const details = txn.details || "";
-            const isSpin = txn.id?.startsWith("txn_spin_") || details.toLowerCase().includes("spin");
-            const isWin = details.toLowerCase().includes("won");
-            return isSpin && isWin && txn.status === "success";
-          });
-          
-          let userBalanceAdjusted = false;
-          let finalBalance = userData.balance || 0;
-          const batch = writeBatch(serverDb);
-          
-          for (const winTxn of spinWins) {
-            const deductId = `txn_deduct_spin_${winTxn.id}`;
-            const alreadyDeducted = transactions.some((t: any) => t.id === deductId);
-            
-            if (!alreadyDeducted) {
-              const winAmount = extractAmountFromDetails(winTxn.details || "");
-              if (winAmount > 0) {
-                console.log(`[Audit Deduction - Firestore] Deducting ₦${winAmount} from Firestore user ${userData.name || userId} for spin win ${winTxn.id}`);
-                finalBalance = Math.max(0, finalBalance - winAmount);
-                
-                const txnRef = doc(serverDb, `users/${userId}/transactions/${deductId}`);
-                batch.set(txnRef, {
-                  id: deductId,
-                  userId: userId,
-                  amount: winAmount,
-                  type: "withdraw",
-                  status: "success",
-                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                  details: `Audit Adjustment: Deduction of previous Fortune Spin winnings (Ref: ${winTxn.id.substring(0, 12)})`
-                });
-                userBalanceAdjusted = true;
-              }
-            }
-          }
-          
-          if (userBalanceAdjusted) {
-            batch.update(doc(serverDb, "users", userId), {
-              balance: finalBalance
-            });
-            await batch.commit();
-            console.log(`[Audit Deduction - Firestore] Committed adjustment for user ${userData.name || userId}. New balance: ₦${finalBalance}`);
-          }
-        }
-      } catch (err) {
-        console.error("[Audit Deduction - Firestore] Error auditing Firestore database:", err);
-      }
-    }
-  };
-
   const reverseNegativeBalances = async () => {
-    console.log("[Auto-Audit Reversal] Scanning for accounts with negative balances to normalize...");
+    console.log("[Auto-Audit Reversal] Scanning for accounts with negative balances or audit-impacted ledgers...");
     
     // 1. Local Database Reversal
     try {
@@ -2292,11 +2010,24 @@ function startServer() {
       let localDbChanged = false;
       
       for (const user of db.users) {
+        if (!user.transactions) user.transactions = [];
+        
+        // A. Restore balance from harmful audit deductions (Ref: txn_deduct_spin_)
+        const auditDeductions = user.transactions.filter(t => t.id?.startsWith("txn_deduct_spin_") && t.status === "success");
+        if (auditDeductions.length > 0) {
+          for (const deduction of auditDeductions) {
+            console.log(`[Auto-Audit Reversal - Local] Restoring audit deduction ₦${deduction.amount} to user ${user.name}`);
+            user.balance += (deduction.amount || 0);
+            deduction.status = "reversed" as any;
+            deduction.details = `REVERSED: ${deduction.details}`;
+            localDbChanged = true;
+          }
+        }
+
         if ((user.balance || 0) < 0) {
           console.log(`[Auto-Audit Reversal - Local] Found user with negative balance: ${user.name} (${user.id}) = ₦${user.balance}. Deactivating investments to restore balance...`);
           
           let activeInvestments = (user.investments || []).filter((inv: any) => inv.joined);
-          // Sort active investments by cost descending to reverse the most expensive or appropriate plan
           activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
           
           for (const inv of activeInvestments) {
@@ -2309,7 +2040,6 @@ function startServer() {
               inv.balance = 0;
               inv.earnYesterday = 0;
               
-              if (!user.transactions) user.transactions = [];
               const revTxnId = `rev_${Date.now()}_${inv.id}`;
               user.transactions.unshift({
                 id: revTxnId,
@@ -2346,15 +2076,31 @@ function startServer() {
           const userData = userDoc.data();
           let currentBalance = userData.balance || 0;
           
+          const txnsCol = collection(serverDb, `users/${userId}/transactions`);
+          const txnsSnap = await getDocs(txnsCol);
+          const transactions = txnsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+          
+          let userChanged = false;
+          const batch = writeBatch(serverDb);
+
+          // A. Restore harmful audit deductions
+          const auditDeductions = transactions.filter(t => t.id?.startsWith("txn_deduct_spin_") && t.status === "success");
+          for (const deduction of auditDeductions) {
+            console.log(`[Auto-Audit Reversal - Firestore] Restoring audit deduction ₦${deduction.amount} to Firestore user ${userData.name || userId}`);
+            currentBalance += (deduction.amount || 0);
+            batch.update(doc(serverDb, `users/${userId}/transactions`, deduction.id), {
+              status: "reversed",
+              details: `REVERSED: ${deduction.details}`
+            });
+            userChanged = true;
+          }
+          
           if (currentBalance < 0) {
             console.log(`[Auto-Audit Reversal - Firestore] Found Firestore user with negative balance: ${userData.name || userId} = ₦${currentBalance}`);
             
             const userInvestments = userData.investments || [];
             let activeInvestments = userInvestments.filter((inv: any) => inv.joined);
             activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
-            
-            let investmentsChanged = false;
-            const batch = writeBatch(serverDb);
             
             for (const inv of activeInvestments) {
               if (currentBalance >= 0) break;
@@ -2363,19 +2109,15 @@ function startServer() {
               if (refundAmt > 0) {
                 currentBalance += refundAmt;
                 
-                // Find and update item in userInvestments array
                 const targetIdx = userInvestments.findIndex((p: any) => p.id === inv.id);
                 if (targetIdx !== -1) {
                   userInvestments[targetIdx].joined = false;
                   userInvestments[targetIdx].balance = 0;
                   userInvestments[targetIdx].earnYesterday = 0;
-                  investmentsChanged = true;
                 }
                 
-                // Add transaction record
                 const revId = `rev_${Date.now()}_${inv.id}`;
-                const txnRef = doc(serverDb, `users/${userId}/transactions/${revId}`);
-                batch.set(txnRef, {
+                batch.set(doc(serverDb, `users/${userId}/transactions/${revId}`), {
                   id: revId,
                   userId: userId,
                   amount: refundAmt,
@@ -2385,18 +2127,19 @@ function startServer() {
                   details: `Regulatory Reversal Refund: ${inv.name} deactivated & returned to correct negative balance.`
                 });
                 
-                console.log(`[Auto-Audit Reversal - Firestore] Reversed ${inv.name} for ${userData.name || userId}, refunded ₦${refundAmt}. Target balance is now ₦${currentBalance}`);
+                userChanged = true;
+                console.log(`[Auto-Audit Reversal - Firestore] Reversed ${inv.name} for ${userData.name || userId}, refunded ₦${refundAmt}.`);
               }
             }
-            
-            if (investmentsChanged) {
-              batch.update(doc(serverDb, "users", userId), {
-                balance: currentBalance,
-                investments: userInvestments
-              });
-              await batch.commit();
-              console.log(`[Auto-Audit Reversal - Firestore] Successfully committed reversals for ${userData.name || userId}`);
-            }
+          }
+          
+          if (userChanged) {
+            batch.update(doc(serverDb, "users", userId), {
+              balance: currentBalance,
+              investments: userData.investments || []
+            });
+            await batch.commit();
+            console.log(`[Auto-Audit Reversal - Firestore] Successfully committed reversals for ${userData.name || userId}. New balance: ₦${currentBalance}`);
           }
         }
       } catch (err) {
@@ -2407,11 +2150,6 @@ function startServer() {
 
   // Schedule tasks shortly after server setup
   setTimeout(async () => {
-    // try {
-    //   await runAuditDeductions();
-    // } catch (e) {
-    //   console.error("runAuditDeductions failed initially:", e);
-    // }
     try {
       await reverseNegativeBalances();
     } catch (e) {

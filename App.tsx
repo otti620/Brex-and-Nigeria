@@ -166,25 +166,23 @@ const App: React.FC = () => {
   const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
 
   // Promotions / Game States
-  const [promoTab, setPromoTab] = useState<'spin' | 'lottery' | 'offers'>('spin');
+  const [promoTab, setPromoTab] = useState<'spin' | 'bids' | 'offers'>('spin');
   const [spinWheelType, setSpinWheelType] = useState<'regular' | 'mega'>('regular');
   const [spinning, setSpinning] = useState(false);
   const [wheelRotation, setWheelRotation] = useState(0);
   const [spinResultModal, setSpinResultModal] = useState<{ show: boolean, reward: number, label: string } | null>(null);
 
-  // Lottery configurations and inputs (Naija 2-Sure Lotto Redesign)
-  const [selectedNums, setSelectedNums] = useState<[number, number]>([17, 88]);
-  const [betStake, setBetStake] = useState<number>(200); // custom stake (₦50 to ₦10000)
-  const [userTickets, setUserTickets] = useState<any[]>([]);
-  const [lotteryLoading, setLotteryLoading] = useState(false);
-  const [drawLoading, setDrawLoading] = useState(false);
-  const [drawResult, setDrawResult] = useState<{ show: boolean, numbers: number[], reward: number, matched: any[] } | null>(null);
-  const [nextDrawTime, setNextDrawTime] = useState({ hours: 1, minutes: 42, seconds: 19 });
+  // Live Bids (Replacing Lottery Redesign)
+  const [bidChoice, setBidChoice] = useState<'high' | 'low'>('high');
+  const [betStake, setBetStake] = useState<number>(200); // stake (₦100 to ₦50000)
+  const [bidHistory, setBidHistory] = useState<any[]>([]);
+  const [bidLoading, setBidLoading] = useState(false);
+  const [bidResultModal, setBidResultModal] = useState<{ show: boolean, won: boolean, result: number, choice: string, reward: number } | null>(null);
 
-  const fetchTickets = async () => {
+  const fetchBidHistory = async () => {
     if (!user) return;
     try {
-      const res = await fetch("/api/user/lottery/tickets", {
+      const res = await fetch("/api/user/bids/history", {
         headers: {
           "Authorization": user.uid
         }
@@ -192,11 +190,11 @@ const App: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          setUserTickets(data.tickets);
+          setBidHistory(data.bids);
         }
       }
     } catch (e) {
-      console.error("Error fetching tickets:", e);
+      console.error("Error fetching bid history:", e);
     }
   };
 
@@ -338,104 +336,55 @@ const App: React.FC = () => {
     }
   };
 
-  const handleBuyLottery = async () => {
-    if (lotteryLoading || !user) return;
-    setLotteryLoading(true);
-    showToast("Locking combinations with server terminal...");
+  const handlePlaceBid = async () => {
+    if (bidLoading || !user) return;
+    setBidLoading(true);
+    showToast("Transmitting bid to live market terminal...");
     try {
-      const res = await fetch("/api/user/lottery/buy", {
+      const res = await fetch("/api/user/bids/place", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": user.uid
         },
-        body: JSON.stringify({ ticketNumbers: selectedNums, stake: betStake })
+        body: JSON.stringify({ choice: bidChoice, stake: betStake })
       });
 
       if (!res.ok) {
         const errData = await res.json();
-        showToast(errData.error || "2-Sure staking failed");
-        setLotteryLoading(false);
-        return;
-      }
-
-      await res.json();
-      showToast(`🎟️ [2-Sure] Registered [${selectedNums.join(", ")}] with ₦${betStake} stake successfully!`);
-      fetchTickets(); // reload lottery tickets
-      refreshProfile(); // reload balances
-      setLotteryLoading(false);
-    } catch (e) {
-      console.error(e);
-      showToast("Network error. Checking ledger logs.");
-      setLotteryLoading(false);
-    }
-  };
-
-  const handleExecuteLotteryDraw = async () => {
-    if (drawLoading || !user) return;
-    setDrawLoading(true);
-    showToast("Spinning 2-Sure Lotto gravity balls... Standby!");
-    
-    try {
-      const res = await fetch("/api/user/lottery/draw", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": user.uid
-        }
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        showToast(errData.error || "Drawing failed");
-        setDrawLoading(false);
+        showToast(errData.error || "Bid placement failed");
+        setBidLoading(false);
         return;
       }
 
       const data = await res.json();
       
-      // suspense delay to simulates bouncing balls!
+      // Simulate market volatility delay
       setTimeout(() => {
-        setDrawLoading(false);
-        setDrawResult({
+        setBidLoading(false);
+        setBidResultModal({
           show: true,
-          numbers: data.drawnNumbers,
-          reward: data.totalRewardAwarded,
-          matched: data.matchedTickets
+          won: data.won,
+          result: data.result,
+          choice: data.choice,
+          reward: data.reward
         });
-        fetchTickets(); // reload tickets
-        refreshProfile(); // update overall user state balances
-      }, 3500); // 3.5s of intense suspense bouncing balls animation!
+        fetchBidHistory();
+        refreshProfile();
+      }, 2000);
     } catch (e) {
       console.error(e);
-      showToast("Drawing failed. Re-syncing system clock.");
-      setDrawLoading(false);
+      showToast("Network error. Checking market logs.");
+      setBidLoading(false);
     }
   };
 
   useEffect(() => {
     if (user && currentScreen === Screen.Promotions) {
-      fetchTickets();
+      fetchBidHistory();
     }
   }, [user, currentScreen]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNextDrawTime(prev => {
-        if (prev.seconds > 0) {
-          return { ...prev, seconds: prev.seconds - 1 };
-        } else if (prev.minutes > 0) {
-          return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-        } else if (prev.hours > 0) {
-          return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        } else {
-          return { hours: 4, minutes: 0, seconds: 0 };
-        }
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-  
   // Auth states
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -1749,14 +1698,14 @@ const App: React.FC = () => {
 
   const renderPromotions = () => {
     const sectors = [
-      { label: "₦200", color: "#6366f1", reward: 200 },
-      { label: "₦500", color: "#3b82f6", reward: 500 },
-      { label: "₦1,000", color: "#10b981", reward: 1000 },
+      { label: "₦50", color: "#6366f1", reward: 50 },
+      { label: "Small Gift", color: "#64748b", reward: 0 },
+      { label: "₦100", color: "#3b82f6", reward: 100 },
       { label: "Try again", color: "#64748b", reward: 0 },
-      { label: "₦2,500", color: "#f59e0b", reward: 2500 },
-      { label: "₦5,000", color: "#a855f7", reward: 5000 },
-      { label: "₦10,000", color: "#ec4899", reward: 10000 },
-      { label: "₦500+", color: "#14b8a6", reward: 500 }
+      { label: "₦200", color: "#10b981", reward: 200 },
+      { label: "Try again", color: "#6366f1", reward: 0 },
+      { label: "₦500", color: "#f59e0b", reward: 500 },
+      { label: "₦1,000", color: "#ec4899", reward: 1000 }
     ];
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -1787,14 +1736,14 @@ const App: React.FC = () => {
             🎡 Spin Wheel
           </button>
           <button
-            onClick={() => setPromoTab('lottery')}
+            onClick={() => setPromoTab('bids')}
             className={`flex-1 py-3 px-1 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
-              promoTab === 'lottery' 
+              promoTab === 'bids' 
                 ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/10' 
                 : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
             }`}
           >
-            🎟️ 2-Sure Lotto
+            📊 Live Bids
           </button>
           <button
             onClick={() => setPromoTab('offers')}
@@ -1901,284 +1850,162 @@ const App: React.FC = () => {
             </div>
             
             {userData?.spinBalance && userData.spinBalance > 0 ? (
-              <div className="w-full bg-amber-50 border border-amber-200 p-4 rounded-2xl text-[9px] font-mono leading-relaxed text-amber-700 font-bold mt-2">
-                🔒 Locked Spin Wallet: ₦{userData.spinBalance.toLocaleString()} NGN. Complete Level 3 savings package activation (Wealth Builder - ₦16,000) or higher to release spin funds under NDIC compliance audits.
+              <div className="w-full bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-[10px] font-mono leading-relaxed text-emerald-800 font-bold mt-2">
+                ✅ Authenticated Spin Commissions: ₦{userData.spinBalance.toLocaleString()} NGN. Your fortune spin winnings have been automatically authenticated and added to your main wallet balance for processing.
               </div>
             ) : null}
           </div>
         )}
 
-        {/* Tab CONTENT 2: Brex Nigeria 2-Sure Lotto */}
-        {promoTab === 'lottery' && (
+        {/* Tab CONTENT 2: Live Market Bids (Replacing Lotto) */}
+        {promoTab === 'bids' && (
           <div className="flex flex-col gap-5 bg-white border border-slate-100 p-5 rounded-[32px] shadow-sm relative overflow-hidden">
             
-            {/* Header / Payout Matrix Table */}
             <div className="flex flex-col gap-3 border-b border-slate-100 pb-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="font-bold text-[9px] uppercase tracking-widest text-[#10b981] bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full font-mono">
-                    Brex 2-Sure Lotto
+                  <span className="font-bold text-[9px] uppercase tracking-widest text-[#4f46e5] bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full font-mono">
+                    Live Market Bids
                   </span>
-                  <h3 className="text-lg font-black text-slate-900 mt-2.5 tracking-tight">Naija Terminal Betslip</h3>
+                  <h3 className="text-lg font-black text-slate-900 mt-2.5 tracking-tight">Price Direction</h3>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-                    Draw 5 balls out of 1-90. Pick 2 to win!
+                    Market Baseline: 5.00 | Outcome: (0.00 - 10.00)
                   </p>
                 </div>
-                <div className="text-right bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-2xl">
-                  <p className="text-[8px] text-rose-600 font-extrabold uppercase font-mono tracking-wider">Lotto Yield</p>
-                  <p className="text-[13px] font-black font-mono text-rose-600 mt-0.5">150x Pay multiplier</p>
+                <div className="text-right bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-2xl">
+                  <p className="text-[8px] text-emerald-600 font-extrabold uppercase font-mono tracking-wider">Potential Gain</p>
+                  <p className="text-[13px] font-black font-mono text-emerald-600 mt-0.5">1.9x Returns</p>
                 </div>
               </div>
 
-              {/* Multiplier Payout Box description */}
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-2xl">
-                  <p className="text-[8px] text-slate-400 font-bold uppercase font-mono">✌️ 2-SURE HIT (Matches 2/2)</p>
-                  <p className="text-[14px] font-black text-rose-600 font-mono mt-0.5">150x Returns</p>
-                  <p className="text-[8.5px] text-slate-400 font-bold mt-0.5">₦1,000 stake wins ₦150k!</p>
-                </div>
-                <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-2xl">
-                  <p className="text-[8px] text-slate-400 font-bold uppercase font-mono">☝️ 1-DIRECT CONSOLATION (Matches 1/2)</p>
-                  <p className="text-[14px] font-black text-emerald-600 font-mono mt-0.5">3.5x Returns</p>
-                  <p className="text-[8.5px] text-slate-400 font-bold mt-0.5">₦1,000 stake wins ₦3,500!</p>
+              <div className="bg-slate-50 border border-slate-150 p-4 rounded-3xl flex flex-col items-center gap-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono">Market Sentiment</p>
+                <div className="flex items-center gap-8">
+                  <div className="flex flex-col items-center">
+                    <span className="text-2xl font-black text-emerald-500 font-mono">68%</span>
+                    <span className="text-[8px] font-black uppercase text-slate-400">Buying High</span>
+                  </div>
+                  <div className="h-8 w-[1px] bg-slate-200" />
+                  <div className="flex flex-col items-center">
+                    <span className="text-2xl font-black text-rose-500 font-mono">32%</span>
+                    <span className="text-[8px] font-black uppercase text-slate-400">Buying Low</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Lucky Ball Selection widgets */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono text-center">
-                Configure your 2 Lucky combination numbers:
+                Select Direction & Stake Amount:
               </p>
 
-              <div className="flex gap-4 justify-center items-center">
-                {[0, 1].map((index) => (
-                  <div key={index} className="flex flex-col items-center bg-slate-50 border border-slate-205 p-4 rounded-[28px] w-32 shadow-sm relative">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono mb-2">BALL #{index+1}</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          const copy = [...selectedNums] as [number, number];
-                          copy[index] = copy[index] > 1 ? copy[index] - 1 : 90;
-                          if (copy[0] === copy[1]) {
-                            copy[index] = copy[index] > 1 ? copy[index] - 1 : 90;
-                          }
-                          setSelectedNums(copy);
-                        }}
-                        className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center font-black text-slate-600 hover:bg-slate-100 active:scale-95 transition-transform shadow-sm"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        max="90"
-                        value={selectedNums[index]}
-                        onChange={(e) => {
-                          const val = Math.max(1, Math.min(90, parseInt(e.target.value) || 1));
-                          const copy = [...selectedNums] as [number, number];
-                          copy[index] = val;
-                          setSelectedNums(copy);
-                        }}
-                        className="w-12 text-center text-2xl font-black font-mono text-slate-950 bg-transparent focus:outline-none"
-                      />
-                      <button
-                        onClick={() => {
-                          const copy = [...selectedNums] as [number, number];
-                          copy[index] = copy[index] < 90 ? copy[index] + 1 : 1;
-                          if (copy[0] === copy[1]) {
-                            copy[index] = copy[index] < 90 ? copy[index] + 1 : 1;
-                          }
-                          setSelectedNums(copy);
-                        }}
-                        className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center font-black text-slate-600 hover:bg-slate-100 active:scale-95 transition-transform shadow-sm"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Stake bets Selector presets to encourage spending */}
-              <div className="flex flex-col gap-2 mt-2 bg-slate-50/50 border border-slate-150 p-4 rounded-3xl">
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest font-mono text-center">
-                  Select Your Bet Stake (NGN):
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {[100, 200, 500, 1000, 2000, 5000].map((amt) => (
-                    <button
-                      key={amt}
-                      onClick={() => setBetStake(amt)}
-                      className={`py-2 px-1 rounded-xl text-[11px] font-black font-mono border-2 transition-all cursor-pointer ${
-                        betStake === amt 
-                          ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/10' 
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      ₦{amt.toLocaleString()}
-                    </button>
-                  ))}
-                  {/* Custom Stake field */}
-                  <div className="col-span-2 flex items-center bg-white border-2 border-slate-200 rounded-xl px-2.5">
-                    <span className="text-[11px] font-black font-mono text-slate-400">₦</span>
-                    <input
-                      type="number"
-                      min="50"
-                      max="10000"
-                      value={betStake}
-                      onChange={(e) => setBetStake(Math.max(50, Math.min(10000, parseInt(e.target.value) || 50)))}
-                      className="w-full text-right text-[11px] font-black font-mono text-slate-800 bg-transparent focus:outline-none pl-1"
-                      placeholder="Custom"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Instant Action buttons */}
-              <div className="grid grid-cols-2 gap-3 mt-1.5">
+              <div className="grid grid-cols-2 gap-4">
                 <button
-                  onClick={() => {
-                    const pool = Array.from({ length: 90 }, (_, i) => i + 1);
-                    const r1 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
-                    const r2 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
-                    setSelectedNums([r1, r2]);
-                    showToast(`⚡ Quick Pick randomly selected: [${r1}, ${r2}]!`);
-                  }}
-                  className="py-3.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  ⚡ Quick Pick
-                </button>
-                <button
-                  disabled={lotteryLoading}
-                  onClick={handleBuyLottery}
-                  className="py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:opacity-90 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-rose-600/10 flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
-                >
-                  🎟️ Stake 2-Sure (₦{betStake})
-                </button>
-              </div>
-            </div>
-
-            {/* Drawing simulation block / Live countdown draws */}
-            <div className="mt-4 bg-[#fbfbfe] border border-blue-100/50 rounded-[28px] p-4 flex flex-col gap-3">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-1.5">
-                  <Clock size={14} className="text-indigo-600 animate-pulse" />
-                  <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider font-mono">Next Draw Timer</span>
-                </div>
-                <span className="text-xs font-black text-indigo-950 font-mono tracking-wider">
-                  {String(nextDrawTime.hours).padStart(2, '0')}:{String(nextDrawTime.minutes).padStart(2, '0')}:{String(nextDrawTime.seconds).padStart(2, '0')}
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-2 mt-1">
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-normal">
-                  You can wait for the official timer, or click the button below to execute a LIVE gravity cage drawing for all pending combination tickets instantly!
-                </p>
-
-                <button
-                  disabled={drawLoading || userTickets.filter(t => t.status === "pending").length === 0}
-                  onClick={handleExecuteLotteryDraw}
-                  className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    userTickets.filter(t => t.status === "pending").length === 0
-                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-lg active:scale-95 shadow-indigo-600/15'
+                  onClick={() => setBidChoice('high')}
+                  className={`flex flex-col items-center p-4 rounded-3xl border-2 transition-all ${
+                    bidChoice === 'high' 
+                      ? 'bg-emerald-50 border-emerald-500 shadow-lg shadow-emerald-500/10' 
+                      : 'bg-white border-slate-100 opacity-60'
                   }`}
                 >
-                  {drawLoading ? (
-                    <span className="flex items-center gap-2">
-                       <span className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-white rounded-full animate-spin" />
-                       Rolling gravity cages...
-                    </span>
-                  ) : userTickets.filter(t => t.status === "pending").length === 0 ? (
-                    "🎟️ Purchase a ticket first to draw"
-                  ) : (
-                    `☘️ Run Live Prize Draw (${userTickets.filter(t => t.status === "pending").length} Pending)`
-                  )}
+                  <TrendingUp className="text-emerald-500 mb-1" size={24} />
+                  <span className="font-black text-sm text-emerald-600">HIGH</span>
+                  <span className="text-[8px] font-bold text-emerald-500/70 font-mono">Outcome &gt; 5.00</span>
+                </button>
+                <button
+                  onClick={() => setBidChoice('low')}
+                  className={`flex flex-col items-center p-4 rounded-3xl border-2 transition-all ${
+                    bidChoice === 'low' 
+                      ? 'bg-rose-50 border-rose-500 shadow-lg shadow-rose-500/10' 
+                      : 'bg-white border-slate-100 opacity-60'
+                  }`}
+                >
+                  <TrendingDown className="text-rose-500 mb-1" size={24} />
+                  <span className="font-black text-sm text-rose-600">LOW</span>
+                  <span className="text-[8px] font-bold text-rose-500/70 font-mono">Outcome ≤ 5.00</span>
                 </button>
               </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {[100, 200, 500, 1000, 2000, 5000].map((amt) => (
+                  <button
+                    key={amt}
+                    onClick={() => setBetStake(amt)}
+                    className={`py-2.5 rounded-xl text-[11px] font-black font-mono border-2 transition-all ${
+                      betStake === amt 
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-md' 
+                        : 'bg-white text-slate-700 border-slate-100 hover:bg-slate-50'
+                    }`}
+                  >
+                    ₦{amt.toLocaleString()}
+                  </button>
+                ))}
+                <div className="col-span-2 flex items-center bg-white border-2 border-slate-100 rounded-xl px-2.5">
+                  <span className="text-[11px] font-black font-mono text-slate-400">₦</span>
+                  <input
+                    type="number"
+                    min="100"
+                    max="50000"
+                    value={betStake}
+                    onChange={(e) => setBetStake(Math.max(100, Math.min(50000, parseInt(e.target.value) || 100)))}
+                    className="w-full text-right text-[11px] font-black font-mono text-slate-800 bg-transparent focus:outline-none pl-1"
+                  />
+                </div>
+              </div>
+
+              <button
+                disabled={bidLoading}
+                onClick={handlePlaceBid}
+                className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-90 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-indigo-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                {bidLoading ? (
+                  <>
+                    <RefreshCw className="animate-spin" size={16} />
+                    Syncing Market Vectors...
+                  </>
+                ) : (
+                  <>
+                    📊 Place Live Bid (₦{betStake.toLocaleString()})
+                  </>
+                )}
+              </button>
             </div>
 
-            {/* Ticket holdings list */}
             <div className="mt-4">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest font-mono mb-3 flex items-center justify-between">
-                <span>📋 Ticket ledger entries</span>
-                <span className="text-[9px] font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono lowercase">
-                  {userTickets.length} registered
-                </span>
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest font-mono mb-3">
+                🕒 Recent Market Outcomes
               </h4>
-
-              {userTickets.length === 0 ? (
-                <div className="text-center py-6 border border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
-                  <Ticket size={24} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest">No tickets in this ledger</p>
-                  <p className="text-[9px] text-slate-400 mt-1">Your purchased combination numbers list will show up here.</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2.5 max-h-56 overflow-y-auto pr-1">
-                  {userTickets.map((tc, idx) => {
-                    const isPending = tc.status === "pending";
-                    const isWon = tc.status === "won";
-                    return (
-                      <div 
-                        key={tc.id || idx} 
-                        className={`flex justify-between items-center p-3 rounded-2xl border ${
-                          isWon 
-                            ? 'bg-emerald-50 border-emerald-100' 
-                            : isPending 
-                              ? 'bg-slate-50/70 border-slate-100' 
-                              : 'bg-slate-50/20 border-slate-100 opacity-75'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Ticket size={16} className={isWon ? 'text-emerald-500' : isPending ? 'text-indigo-400' : 'text-slate-400'} />
-                          <div>
-                            <div className="flex gap-1.5 items-center">
-                              {tc.ticketNumbers?.map((n: number, nIdx: number) => (
-                                <span key={nIdx} className="w-6 h-6 rounded-full bg-slate-900 text-white font-mono font-black text-[11px] flex items-center justify-center border border-white shadow-sm">
-                                  {n}
-                                </span>
-                              ))}
-                              <span className="text-[8.5px] font-black font-mono text-slate-500 bg-slate-150 px-1.5 py-0.5 rounded ml-1">
-                                ₦{tc.purchasePrice || 200} Stake
-                              </span>
-                            </div>
-                            <p className="text-[8px] text-slate-400 font-bold font-mono tracking-wider uppercase mt-1">ID: {tc.id?.slice(-8)} • {tc.entryDate}</p>
-                          </div>
+              <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                {bidHistory.length === 0 ? (
+                  <div className="text-center py-8 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                    <TrendingUp size={24} className="text-slate-300 mx-auto mb-2" />
+                    <p className="text-[10px] text-slate-400 font-bold font-mono uppercase">Market is active</p>
+                    <p className="text-[9px] text-slate-400 mt-1">Place your first bid to start tracking</p>
+                  </div>
+                ) : (
+                  bidHistory.map((bid) => (
+                    <div key={bid.id} className="bg-slate-50 border border-slate-100 p-3 rounded-2xl flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${bid.won ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                          {bid.won ? <Check size={14} strokeWidth={3} /> : <RotateCcw size={14} strokeWidth={3} />}
                         </div>
-
-                        <div className="text-right">
-                          {isPending ? (
-                            <span className="text-[8px] font-black uppercase text-indigo-600 bg-indigo-50 border border-indigo-150 px-2.5 py-1 rounded-full font-mono animate-pulse">
-                              Pending
-                            </span>
-                          ) : isWon ? (
-                            <div className="flex flex-col items-end">
-                              <span className="text-[8px] font-black uppercase text-emerald-700 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
-                                WON
-                              </span>
-                              <span className="text-[11px] font-black text-emerald-600 font-mono mt-0.5">
-                                +₦{tc.rewardAmount.toLocaleString()}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-end opacity-60">
-                              <span className="text-[8px] font-black uppercase text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full font-mono">
-                                Lost
-                              </span>
-                              {tc.drawNumbers && (
-                                <span className="text-[8px] font-bold font-mono text-slate-400 mt-1">
-                                  Drawn: [{tc.drawNumbers?.join(",")}]
-                                </span>
-                              )}
-                            </div>
-                          )}
+                        <div>
+                          <p className={`text-[10px] font-black uppercase font-mono ${bid.choice === 'high' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {bid.choice} Bid @ {bid.result}
+                          </p>
+                          <p className="text-[8px] text-slate-400 font-bold font-mono">STAKE: ₦{bid.stake.toLocaleString()}</p>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      <div className="text-right">
+                        <p className={`text-[11px] font-black font-mono ${bid.won ? 'text-emerald-600' : 'text-rose-400'}`}>
+                          {bid.won ? `+₦${bid.reward.toLocaleString()}` : `-₦${bid.stake.toLocaleString()}`}
+                        </p>
+                        <p className="text-[7px] text-slate-400 font-bold font-mono">{new Date(bid.date).toLocaleTimeString()}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2195,7 +2022,60 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Fortune Wheel Result Modal Dialog Overlay */}
+        {/* Live Bid Result Modal */}
+        {bidResultModal?.show && (
+          <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-5 z-[250] select-none">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-[36px] w-full max-w-sm p-6 flex flex-col items-center justify-center text-center shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl -top-10 -left-10" />
+              <div className="absolute w-40 h-40 rounded-full bg-violet-500/10 blur-3xl -bottom-10 -right-10" />
+
+              {bidResultModal.won ? (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center text-3xl mb-4 shadow-sm animate-bounce">
+                    💎
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Market Profit Unlocked!</h3>
+                  <p className="text-[10px] font-extrabold text-slate-400 font-mono uppercase tracking-widest mt-1">
+                    Market Baseline: 5.00 | Outcome: {bidResultModal.result}
+                  </p>
+                  <p className="text-4xl font-extrabold font-mono text-emerald-600 tracking-tighter my-5">
+                    +₦{bidResultModal.reward.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-bold font-mono uppercase tracking-normal mt-1 max-w-xs leading-relaxed">
+                    Your {bidResultModal.choice.toUpperCase()} bid was accurate. Profit has been added to your ledger.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-rose-100 border border-rose-200 flex items-center justify-center text-3xl mb-4 shadow-sm">
+                    📉
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 tracking-tight">Market Volatility</h3>
+                  <p className="text-[10px] font-extrabold text-slate-400 font-mono uppercase tracking-widest mt-1">
+                    Market Baseline: 5.00 | Outcome: {bidResultModal.result}
+                  </p>
+                  <p className="text-2xl font-extrabold font-mono text-rose-600 tracking-tighter my-5">
+                    LOST BID
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-bold font-mono uppercase tracking-normal mt-1 max-w-xs leading-relaxed">
+                    The {bidResultModal.choice.toUpperCase()} prediction missed the mark. Better luck in the next session!
+                  </p>
+                </>
+              )}
+
+              <button
+                onClick={() => setBidResultModal(null)}
+                className="w-full mt-6 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95"
+              >
+                Continue Trading
+              </button>
+            </motion.div>
+          </div>
+        )}
         {spinResultModal?.show && (
           <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-5 z-[230] select-none">
             <motion.div
@@ -2245,121 +2125,6 @@ const App: React.FC = () => {
                 className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-6 active:scale-95 transition-all cursor-pointer"
               >
                 Close Gateway
-              </button>
-            </motion.div>
-          </div>
-        )}
-
-        {/* Lottery Drawing Suspense Overlay Animation */}
-        {drawLoading && (
-          <div className="fixed inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-5 z-[230] select-none text-center">
-            {/* Beautiful gravity bouncy balls animation */}
-            <div className="flex gap-3 justify-center items-center my-6 flex-wrap max-w-xs">
-              {[1, 2, 3, 4, 5].map((b) => {
-                const randomDigit = Math.floor(Math.random() * 90) + 1;
-                return (
-                  <motion.div
-                    key={b}
-                    animate={{ 
-                      y: [-25, 25, -25],
-                      rotate: [0, 360],
-                      scale: [1, 1.15, 1]
-                    }}
-                    transition={{
-                      duration: 0.5,
-                      repeat: Infinity,
-                      delay: b * 0.08,
-                      ease: "easeInOut"
-                    }}
-                    className="w-12 h-12 rounded-full bg-gradient-to-tr from-rose-500 via-orange-500 to-yellow-500 border-2 border-white text-white font-mono font-black text-sm flex items-center justify-center shadow-2xl shadow-rose-600/20"
-                  >
-                    {randomDigit}
-                  </motion.div>
-                );
-              })}
-            </div>
-            
-            <h3 className="text-base font-black text-white tracking-wider animate-pulse uppercase">
-              Drawing 2-Sure Gravity Balls...
-            </h3>
-            <p className="text-[9px] font-mono text-amber-400 uppercase tracking-widest mt-2 max-w-xs leading-relaxed">
-              Tumbling cage cylinders. Checking combination matrices...
-            </p>
-          </div>
-        )}
-
-        {/* Lottery Draw Result Modal Dialog Overlay */}
-        {drawResult?.show && (
-          <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-5 z-[230] select-none">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white rounded-[36px] w-full max-w-sm p-6 flex flex-col items-center justify-center text-center shadow-2xl relative overflow-hidden"
-            >
-              <div className="absolute w-40 h-40 rounded-full bg-yellow-500/10 blur-3xl -top-10 -left-10" />
-              <div className="absolute w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl -bottom-10 -right-10" />
-
-              <div className="w-16 h-16 rounded-full bg-rose-100 border border-rose-200 flex items-center justify-center text-3xl mb-4 shadow-sm animate-bounce">
-                🏆
-              </div>
-
-              <h3 className="text-md font-black text-slate-900 tracking-tight">Official Draw Output (Lagos Live)</h3>
-              <p className="text-[9px] font-extrabold text-slate-405 font-mono uppercase tracking-widest mt-1">
-                Gravity Balls Drawn:
-              </p>
-
-              {/* Drawn Winning Balls */}
-              <div className="flex gap-2 my-5 justify-center flex-wrap">
-                {drawResult.numbers.map((n, idx) => (
-                  <div key={idx} className="w-10 h-10 rounded-full bg-slate-900 text-white border-2 border-yellow-500 text-sm font-black font-mono flex items-center justify-center shadow-md animate-bounce" style={{ animationDelay: `${idx * 0.15}s` }}>
-                    {n}
-                  </div>
-                ))}
-              </div>
-
-              {drawResult.reward > 0 ? (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 w-full mb-3 text-center">
-                  <p className="text-[9px] text-emerald-600 font-extrabold uppercase font-mono tracking-widest">
-                    🎉 Jackpot payout achieved!
-                  </p>
-                  <p className="text-2xl font-black font-mono text-emerald-700 mt-1">
-                    +₦{drawResult.reward.toLocaleString()} NGN
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 w-full mb-3 text-center">
-                  <p className="text-[9px] text-slate-500 font-extrabold uppercase font-mono tracking-widest">
-                    No matching direct balls
-                  </p>
-                  <p className="text-xs font-black text-slate-700 mt-1">
-                    Better luck in the next drawing!
-                  </p>
-                </div>
-              )}
-
-              {/* Matched Tickets breakdown list */}
-              <div className="w-full text-left mt-1 border-t border-slate-100 pt-3">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono mb-2">
-                  Betslip Ledger Match Report:
-                </p>
-                <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
-                  {drawResult.matched.map((m, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-[10px] py-1 border-b border-slate-50 last:border-0 font-mono text-slate-600">
-                      <span className="font-bold">Comb: [{m.ticketNumbers.join(",")}]</span>
-                      <span className="font-bold text-slate-400">{m.matchCount}/2 Matches</span>
-                      <span className={`font-black uppercase ${m.prize > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {m.prize > 0 ? `+₦${m.prize}` : 'Lost'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                onClick={() => setDrawResult(null)}
-                className="w-full py-4 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg mt-5 active:scale-95 transition-all cursor-pointer"
-              >
-                Clear Draw Interface
               </button>
             </motion.div>
           </div>
