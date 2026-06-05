@@ -42,6 +42,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useFirebase } from './FirebaseProvider';
+import { UserDetailModal } from './UserDetailModal';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -70,6 +71,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
     const [plans, setPlans] = useState<any[]>([]);
     
     const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'transactions' | 'plans' | 'tickets'>('dashboard');
+    const [selectedUser, setSelectedUser] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [operationMsg, setOperationMsg] = useState('');
     const [operationError, setOperationError] = useState('');
@@ -727,6 +729,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
             {/* TAB CONTAINER */}
             <Card className="bg-white border-slate-200 p-5 rounded-[32px] shadow-sm">
+                {selectedUser && <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
                 
                 {/* 1. OVERVIEW & TELEMETRY */}
                 {activeTab === 'dashboard' && (
@@ -832,7 +835,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                     const isSelf = u.email === userData?.email;
                                     const isSubAdmin = u.isAdmin;
                                     return (
-                                        <div key={u.id} className="bg-white border border-gray-100 p-6 rounded-[32px] flex flex-col gap-4 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-md">
+                                        <div key={u.id} onClick={() => setSelectedUser(u)} className="bg-white border border-gray-100 p-6 rounded-[32px] flex flex-col gap-4 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-md cursor-pointer">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-base font-black text-indigo-600 uppercase">
@@ -845,6 +848,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                             {u.isSuspended && <span className="bg-red-500/20 text-red-500 border border-red-500/30 text-[9px] font-black px-2 py-0.5 rounded font-mono">SUSPENDED</span>}
                                                         </div>
                                                         <p className="text-[11px] text-gray-500 font-mono font-bold mt-0.5">{u.email} | {u.phoneNumber || 'No phone'}</p>
+                                                        {u.linkedBankName && <p className="text-[10px] text-gray-400 font-mono italic mt-0.5">{u.linkedBankName} - {u.linkedBankCode}</p>}
                                                     </div>
                                                 </div>
                                                 <div className="text-right">

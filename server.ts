@@ -821,7 +821,7 @@ function startServer() {
   });
 
   // Process live recharge deposit
-  app.post("/api/user/recharge", (req, res) => {
+  app.post("/api/user/recharge", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       const { amount } = req.body;
@@ -842,6 +842,7 @@ function startServer() {
       // Log transaction record
       const txnRecord = {
         id: `txn_${Date.now()}`,
+        userId: db.users[idx].id,
         amount: deposit,
         type: "recharge" as const,
         status: "success" as const,

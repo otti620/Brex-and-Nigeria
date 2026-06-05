@@ -60,7 +60,7 @@ export interface UserInvestment {
 export interface TransactionRecord {
   id: string;
   amount: number;
-  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe' | 'earning';
+  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe' | 'earning' | 'adjustment';
   status: 'pending' | 'success' | 'failed';
   date: string;
   details: string;
