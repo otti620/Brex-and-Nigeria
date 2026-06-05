@@ -840,14 +840,30 @@ function startServer() {
       db.users[idx].monthlyGains += Math.floor(deposit * 0.05); // Standard investment bonus
 
       // Log transaction record
-      db.users[idx].transactions.unshift({
+      const txnRecord = {
         id: `txn_${Date.now()}`,
         amount: deposit,
         type: "recharge" as const,
         status: "success" as const,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
         details: "Instant Deposit Verified"
-      });
+      };
+      db.users[idx].transactions.unshift(txnRecord);
+
+      // 2. Also update Firestore if available
+      if (serverDb) {
+        const userId = db.users[idx].id;
+        try {
+          const userRef = doc(serverDb, 'users', userId);
+          const txnRef = doc(serverDb, `users/${userId}/transactions/${txnRecord.id}`);
+          const batch = writeBatch(serverDb);
+          batch.update(userRef, { balance: increment(deposit) });
+          batch.set(txnRef, txnRecord);
+          await batch.commit();
+        } catch (e) {
+          console.error("Failed to sync recharge to Firestore:", e);
+        }
+      }
 
       // Credit 10% referral bonus to local DB referrer!
       const referredByUserCode = db.users[idx].referredBy;
