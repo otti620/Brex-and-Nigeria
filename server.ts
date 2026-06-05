@@ -1905,7 +1905,7 @@ function startServer() {
   });
 
   // Admin secure cash/yield injection (credit user funds)
-  app.post("/api/admin/credit", (req, res) => {
+  app.post("/api/admin/credit", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       const { userId, amount } = req.body;
@@ -1919,20 +1919,52 @@ function startServer() {
       }
 
       const userIndex = db.users.findIndex((u) => u.id === userId || u.phoneNumber === userId);
-      if (userIndex === -1) {
-        return res.status(444).json({ error: "User not found" });
-      }
-
       const creditAmt = Number(amount);
       if (isNaN(creditAmt) || creditAmt <= 0) {
         return res.status(400).json({ error: "Specify a valid credit amount" });
       }
 
-      db.users[userIndex].balance += creditAmt;
-      saveDatabase(db);
+      // 1. Update Local
+      if (userIndex !== -1) {
+        db.users[userIndex].balance += creditAmt;
+        if (!db.users[userIndex].transactions) db.users[userIndex].transactions = [];
+        db.users[userIndex].transactions.unshift({
+          id: `txn_admin_${Date.now()}`,
+          amount: creditAmt,
+          type: "bonus" as const,
+          status: "success" as const,
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Admin Adjustment: Credit via System`
+        });
+        saveDatabase(db);
+      }
+
+      // 2. Update Firestore
+      if (serverDb) {
+        const userRef = doc(serverDb, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          const batch = writeBatch(serverDb);
+          batch.update(userRef, {
+            balance: (userData.balance || 0) + creditAmt
+          });
+          batch.set(doc(serverDb, `users/${userId}/transactions/txn_admin_${Date.now()}`), {
+            id: `txn_admin_${Date.now()}`,
+            userId: userId,
+            amount: creditAmt,
+            type: "bonus",
+            status: "success",
+            date: new Date().toISOString(),
+            details: "Admin Adjustment: Credit via System"
+          });
+          await batch.commit();
+        }
+      }
 
       res.json({ message: `Successfully injected ₦${creditAmt.toLocaleString()} NGN into account balance!` });
     } catch (err) {
+      console.error("Admin credit error:", err);
       res.status(500).json({ error: "Direct credit operation failed" });
     }
   });
