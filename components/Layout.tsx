@@ -1,5 +1,6 @@
 import React from 'react';
 import { Screen } from '../types';
+import { useFirebase } from './FirebaseProvider';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hideNav = false, isAdmin = false }) => {
+  const { isImpersonating, stopImpersonating, userData } = useFirebase();
   const navItems = [
     { 
       id: Screen.Dashboard, 
@@ -83,6 +85,25 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
   return (
     <div className="flex flex-col h-[100dvh] max-w-md mx-auto relative overflow-hidden bg-[#f8f8f8] shadow-2xl border-x border-gray-200 gpu text-[#1a1a1a]">
       
+      {/* Live Masquerade View Warning Banner */}
+      {isImpersonating && (
+        <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white font-mono text-[11px] font-black py-2.5 px-4 flex items-center justify-between shadow-md border-b border-rose-800 shrink-0 select-none animate-pulse">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="bg-white/20 px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">LIVE VIEW</span>
+            <span className="truncate uppercase font-black">{userData?.name || 'User'}</span>
+          </div>
+          <button 
+            onClick={() => {
+              if (stopImpersonating) stopImpersonating();
+              onNavigate(Screen.Admin);
+            }}
+            className="bg-white text-rose-700 hover:text-rose-800 px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider font-extrabold cursor-pointer shadow-sm transition-all"
+          >
+            Exit ✕
+          </button>
+        </div>
+      )}
+
       {/* SEC Educational Banner hidden from user view as requested */}
       
       <main className="flex-1 overflow-y-auto hide-scrollbar pb-24 safe-pb bg-[#f8f8f8]">

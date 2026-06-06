@@ -92,4 +92,8 @@ export interface UserState {
   investments?: UserInvestment[];
   transactions?: TransactionRecord[];
   spinBalance?: number;
+  currentReferrals?: number;
+  referralTier?: number;
+  totalReferrals?: number;
+  notifications?: { id: string; message: string; read: boolean; date: string }[];
 }

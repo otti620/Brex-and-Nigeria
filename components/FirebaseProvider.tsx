@@ -25,6 +25,10 @@ interface FirebaseContextType {
   resetPassword: (email: string) => Promise<void>;
   simulateInvite: () => Promise<any>;
   globalPlans: any[];
+  impersonateUser?: (profile: any) => void;
+  stopImpersonating?: () => void;
+  isImpersonating?: boolean;
+  originalAdminData?: any;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
@@ -45,7 +49,11 @@ const FirebaseContext = createContext<FirebaseContextType>({
   refreshProfile: async () => {},
   resetPassword: async () => {},
   simulateInvite: async () => {},
-  globalPlans: []
+  globalPlans: [],
+  impersonateUser: () => {},
+  stopImpersonating: () => {},
+  isImpersonating: false,
+  originalAdminData: null
 });
 
 export const useFirebase = () => useContext(FirebaseContext);
@@ -132,6 +140,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [user, setUser] = useState<{ uid: string; email: string; name: string } | null>(null);
   const [userData, setUserData] = useState<UserState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [originalAdminData, setOriginalAdminData] = useState<UserState | null>(null);
+  const [isImpersonating, setIsImpersonating] = useState<boolean>(false);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  const impersonateUser = (targetProfile: any) => {
+    if (!originalAdminData) {
+      setOriginalAdminData(userData);
+    }
+    setIsImpersonating(true);
+    setUserData({ ...targetProfile, isImpersonated: true });
+  };
+
+  const stopImpersonating = () => {
+    if (originalAdminData) {
+      setUserData(originalAdminData);
+      setOriginalAdminData(null);
+    }
+    setIsImpersonating(false);
+  };
   const [globalPlans, setGlobalPlans] = useState<any[]>(CLIENT_DEFAULT_VIP_PLANS);
 
   useEffect(() => {
@@ -201,15 +228,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Listen to transactions subcollection
         if (unsubTxns) unsubTxns();
         unsubTxns = onSnapshot(collection(db, `users/${fbUser.uid}/transactions`), (snap) => {
-          const txns = snap.docs.map(d => d.data());
+          const txns = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           // sort descending by date
           txns.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          
-          setUserData(prev => {
-            if (!prev) return prev;
-            const spinBal = calculateSpinBalance(txns);
-            return { ...prev, transactions: txns as any[], spinBalance: spinBal };
-          });
+          setTransactions(txns as any[]);
         }, (err) => {
           console.warn("Firestore: unable to load user transactions.", err.message);
         });
@@ -244,15 +266,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
 
             setUserData(prev => {
-              const txns = prev?.transactions || [];
-              const spinBal = calculateSpinBalance(txns);
               return { 
                 ...(prev || {}), 
                 ...data,
                 isAdmin: isUserAdmin,
                 investments: mergedInvestments, 
-                transactions: txns as any[],
-                spinBalance: spinBal,
                 isLoggedIn: true 
               } as UserState;
             });
@@ -790,7 +808,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   return (
     <FirebaseContext.Provider value={{
       user,
-      userData,
+      userData: userData ? {
+        ...userData,
+        transactions,
+        spinBalance: calculateSpinBalance(transactions)
+      } : null,
       loading,
       login,
       register,
@@ -808,7 +830,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       resetPassword,
       approveTransaction,
       rejectTransaction,
-      simulateInvite
+      simulateInvite,
+      impersonateUser,
+      stopImpersonating,
+      isImpersonating,
+      originalAdminData
     }}>
       {children}
     </FirebaseContext.Provider>

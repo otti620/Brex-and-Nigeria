@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import flyer1 from './src/assets/images/revenue_stream_flyer_1780385009267.png';
 import flyer2 from './src/assets/images/wealth_builder_flyer_1780385024026.png';
 import { FlyerPopup } from './components/FlyerPopup';
+import { BalanceCounter } from './components/BalanceCounter';
 import { LiveActivityBar } from './components/LiveActivityBar';
 import { TelegramModal } from './components/TelegramModal';
 import { Screen, UserState } from './types';
@@ -83,7 +84,9 @@ const App: React.FC = () => {
     subscribeToPlan,
     simulateInvite,
     loadTeamData,
-    refreshProfile 
+    refreshProfile,
+    isImpersonating,
+    stopImpersonating
   } = useFirebase();
 
   const isSpecificAdmin = userData?.isAdmin;
@@ -166,7 +169,7 @@ const App: React.FC = () => {
   const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
 
   // Promotions / Game States
-  const [promoTab, setPromoTab] = useState<'spin' | 'bids' | 'offers'>('spin');
+  const [promoTab, setPromoTab] = useState<'spin' | 'bids' | 'offers' | 'deal'>('deal');
   const [spinWheelType, setSpinWheelType] = useState<'regular' | 'mega'>('regular');
   const [spinning, setSpinning] = useState(false);
   const [wheelRotation, setWheelRotation] = useState(0);
@@ -1411,7 +1414,9 @@ const App: React.FC = () => {
         <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-[32px] p-6 relative overflow-hidden shadow-xl shadow-indigo-600/20">
           <p className="text-white/70 text-[10px] font-bold tracking-widest uppercase mb-1 font-mono">Available Balance</p>
           <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-3xl font-black text-white font-mono">₦{userData.balance.toLocaleString()}</span>
+            <span className="text-3xl font-black text-white font-mono">
+              <BalanceCounter value={userData.balance} />
+            </span>
             <div className="flex items-center gap-0.5 text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">
               <TrendingUp size={10} /> +14.5% Daily Interest
             </div>
@@ -1726,34 +1731,44 @@ const App: React.FC = () => {
         {/* Dynamic Segmented Navigation Tab */}
         <div className="bg-white border border-slate-100 p-1 rounded-2xl flex gap-1 shadow-sm">
           <button
-            onClick={() => setPromoTab('spin')}
-            className={`flex-1 py-3 px-1 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
-              promoTab === 'spin' 
-                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/10' 
+            onClick={() => setPromoTab('deal')}
+            className={`flex-1 py-3 px-1 rounded-xl font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1 transition-all ${
+              promoTab === 'deal' 
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/10' 
                 : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
             }`}
           >
-            🎡 Spin Wheel
+            🤝 Deal
+          </button>
+          <button
+            onClick={() => setPromoTab('spin')}
+            className={`flex-1 py-3 px-1 rounded-xl font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1 transition-all ${
+              promoTab === 'spin' 
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/10' 
+                : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
+            }`}
+          >
+            🎡 Spin
           </button>
           <button
             onClick={() => setPromoTab('bids')}
-            className={`flex-1 py-3 px-1 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 py-3 px-1 rounded-xl font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1 transition-all ${
               promoTab === 'bids' 
-                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/10' 
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/10' 
                 : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
             }`}
           >
-            📊 Live Bids
+            📊 Bids
           </button>
           <button
             onClick={() => setPromoTab('offers')}
-            className={`flex-1 py-3 px-1 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 py-3 px-1 rounded-xl font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1 transition-all ${
               promoTab === 'offers' 
-                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/10' 
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/10' 
                 : 'text-slate-500 hover:text-slate-950 hover:bg-slate-50'
             }`}
           >
-            📌 Specl. Banner
+            📌 Flyer
           </button>
         </div>
 
@@ -2010,15 +2025,308 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* Tab CONTENT 0: Employee Deal Program */}
+        {promoTab === 'deal' && (
+          <div className="flex flex-col gap-5 animate-fadeIn">
+            {/* Top Section */}
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] text-white shadow-lg relative overflow-hidden">
+              {/* Soft Ambient Inner Glows */}
+              <div className="absolute w-40 h-40 rounded-full bg-blue-500/10 blur-3xl -top-10 -left-10" />
+              <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-indigo-500/10 blur-2xl" />
+              
+              <div className="relative flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-1.5 bg-blue-500/15 border border-blue-500/30 px-3 py-1 rounded-full w-max mb-3">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-300 font-mono">Brex Deal Room</span>
+                  </div>
+                  <h3 className="text-xl font-black tracking-tight leading-none mb-1 text-white">Employee Deal Program</h3>
+                  <p className="text-[11px] text-slate-300 font-medium">Accelerate growth, unlock continuous compounding rewards</p>
+                </div>
+                <div className="bg-white/10 p-2.5 rounded-2xl border border-white/15 shadow-inner select-none text-xl">
+                  🤝
+                </div>
+              </div>
+
+              {/* Stats Highlights */}
+              <div className="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-white/10 font-mono text-center">
+                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
+                  <span className="text-[8px] uppercase tracking-wider text-slate-400 font-extrabold block mb-0.5">Active Tier</span>
+                  <span className="text-xs font-black text-blue-300">Milestone {userData?.referralTier || 1}</span>
+                </div>
+                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
+                  <span className="text-[8px] uppercase tracking-wider text-slate-400 font-extrabold block mb-0.5">Progress</span>
+                  <span className="text-xs font-black text-emerald-400">
+                    {userData?.currentReferrals || 0} / {userData?.referralTier === 3 ? 32 : userData?.referralTier === 2 ? 20 : 10}
+                  </span>
+                </div>
+                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
+                  <span className="text-[8px] uppercase tracking-wider text-slate-400 font-extrabold block mb-0.5">Total Referred</span>
+                  <span className="text-xs font-black text-indigo-300">{userData?.totalReferrals || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sandbox Simulation / Add Referral Panel */}
+            <div className="bg-blue-50 border border-blue-100 p-5 rounded-[24px] flex flex-col items-center justify-between gap-4 text-center sm:text-left sm:flex-row">
+              <div className="flex-1">
+                <p className="text-xs font-black text-blue-900">Sandbox Invite Simulator 👉</p>
+                <p className="text-[10px] text-blue-700 font-semibold mt-0.5">
+                  Directly simulate custom downline registration events to instantly test counts and rewards!
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  showToast("Simulating a downline invite...");
+                  try {
+                    // 1. Try local mock sim
+                    if (userData?.id) {
+                      await fetch('/api/user/simulate-invite', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': userData.id
+                        }
+                      });
+                    }
+                    // 2. Try online firestore stats increment as well
+                    if (simulateInvite) {
+                      await simulateInvite();
+                    }
+                    // 3. Reload latest statistics
+                    if (refreshProfile) {
+                      await refreshProfile();
+                    }
+                    showToast("🎉 Simulated invite successfully processed!");
+                  } catch (e) {
+                    console.error("Simulation trigger failed:", e);
+                    showToast("Processed invite completed with syncing!");
+                  }
+                }}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] uppercase tracking-widest px-4.5 py-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-600/10 cursor-pointer active:scale-95"
+              >
+                <span>🚀 Simulate Referral</span>
+              </button>
+            </div>
+
+            {/* Middle Section: Milestones Stacked Cards */}
+            <div>
+              <div className="flex items-center justify-between mb-3.5 px-1">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Rewards Milestones</span>
+                <span className="text-[10px] font-bold text-slate-400 font-mono uppercase">Tier Advancements</span>
+              </div>
+              
+              <div className="space-y-4">
+                {[
+                  { tier: 1, target: 10, payout: 30000, label: "10 Referrals Booster Deal" },
+                  { tier: 2, target: 20, payout: 65000, label: "20 Referrals Business Deal" },
+                  { tier: 3, target: 32, payout: 100000, label: "32 Referrals Corporate Deal" }
+                ].map((milestone) => {
+                  const currentTier = userData?.referralTier || 1;
+                  const currentProgress = userData?.currentReferrals || 0;
+                  
+                  let isCompleted = currentTier > milestone.tier;
+                  let isActive = currentTier === milestone.tier;
+                  let isLocked = currentTier < milestone.tier;
+                  
+                  let percentage = 0;
+                  if (isCompleted) percentage = 100;
+                  else if (isActive) percentage = Math.min(100, Math.round((currentProgress / milestone.target) * 100));
+                  
+                  return (
+                    <div 
+                      key={milestone.tier} 
+                      className={`relative bg-white border rounded-[28px] p-5.5 transition-all shadow-sm flex flex-col gap-3.5 overflow-hidden ${
+                        isActive 
+                          ? 'border-blue-500 shadow-md shadow-blue-500/5 ring-1 ring-blue-500/10 bg-white' 
+                          : isCompleted 
+                            ? 'border-slate-200 bg-slate-50/50 opacity-90' 
+                            : 'border-slate-100 opacity-60 bg-slate-100/30'
+                      }`}
+                    >
+                      {/* Badge representation */}
+                      {isCompleted && (
+                        <div className="absolute top-4 right-4 bg-emerald-500 text-white font-mono text-[8px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
+                          ✓ COMPLETED
+                        </div>
+                      )}
+                      {isActive && (
+                        <div className="absolute top-4 right-4 bg-blue-600 text-white font-mono text-[8px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
+                          ● ACTIVE TIER
+                        </div>
+                      )}
+                      {isLocked && (
+                        <div className="absolute top-4 right-4 bg-slate-200 text-slate-600 font-mono text-[8px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
+                          🔒 LOCKED
+                        </div>
+                      )}
+
+                      <div>
+                        <span className="text-[9px] font-black text-blue-600 font-mono uppercase tracking-wider block mb-0.5">Tier {milestone.tier} Milestone</span>
+                        <h4 className="text-base font-black text-slate-900 tracking-tight leading-none">{milestone.label}</h4>
+                      </div>
+
+                      <div className="flex justify-between items-baseline py-1 border-t border-slate-55 mt-1">
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase">Payout Commission</span>
+                        <span className="text-base font-mono font-black text-slate-900">
+                          ₦{milestone.payout.toLocaleString()} <span className="text-[10px] text-slate-400 font-sans font-extrabold">Monthly</span>
+                        </span>
+                      </div>
+
+                      {/* IOS-Style blue fill grey background progress bar */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between items-center text-[10px] font-mono font-extrabold uppercase">
+                          <span className={`${isActive ? 'text-blue-600' : 'text-slate-400'}`}>MILESTONE BAR</span>
+                          <span className="text-slate-900">{isCompleted ? milestone.target : isActive ? currentProgress : 0} / {milestone.target}</span>
+                        </div>
+                        <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/40">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isCompleted 
+                                ? 'bg-emerald-500' 
+                                : isActive 
+                                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 shadow-sm' 
+                                  : 'bg-slate-300'
+                            }`}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Notification logs inside the program */}
+            {userData?.notifications && userData.notifications.length > 0 && (
+              <div className="bg-white border border-slate-100 p-5 rounded-[28px] shadow-sm">
+                <div className="flex items-center gap-2 mb-3.5 pb-2.5 border-b border-slate-100">
+                  <span className="text-sm">🔔</span>
+                  <p className="text-xs font-black text-slate-900 uppercase">Live Milestone Alerts</p>
+                </div>
+                <div className="space-y-2.5 max-h-48 overflow-y-auto hide-scrollbar">
+                  {userData.notifications.slice(0, 10).map((n: any) => (
+                    <div key={n.id} className="bg-slate-50/50 border border-slate-100 p-3 rounded-2xl flex gap-3 items-start">
+                      <span className="text-xs mt-0.5">⭐</span>
+                      <div className="flex-grow">
+                        <p className="text-[11px] font-bold text-slate-800 leading-normal">{n.message}</p>
+                        <p className="text-[8px] text-slate-400 font-mono mt-1 font-bold">{n.date ? new Date(n.date).toLocaleDateString() : 'Just now'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Section */}
+            <div className="text-center py-4 bg-slate-100/50 border border-dashed border-slate-200 rounded-2xl mt-1 select-none">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono">Track Progress. Boost Earnings.</p>
+            </div>
+          </div>
+        )}
+
         {/* Tab CONTENT 3: Special Banner Flyer offers */}
         {promoTab === 'offers' && (
-          <div className="flex flex-col gap-6">
-            <div className="text-center bg-white border border-slate-100 p-4 rounded-3xl">
-              <h3 className="text-sm font-black text-slate-800 tracking-tight">Active VIP Portfolio Streams</h3>
-              <p className="text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest mt-0.5">Official Promos & Circular Bulletins</p>
+          <div className="flex flex-col gap-6 animate-in fade-in duration-300">
+            {/* Brex Employee Deal Flyer */}
+            <div className="bg-gradient-to-b from-[#f8fafc] to-[#eef2f6] rounded-[40px] p-8 border border-slate-200/60 shadow-xl relative overflow-hidden flex flex-col gap-6">
+              {/* Outer Subtle Radial Background Glow */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-blue-50/40 via-transparent to-transparent pointer-events-none" />
+
+              {/* Logo Header */}
+              <div className="flex items-center justify-center gap-3 pt-4 relative z-10">
+                <svg className="w-10 h-10 shrink-0 shadow-sm rounded-2xl" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <g clipPath="url(#clipLogo)">
+                    <rect width="120" height="120" rx="30" fill="url(#logoBgGrad)" />
+                    {/* Dark overlapping blue swooshes matching the uploaded image */}
+                    <path d="M-10 110 C 35 48, 85 35, 130 10 L 130 130 H -10 Z" fill="url(#logoWaveGrad)" />
+                    <path d="M-10 95 C 40 38, 90 25, 130 3 C 85 22, 35 35, -10 95" fill="white" fillOpacity="0.85" />
+                  </g>
+                  <defs>
+                    <clipPath id="clipLogo">
+                      <rect width="120" height="120" rx="30" fill="white" />
+                    </clipPath>
+                    <linearGradient id="logoBgGrad" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#0284c7" />
+                      <stop offset="100%" stopColor="#2563eb" />
+                    </linearGradient>
+                    <linearGradient id="logoWaveGrad" x1="0" y1="120" x2="120" y2="0" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#2563eb" />
+                      <stop offset="100%" stopColor="#60a5fa" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <span className="text-[34px] font-extrabold text-[#0f172a] tracking-tight font-sans">Brex</span>
+              </div>
+
+              {/* Main Titles */}
+              <div className="text-center flex flex-col gap-2 relative z-10">
+                <h3 className="text-[28px] font-black text-[#1e293b] tracking-tight leading-tight">
+                  Brex Employee Deal
+                </h3>
+                
+                {/* Thin fade-out divider with centered royal blue text */}
+                <div className="relative flex py-2 items-center justify-center w-full max-w-xs mx-auto">
+                  <div className="flex-grow border-t border-slate-300/60"></div>
+                  <span className="flex-shrink mx-4 text-blue-600 font-extrabold text-[12px] tracking-wide uppercase font-sans">
+                    Refer & Earn More!
+                  </span>
+                  <div className="flex-grow border-t border-slate-300/60"></div>
+                </div>
+              </div>
+
+              {/* Milestone Cards Tracker Grid (derived from real user statistics if logged in) */}
+              <div className="flex flex-col gap-4.5 relative z-10 w-full">
+                {(() => {
+                  const activeRefs = userData?.rechargeMembers || 0;
+                  const milestonesList = [
+                    { target: 10, payout: 30000 },
+                    { target: 20, payout: 65000 },
+                    { target: 32, payout: 100000 }
+                  ];
+
+                  return milestonesList.map((m) => {
+                    const pct = Math.min((activeRefs / m.target) * 100, 100);
+                    return (
+                      <div key={m.target} className="bg-white border border-slate-100 rounded-[24px] p-5.5 shadow-md flex flex-col gap-3.5 transition-transform hover:scale-[1.01] duration-300">
+                        <div className="flex justify-between items-center px-1">
+                          <span className="font-extrabold text-[#111827] text-[16px] font-sans">
+                            {m.target} Referrals
+                          </span>
+                          <span className="font-black text-[#2563eb] text-[16px] font-sans">
+                            ₦{m.payout.toLocaleString()} <span className="text-[10px] text-slate-400 font-bold font-mono">/ Month</span>
+                          </span>
+                        </div>
+                        
+                        {/* iOS / modern stylized progress bar */}
+                        <div className="h-[28px] bg-[#eef2f6] rounded-[10px] w-full relative overflow-hidden flex items-center border border-slate-100 shadow-inner">
+                          {pct > 0 ? (
+                            <div 
+                              className="h-full bg-gradient-to-r from-[#1d4ed8] to-[#3b82f6] rounded-[10px] flex items-center px-3 text-[10px] font-black font-mono text-white select-none transition-all duration-700 shadow-sm"
+                              style={{ width: `${Math.max(pct, 15)}%` }}
+                            >
+                              {activeRefs} / {m.target}
+                            </div>
+                          ) : (
+                            <div className="pl-3.5 text-[10px] font-black font-mono text-slate-400 select-none">
+                              0 / {m.target}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* Static Motivational Footer matching Flyer */}
+              <div className="text-center pt-4 border-t border-slate-200/50 pb-2">
+                <p className="text-[13px] font-bold text-slate-600 tracking-wide font-sans italic selection:bg-blue-100">
+                  Track Progress. Boost Earnings.
+                </p>
+              </div>
             </div>
-            <img src={flyer1} alt="Revenue Stream Plan" className="rounded-[32px] shadow-lg w-full border border-slate-100" />
-            <img src={flyer2} alt="Wealth Builder Plan" className="rounded-[32px] shadow-lg w-full border border-slate-100" />
           </div>
         )}
 
@@ -2615,6 +2923,7 @@ const App: React.FC = () => {
                 <h3 className="text-slate-900 font-black text-sm mb-1 uppercase tracking-tight">Transaction Records</h3>
                 <p className="text-slate-500 text-[11px] font-medium leading-relaxed italic">Your recent recharge and withdrawal history.</p>
              </div>
+             
              <div className="flex flex-col gap-3.5">
                 {!userData.transactions || userData.transactions.length === 0 ? (
                   <div className="py-24 text-center border-2 border-dashed border-slate-200 rounded-[40px] bg-white opacity-50 px-10">
@@ -2622,24 +2931,36 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   userData.transactions.map((t: any) => {
-                    const isPlus = ['recharge', 'claim', 'bonus'].includes(t.type);
+                    const isPlus = ['recharge', 'claim', 'bonus', 'earning', 'earnings', 'profit', 'deal', 'referral', 'reward', 'spin_win'].includes(t.type) || (t.type === 'adjustment' && Number(t.amount) >= 0);
                     const isWithdrawal = t.type === 'withdraw';
                     return (
                       <div key={t.id} className="bg-white border border-slate-200 p-5 rounded-[32px] flex flex-col gap-4 shadow-sm group hover:border-blue-200 transition-all font-semibold">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-sm ${isPlus ? 'bg-blue-50' : 'bg-slate-50'}`}>
-                                {t.type === 'recharge' ? '📥' : t.type === 'withdraw' ? '📤' : t.type === 'subscribe' ? '💼' : '🎁'}
+                                {t.type === 'recharge' ? '📥' : 
+                                 t.type === 'withdraw' ? '📤' : 
+                                 ['subscribe', 'investment'].includes(t.type) ? '💼' : 
+                                 ['earning', 'profit', 'claim'].includes(t.type) ? '📈' : 
+                                 t.type === 'adjustment' ? '⚙️' : '🎁'}
                              </div>
                              <div>
-                                <p className="text-[11px] font-black uppercase text-slate-900 font-mono group-hover:text-blue-600 transition-colors">{t.type}</p>
+                                <p className="text-[11px] font-black uppercase text-slate-900 font-mono group-hover:text-blue-600 transition-colors">
+                                  {t.type === 'recharge' ? 'Funding Deposit' :
+                                   t.type === 'withdraw' ? 'Withdrawal Payout' :
+                                   t.type === 'subscribe' ? 'Plan Subscription' :
+                                   t.type === 'claim' ? 'Yield Claim' :
+                                   t.type === 'earning' || t.type === 'profit' ? 'Task Profit' :
+                                   t.type === 'adjustment' ? 'Balance Adjustment' :
+                                   ['bonus', 'referral', 'deal', 'reward'].includes(t.type) ? 'Referral Reward' : t.type}
+                                </p>
                                 {t.details && <p className="text-[10px] text-slate-500 font-semibold leading-relaxed my-0.5">{t.details}</p>}
                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 font-mono">{t.date}</p>
                              </div>
                           </div>
                           <div className="text-right">
                              <p className={`font-black font-mono text-sm ${isPlus ? 'text-emerald-600' : 'text-rose-600'}`}>
-                               {isPlus ? '+' : '-'}₦{t.amount.toLocaleString()}
+                               {isPlus ? '+' : '-'}₦{Math.abs(Number(t.amount || 0)).toLocaleString()}
                              </p>
                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1 italic font-mono">{t.status || 'Success'}</p>
                           </div>

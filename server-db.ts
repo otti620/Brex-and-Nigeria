@@ -20,7 +20,7 @@ export interface UserInvestment {
 export interface TransactionRecord {
   id: string;
   amount: number;
-  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe' | 'earning';
+  type: 'recharge' | 'withdraw' | 'claim' | 'bonus' | 'subscribe' | 'earning' | 'adjustment';
   status: 'pending' | 'success' | 'failed';
   date: string;
   details: string;
@@ -54,6 +54,10 @@ export interface DbUser {
   firstDepositBonusAwarded?: boolean;
   investments: UserInvestment[];
   transactions: TransactionRecord[];
+  currentReferrals?: number;
+  referralTier?: number;
+  totalReferrals?: number;
+  notifications?: { id: string; message: string; read: boolean; date: string }[];
 }
 
 const isVercel = !!process.env.VERCEL;
@@ -372,6 +376,22 @@ export function loadDatabase(): { users: DbUser[] } {
       }
       if (!u.transactions) {
         u.transactions = [];
+        changed = true;
+      }
+      if (u.currentReferrals === undefined) {
+        u.currentReferrals = 0;
+        changed = true;
+      }
+      if (u.referralTier === undefined) {
+        u.referralTier = 1;
+        changed = true;
+      }
+      if (u.totalReferrals === undefined) {
+        u.totalReferrals = 0;
+        changed = true;
+      }
+      if (u.notifications === undefined) {
+        u.notifications = [];
         changed = true;
       }
       if (changed) dirty = true;

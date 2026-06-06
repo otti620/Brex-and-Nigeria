@@ -61,7 +61,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser }) => {
-    const { userData, approveTransaction, rejectTransaction, globalPlans } = useFirebase();
+    const { userData, approveTransaction, rejectTransaction, globalPlans, impersonateUser } = useFirebase();
     const [users, setUsers] = useState<any[]>([]);
     const [pendingTxns, setPendingTxns] = useState<any[]>([]);
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
@@ -836,35 +836,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                     const isSubAdmin = u.isAdmin;
                                     return (
                                         <div key={u.id} onClick={() => setSelectedUser(u)} className="bg-white border border-gray-100 p-6 rounded-[32px] flex flex-col gap-4 relative overflow-hidden transition-all hover:border-[#ff9c00]/30 shadow-md cursor-pointer">
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-base font-black text-indigo-600 uppercase">
+                                            {/* Primary User Information Header Details */}
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-gray-55">
+                                                <div className="flex items-center gap-3.5 min-w-0">
+                                                    <div className="w-12 h-12 shrink-0 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-base font-black text-indigo-600 uppercase">
                                                         {u.name?.[0]?.toUpperCase() || 'U'}
                                                     </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <p className="font-extrabold text-base text-black">{u.name}</p>
-                                                            {isSubAdmin && <span className="bg-indigo-600 text-white text-[8px] font-black px-2 py-0.5 rounded font-mono">OWNER ADMIN</span>}
-                                                            {u.isSuspended && <span className="bg-red-500/20 text-red-500 border border-red-500/30 text-[9px] font-black px-2 py-0.5 rounded font-mono">SUSPENDED</span>}
+                                                    <div className="min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-1.5">
+                                                            <p className="font-extrabold text-base text-black truncate max-w-[140px]">{u.name}</p>
+                                                            {isSubAdmin && <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded font-mono shrink-0">OWNER</span>}
+                                                            {u.isSuspended && <span className="bg-red-500/10 text-red-500 border border-red-500/20 text-[8px] font-black px-1.5 py-0.5 rounded font-mono shrink-0">SUSPENDED</span>}
                                                         </div>
-                                                        <p className="text-[11px] text-gray-500 font-mono font-bold mt-0.5">{u.email} | {u.phoneNumber || 'No phone'}</p>
-                                                        {u.linkedBankName && <p className="text-[10px] text-gray-400 font-mono italic mt-0.5">{u.linkedBankName} - {u.linkedBankCode}</p>}
+                                                        <p className="text-[10px] text-gray-500 font-mono font-bold mt-0.5 break-all">{u.email}</p>
+                                                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">Ph: {u.phoneNumber || 'No phone'}</p>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    {(() => {
-                                                        const investedAmt = (u.investments || []).reduce((sum: number, inv: any) => sum + (inv.joined ? (Number(inv.balance) || 0) : 0), 0);
-                                                        const totalVal = (Number(u.balance) || 0) + investedAmt;
-                                                        return (
-                                                            <>
-                                                                <p className="text-[10px] text-[#4f46e5] font-black uppercase font-mono">PORTFOLIO VALUE</p>
-                                                                <p className="text-base font-black text-slate-900 font-mono">₦{totalVal.toLocaleString()}</p>
-                                                                <p className="text-[9px] text-slate-400 font-black font-mono mt-0.5">Wallet: ₦{(u.balance || 0).toLocaleString()} | Int: ₦{investedAmt.toLocaleString()}</p>
-                                                            </>
-                                                        );
-                                                    })()}
-                                                </div>
+                                                
+                                                {/* Account & Bank Info inside responsive badges */}
+                                                {u.linkedBankName ? (
+                                                    <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-xl text-left sm:text-right shrink-0">
+                                                        <p className="text-[8px] text-slate-400 font-black uppercase font-mono">LINKED BANK</p>
+                                                        <p className="text-[10px] font-extrabold text-slate-700 font-mono">{u.linkedBankName}</p>
+                                                        <p className="text-[9px] text-slate-500 font-mono">{u.linkedBankCode}</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="bg-amber-50/50 border border-amber-100/50 p-2 rounded-xl text-left sm:text-right shrink-0">
+                                                        <p className="text-[8px] text-amber-500 font-black uppercase font-mono">LINKED BANK</p>
+                                                        <p className="text-[9px] font-extrabold text-amber-600 font-mono">No Banklinked</p>
+                                                    </div>
+                                                )}
                                             </div>
+
+                                            {/* Stylized Portfolio Breakdowns inside full-width sub-dashboard grid */}
+                                            {(() => {
+                                                const investedAmt = (u.investments || []).reduce((sum: number, inv: any) => sum + (inv.joined ? (Number(inv.balance) || 0) : 0), 0);
+                                                const totalVal = (Number(u.balance) || 0) + investedAmt;
+                                                return (
+                                                    <div className="grid grid-cols-2 gap-3 bg-slate-50 border border-slate-100/80 p-3.5 rounded-2xl">
+                                                        <div className="col-span-2 pb-2 border-b border-gray-200/50 flex justify-between items-center">
+                                                            <span className="text-[9px] text-[#4f46e5] font-black uppercase font-mono">PORTFOLIO VALUE</span>
+                                                            <span className="text-sm font-black text-slate-900 font-mono">₦{totalVal.toLocaleString()}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[8px] text-slate-400 font-black uppercase font-mono block mb-0.5">Wallet Balance</span>
+                                                            <span className="text-[10px] font-black text-slate-700 font-mono">₦{(u.balance || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div className="border-l border-slate-200/50 pl-3">
+                                                            <span className="text-[8px] text-slate-400 font-black uppercase font-mono block mb-0.5">Total Investments</span>
+                                                            <span className="text-[10px] font-black text-slate-700 font-mono">₦{investedAmt.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Subactions block */}
                                             <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-100">
@@ -901,9 +925,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                         ))}
                                                     </div>
 
+                                                {/* Live Masquerade View */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (impersonateUser) {
+                                                            impersonateUser(u);
+                                                            if (onBack) onBack();
+                                                        }
+                                                    }}
+                                                    className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-650 text-[10px] px-3 py-1.5 rounded-lg font-black uppercase flex items-center gap-1 cursor-pointer shadow-sm transition-all"
+                                                >
+                                                    View Live 👁️
+                                                </button>
+
                                                 {/* Launcher Balance Adjustment Tool */}
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         setAdjustingUserId(u.id);
                                                         setAdjustAmt(0);
                                                     }}

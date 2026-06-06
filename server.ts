@@ -644,6 +644,60 @@ function startServer() {
           parentBy = parent.invitationCode;
           parent.teamSize = (parent.teamSize || 0) + 1;
           parent.teamSizeToday = (parent.teamSizeToday || 0) + 1;
+
+          // Initialize referral variables if missing
+          if (parent.currentReferrals === undefined) parent.currentReferrals = 0;
+          if (parent.referralTier === undefined) parent.referralTier = 1;
+          if (parent.totalReferrals === undefined) parent.totalReferrals = 0;
+          if (!parent.notifications) parent.notifications = [];
+
+          parent.currentReferrals += 1;
+          parent.totalReferrals += 1;
+
+          let milestoneTarget = 10;
+          let milestoneReward = 30000;
+
+          if (parent.referralTier === 2) {
+            milestoneTarget = 20;
+            milestoneReward = 65000;
+          } else if (parent.referralTier === 3) {
+            milestoneTarget = 32;
+            milestoneReward = 100000;
+          }
+
+          if (parent.currentReferrals >= milestoneTarget) {
+            parent.balance += milestoneReward;
+            
+            parent.notifications.unshift({
+              id: `notif_${Date.now()}`,
+              message: `Congratulations! You’ve unlocked ₦${milestoneReward.toLocaleString()} monthly from your referral milestone!`,
+              read: false,
+              date: new Date().toISOString()
+            });
+
+            parent.transactions.unshift({
+              id: `txn_milestone_${Date.now()}`,
+              amount: milestoneReward,
+              type: "bonus" as const,
+              status: "success" as const,
+              date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+              details: `Referral Milestone Unlocked: Level ${parent.referralTier}`
+            });
+
+            if (parent.referralTier < 3) {
+              parent.referralTier += 1;
+              parent.currentReferrals = 0;
+            } else {
+              parent.currentReferrals = 0;
+            }
+          } else {
+            parent.notifications.unshift({
+              id: `notif_${Date.now()}`,
+              message: `You’re now ${parent.currentReferrals}/${milestoneTarget} referrals! Keep going!`,
+              read: false,
+              date: new Date().toISOString()
+            });
+          }
         }
       }
 
@@ -1858,6 +1912,60 @@ function startServer() {
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
         details: `Referral Bonus: ${simulatedUser.name} Sim Deposit`
       });
+
+      // Initialize referral variables if missing
+      if (parent.currentReferrals === undefined) parent.currentReferrals = 0;
+      if (parent.referralTier === undefined) parent.referralTier = 1;
+      if (parent.totalReferrals === undefined) parent.totalReferrals = 0;
+      if (!parent.notifications) parent.notifications = [];
+
+      parent.currentReferrals += 1;
+      parent.totalReferrals += 1;
+
+      let milestoneTarget = 10;
+      let milestoneReward = 30000;
+
+      if (parent.referralTier === 2) {
+        milestoneTarget = 20;
+        milestoneReward = 65000;
+      } else if (parent.referralTier === 3) {
+        milestoneTarget = 32;
+        milestoneReward = 100000;
+      }
+
+      if (parent.currentReferrals >= milestoneTarget) {
+        parent.balance += milestoneReward;
+        
+        parent.notifications.unshift({
+          id: `notif_${Date.now()}`,
+          message: `Congratulations! You’ve unlocked ₦${milestoneReward.toLocaleString()} monthly from your referral milestone!`,
+          read: false,
+          date: new Date().toISOString()
+        });
+
+        parent.transactions.unshift({
+          id: `txn_milestone_${Date.now()}`,
+          amount: milestoneReward,
+          type: "bonus" as const,
+          status: "success" as const,
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Referral Milestone Unlocked: Level ${parent.referralTier}`
+        });
+
+        if (parent.referralTier < 3) {
+          parent.referralTier += 1;
+          parent.currentReferrals = 0;
+        } else {
+          parent.currentReferrals = 0;
+        }
+      } else {
+        parent.notifications.unshift({
+          id: `notif_${Date.now()}`,
+          message: `You’re now ${parent.currentReferrals}/${milestoneTarget} referrals! Keep going!`,
+          read: false,
+          date: new Date().toISOString()
+        });
+      }
 
       saveDatabase(db);
       const { passwordHash, ...profile } = parent;
