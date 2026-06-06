@@ -1750,11 +1750,133 @@ function startServer() {
   });
 
   // Query real-time referral list
-  app.get("/api/user/team", (req, res) => {
+  app.get("/api/user/team", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
+      if (serverDb) {
+        // --- REAL FIRESTORE MODE (Production) ---
+        // 1. Fetch all users from Firestore
+        const usersCol = collection(serverDb, "users");
+        const usersSnap = await getDocs(usersCol);
+        const allUsers = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+
+        const currentUser = allUsers.find(u => u.id === authHeader);
+        if (!currentUser) return res.status(404).json({ error: "User not found" });
+
+        const ourCode = (currentUser.invitationCode || "").toUpperCase();
+
+        // Level 1 downlines: referredBy matches ourCode OR referrerUid matches authHeader
+        const lvl1Users = allUsers.filter(u => 
+          (u.referredBy && u.referredBy.toUpperCase() === ourCode) ||
+          (u.referrerUid && u.referrerUid === authHeader)
+        );
+        const lvl1Codes = lvl1Users.map(u => (u.invitationCode || "").toUpperCase());
+        const lvl1Ids = lvl1Users.map(u => u.id);
+
+        // Level 2 downlines
+        const lvl2Users = lvl1Codes.length > 0
+          ? allUsers.filter(u => 
+              !lvl1Ids.includes(u.id) && u.id !== authHeader &&
+              ((u.referredBy && lvl1Codes.includes(u.referredBy.toUpperCase())) ||
+               (u.referrerUid && lvl1Ids.includes(u.referrerUid)))
+            )
+          : [];
+        const lvl2Codes = lvl2Users.map(u => (u.invitationCode || "").toUpperCase());
+        const lvl2Ids = lvl2Users.map(u => u.id);
+
+        // Level 3 downlines
+        const lvl3Users = lvl2Codes.length > 0
+          ? allUsers.filter(u => 
+              !lvl1Ids.includes(u.id) && !lvl2Ids.includes(u.id) && u.id !== authHeader &&
+              ((u.referredBy && lvl2Codes.includes(u.referredBy.toUpperCase())) ||
+               (u.referrerUid && lvl2Ids.includes(u.referrerUid)))
+            )
+          : [];
+
+        // Build a list of all downline user objects to fetch their transactions
+        const allDownlines = [
+          ...lvl1Users.map(u => ({ u, lvl: 1 })),
+          ...lvl2Users.map(u => ({ u, lvl: 2 })),
+          ...lvl3Users.map(u => ({ u, lvl: 3 }))
+        ];
+
+        // Format downline members asynchronously
+        const members = await Promise.all(allDownlines.map(async ({ u, lvl }) => {
+          const cleanPhone = u.phoneNumber || "";
+          let phoneObfuscated = "Phone hidden";
+          if (cleanPhone.length >= 7) {
+            phoneObfuscated = cleanPhone.slice(0, 4) + "****" + cleanPhone.slice(-3);
+          }
+
+          // Total joined active plans cost
+          const investedAmt = (u.investments || []).reduce((sum: number, inv: any) => sum + (inv.joined ? (Number(inv.cost) || 0) : 0), 0);
+          
+          let totalRechargedFromTxns = 0;
+          let totalWithdrawals = 0;
+          let regDate = "";
+
+          try {
+            const txnsCol = collection(serverDb, `users/${u.id}/transactions`);
+            const tx = await getDocs(txnsCol);
+            const txDocs = tx.docs.map(doc => doc.data() as any);
+            
+            totalRechargedFromTxns = txDocs
+              .filter(t => t.type === "recharge" && t.status === "success")
+              .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+
+            totalWithdrawals = txDocs
+              .filter(t => t.type === "withdraw" && t.status === "success")
+              .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+
+            // Find setup welcome bonus transaction or any transaction for date
+            const welcomeTx = txDocs.find(t => t.details?.toLowerCase().includes("setup") || t.details?.toLowerCase().includes("welcome"));
+            if (welcomeTx && welcomeTx.date) {
+              regDate = welcomeTx.date;
+            } else if (txDocs.length > 0) {
+              // Get the oldest transaction date
+              txDocs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+              regDate = txDocs[0].date;
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch transactions subcollection for downline ${u.id}:`, err);
+          }
+
+          const finalRecharge = Math.max(investedAmt, totalRechargedFromTxns, u.balance > 1000 ? u.balance : 0);
+
+          if (!regDate) {
+            // Fallback to timestamp ID parse or standard date
+            if (u.id.startsWith("user_") && !isNaN(Number(u.id.slice(5)))) {
+              regDate = new Date(Number(u.id.slice(5))).toISOString().slice(0, 19).replace('T', ' ');
+            } else {
+              regDate = "2026-05-30 12:00:00";
+            }
+          }
+
+          return {
+            phone: phoneObfuscated,
+            recharge: finalRecharge,
+            withdraw: totalWithdrawals,
+            date: regDate,
+            lvl
+          };
+        }));
+
+        const rechargeMembersCount = allDownlines.filter(({ u }) => {
+          const hasJoinedPlans = u.investments && u.investments.some((p: any) => p.joined);
+          const hasBalance = (u.balance || 0) > 2000;
+          return hasJoinedPlans || hasBalance;
+        }).length;
+
+        return res.json({
+          teamSize: members.length,
+          rechargeMembers: rechargeMembersCount,
+          members
+        });
+      }
+
+      // ---fallback local database.json ---
       const db = loadDatabase();
       const user = db.users.find(u => u.id === authHeader);
       if (!user) return res.status(404).json({ error: "User not found" });
@@ -1823,6 +1945,7 @@ function startServer() {
         members
       });
     } catch (err: any) {
+      console.error("Team query failed:", err);
       res.status(500).json({ error: "Failed to pull referral logs" });
     }
   });

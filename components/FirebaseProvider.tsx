@@ -708,76 +708,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const loadTeamData = async () => {
     if (!user || !userData) return { members: [], teamSize: 0, rechargeMembers: 0 };
     
-    const path = 'users';
     try {
-      // Level 1: Find anyone referred by current user's invite code OR UID
-      const q1Code = query(collection(db, path), where('referredBy', '==', userData.invitationCode));
-      const q1Uid = query(collection(db, path), where('referrerUid', '==', user.uid));
-      
-      const [snapCode, snapUid] = await Promise.all([
-        getDocs(q1Code),
-        getDocs(q1Uid)
-      ]);
-      
-      const members: any[] = [];
-      const l1Codes: string[] = [];
-      const seenIds = new Set();
-      let rechargeMembers = 0;
-      
-      const processSnap = (snap: any, lvl: number) => {
-        snap.forEach((docSnap: any) => {
-          const d = docSnap.data();
-          if (seenIds.has(docSnap.id)) return;
-          seenIds.add(docSnap.id);
-          
-          l1Codes.push(d.invitationCode);
-          const hasRecharged = d.balance > 2000;
-          if (hasRecharged) rechargeMembers++;
-          
-          members.push({
-            id: docSnap.id,
-            phone: d.phoneNumber ? `***${d.phoneNumber.slice(-4)}` : 'Hidden',
-            recharge: d.balance || 0,
-            withdraw: 0,
-            date: d.date || 'Recent',
-            lvl: lvl
-          });
-        });
-      };
-      
-      processSnap(snapCode, 1);
-      processSnap(snapUid, 1);
-
-      // Level 2 (Referred by Level 1 members)
-      if (l1Codes.length > 0) {
-        try {
-          // Firestore 'in' queries are limited to 10-30 items depending on version, chunking if over 10
-          const chunks = [];
-          for (let i = 0; i < l1Codes.length; i += 10) {
-            chunks.push(l1Codes.slice(i, i + 10));
-          }
-          
-          for (const chunk of chunks) {
-            const q2 = query(collection(db, path), where('referredBy', 'in', chunk));
-            const snap2 = await getDocs(q2);
-            processSnap(snap2, 2);
-          }
-        } catch (l2Error) {
-          console.warn("Could not query deep Level 2 referrals due to role constraints:", l2Error);
+      const res = await fetch("/api/user/team", {
+        headers: {
+          "Authorization": user.uid
         }
+      });
+      if (res.ok) {
+        return await res.json();
+      } else {
+        const errorData = await res.json();
+        console.warn("Failed to retrieve secure team logs:", errorData.error);
+        return { members: [], teamSize: 0, rechargeMembers: 0 };
       }
-
-      // Level 3 (Referred by Level 2 members) - Simple depth 3 only for current L2s
-      const l2Codes = members.filter(m => m.lvl === 2).map(m => m.id); // placeholder logic for depth
-      // In a real high-scale app we would use a flat hierarchy collection or a recursive cloud function
-      
-      return {
-        members,
-        teamSize: members.length,
-        rechargeMembers
-      };
     } catch (err) {
-      handleFirestoreError(err, OperationType.LIST, path);
+      console.error("Failed loadTeamData REST fetch:", err);
       return { members: [], teamSize: 0, rechargeMembers: 0 };
     }
   };
