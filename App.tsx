@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import flyer1 from './src/assets/images/revenue_stream_flyer_1780385009267.png';
-import flyer2 from './src/assets/images/wealth_builder_flyer_1780385024026.png';
 import { FlyerPopup } from './components/FlyerPopup';
 import { BalanceCounter } from './components/BalanceCounter';
 import { LiveActivityBar } from './components/LiveActivityBar';
@@ -2845,7 +2843,7 @@ const App: React.FC = () => {
 
                 <div className="bg-white border border-slate-200 p-6 rounded-[32px] flex justify-between items-center shadow-sm">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono">Available Balance</p>
-                   <p className="text-xl font-black text-blue-600 font-mono italic">₦{userData.balance.toLocaleString()}</p>
+                   <p className="text-xl font-black text-blue-600 font-mono italic"><BalanceCounter value={userData.balance} /></p>
                 </div>
 
                 {userData.spinBalance && userData.spinBalance > 0 ? (

@@ -2182,35 +2182,9 @@ function startServer() {
         }
 
         if ((user.balance || 0) < 0) {
-          console.log(`[Auto-Audit Reversal - Local] Found user with negative balance: ${user.name} (${user.id}) = ₦${user.balance}. Deactivating investments to restore balance...`);
-          
-          let activeInvestments = (user.investments || []).filter((inv: any) => inv.joined);
-          activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
-          
-          for (const inv of activeInvestments) {
-            if (user.balance >= 0) break;
-            
-            const refundAmt = inv.balance || inv.cost || 0;
-            if (refundAmt > 0) {
-              user.balance += refundAmt;
-              inv.joined = false;
-              inv.balance = 0;
-              inv.earnYesterday = 0;
-              
-              const revTxnId = `rev_${Date.now()}_${inv.id}`;
-              user.transactions.unshift({
-                id: revTxnId,
-                amount: refundAmt,
-                type: "bonus",
-                status: "success",
-                date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                details: `Regulatory Reversal Refund: ${inv.name} deactivated & returned to correct negative balance.`
-              });
-              
-              console.log(`[Auto-Audit Reversal - Local] Reversed ${inv.name}, refunded ₦${refundAmt}. New user balance: ₦${user.balance}`);
-              localDbChanged = true;
-            }
-          }
+          console.log(`[Auto-Audit Reversal - Local] Found user with negative balance: ${user.name} (${user.id}) = ₦${user.balance}. Auto-correcting to 0.`);
+          user.balance = 0;
+          localDbChanged = true;
         }
       }
       
@@ -2253,50 +2227,17 @@ function startServer() {
           }
           
           if (currentBalance < 0) {
-            console.log(`[Auto-Audit Reversal - Firestore] Found Firestore user with negative balance: ${userData.name || userId} = ₦${currentBalance}`);
-            
-            const userInvestments = userData.investments || [];
-            let activeInvestments = userInvestments.filter((inv: any) => inv.joined);
-            activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
-            
-            for (const inv of activeInvestments) {
-              if (currentBalance >= 0) break;
-              
-              const refundAmt = inv.balance || inv.cost || 0;
-              if (refundAmt > 0) {
-                currentBalance += refundAmt;
-                
-                const targetIdx = userInvestments.findIndex((p: any) => p.id === inv.id);
-                if (targetIdx !== -1) {
-                  userInvestments[targetIdx].joined = false;
-                  userInvestments[targetIdx].balance = 0;
-                  userInvestments[targetIdx].earnYesterday = 0;
-                }
-                
-                const revId = `rev_${Date.now()}_${inv.id}`;
-                batch.set(doc(serverDb, `users/${userId}/transactions/${revId}`), {
-                  id: revId,
-                  userId: userId,
-                  amount: refundAmt,
-                  type: "bonus",
-                  status: "success",
-                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                  details: `Regulatory Reversal Refund: ${inv.name} deactivated & returned to correct negative balance.`
-                });
-                
-                userChanged = true;
-                console.log(`[Auto-Audit Reversal - Firestore] Reversed ${inv.name} for ${userData.name || userId}, refunded ₦${refundAmt}.`);
-              }
-            }
+            console.log(`[Auto-Audit Reversal - Firestore] Found Firestore user with negative balance: ${userData.name || userId} = ₦${currentBalance}. Correcting to 0.`);
+            currentBalance = 0;
+            userChanged = true;
           }
           
           if (userChanged) {
             batch.update(doc(serverDb, "users", userId), {
-              balance: currentBalance,
-              investments: userData.investments || []
+              balance: currentBalance
             });
             await batch.commit();
-            console.log(`[Auto-Audit Reversal - Firestore] Successfully committed reversals for ${userData.name || userId}. New balance: ₦${currentBalance}`);
+            console.log(`[Auto-Audit Reversal - Firestore] Successfully committed balance corrections for ${userData.name || userId}. New balance: ₦${currentBalance}`);
           }
         }
       } catch (err) {
