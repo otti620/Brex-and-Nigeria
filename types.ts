@@ -13,7 +13,7 @@ export enum Screen {
   Funds = 'funds',
   Portfolio = 'portfolio',
   Profile = 'profile',
-  Fund = 'fund',
+  Wallet = 'wallet',
   AssetDetail = 'asset_detail',
   AIAdvisor = 'ai_advisor'
 }

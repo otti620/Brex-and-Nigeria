@@ -873,7 +873,7 @@ const App: React.FC = () => {
     if (isSubscribing) return;
     if (!userData || userData.balance < cost) {
       showToast(`Insufficient balance. You need at least ₦${cost.toLocaleString()} to activate this pool.`);
-      navigate(Screen.Fund);
+      navigate(Screen.Wallet);
       setFundTab('recharge');
       setRechargeStep('input');
       return;
@@ -1226,7 +1226,7 @@ const App: React.FC = () => {
               onClick={() => {
                 setFundTab('recharge');
                 setRechargeStep('input');
-                navigate(Screen.Fund);
+                navigate(Screen.Wallet);
               }}
               className="bg-black text-white font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-900 transition-all cursor-pointer outline-none shadow-lg "
             >
@@ -1235,7 +1235,7 @@ const App: React.FC = () => {
             <button 
               onClick={() => {
                 setFundTab('withdrawal');
-                navigate(Screen.Fund);
+                navigate(Screen.Wallet);
               }}
               className="bg-white/20 hover:bg-white/30 text-black border border-black/10 font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer outline-none"
             >
@@ -1509,7 +1509,7 @@ const App: React.FC = () => {
         name: "Samsung Growth Fund",
         companyName: "Samsung Electronics",
         minInvestment: 2000,
-        dailyRate: 1.2,
+        dailyRate: 4.8,
         description: "Samsung Electronics is a global leader in semiconductor, mobile, and display engineering. This growth fund concentrates on Next-Gen logic foundry expansion and high-yield display technology scaling.",
         avatar: "📱",
         iconColor: "text-blue-600 bg-blue-50 border border-blue-100",
@@ -1522,7 +1522,7 @@ const App: React.FC = () => {
         name: "Pepsi Consumer Fund",
         companyName: "PepsiCo Inc.",
         minInvestment: 3000,
-        dailyRate: 1.5,
+        dailyRate: 5.5,
         description: "PepsiCo is a diversified global food and beverage force active across 200+ countries. This retail fund captures high fast-moving grocery yields and robust global bottling distribution margins.",
         avatar: "🥤",
         iconColor: "text-red-500 bg-red-50 border border-red-100",
@@ -1535,7 +1535,7 @@ const App: React.FC = () => {
         name: "Dangote Industrial Fund",
         companyName: "Dangote Industries",
         minInvestment: 5000,
-        dailyRate: 2.0,
+        dailyRate: 9.0,
         description: "Dangote Industries is sub-Saharan Africa's premier industrial titan, dominating sectors including cement infrastructure products, oil & gas refining, logistics, and sugar processing.",
         avatar: "🏗️",
         iconColor: "text-emerald-600 bg-emerald-50 border border-emerald-100",
@@ -1548,7 +1548,7 @@ const App: React.FC = () => {
         name: "Nestle Nutrition Fund",
         companyName: "Nestle S.A.",
         minInvestment: 4000,
-        dailyRate: 1.8,
+        dailyRate: 7.2,
         description: "Nestle is the global leading provider of nutritional foods, dairy drinks, and wellness formulas. This structural savings fund is targeted on emerging markets food processing efficiency.",
         avatar: "🍫",
         iconColor: "text-amber-600 bg-amber-50 border border-amber-100",
@@ -1632,26 +1632,29 @@ const App: React.FC = () => {
       }
     };
 
-    const handleFastForwardFund = async (invId: string, daysOffset: number) => {
+    const handleCancelInvestment = async (invId: string) => {
+      const confirmCancel = window.confirm("Are you sure you want to terminate this contract early? 10% of your principal will be deducted as penalty, and all interest will be forfeited.");
+      if (!confirmCancel) return;
+
       try {
-        const response = await fetch("/api/user/funds/fast-forward", {
+        const response = await fetch("/api/user/funds/cancel", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": userData.id || userData.phoneNumber || ""
           },
-          body: JSON.stringify({ investmentId: invId, daysToOffset: daysOffset })
+          body: JSON.stringify({ investmentId: invId })
         });
 
         const data = await response.json();
         if (response.ok) {
-          showToast(`Time offset by +${daysOffset} days simulated successfully!`);
+          showToast(data.message || "Investment terminated. Refund credited successfully!");
           refreshProfile();
         } else {
-          showToast(data.error || "Fast forward simulation failed.");
+          showToast(data.error || "Termination request failed.");
         }
       } catch (err) {
-        showToast("Simulation exception occurred.");
+        showToast("Network exception during early termination.");
       }
     };
 
@@ -1854,9 +1857,15 @@ const App: React.FC = () => {
                         {/* Status Label badge */}
                         <div className="absolute top-4.5 right-4.5">
                           {isClaimedPaid ? (
-                            <span className="font-mono text-[8px] font-black uppercase text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-md">
-                              ✓ REFUNDED & RETRIEVED
-                            </span>
+                            inv.canceled ? (
+                              <span className="font-mono text-[8px] font-black uppercase text-red-700 bg-red-100 px-2 py-0.5 rounded-md">
+                                ✕ TERMINATED EARLY
+                              </span>
+                            ) : (
+                              <span className="font-mono text-[8px] font-black uppercase text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-md">
+                                ✓ REFUNDED & RETRIEVED
+                              </span>
+                            )
                           ) : isMatured ? (
                             <span className="font-mono text-[8px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md animate-pulse">
                               ● MATURED READY
@@ -1918,35 +1927,29 @@ const App: React.FC = () => {
                             )}
 
                             {!isClaimedPaid && !isMatured && (
-                              <div className="flex flex-col gap-2.5 w-full bg-slate-50 border border-slate-100 p-3.5 rounded-[18px]">
-                                <span className="text-[8px] font-black text-[#64748B] font-mono tracking-widest uppercase">TESTING SANDBOX: Sim TIME FAST-FORWARD</span>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => handleFastForwardFund(inv.id, 3)}
-                                    className="flex-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-900 font-black text-[9px] uppercase tracking-wider py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
-                                  >
-                                    +3 Days Offset
-                                  </button>
-                                  <button
-                                    onClick={() => handleFastForwardFund(inv.id, 7)}
-                                    className="flex-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-900 font-black text-[9px] uppercase tracking-wider py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
-                                  >
-                                    +7 Days Offset
-                                  </button>
-                                  <button
-                                    onClick={() => handleFastForwardFund(inv.id, inv.days)}
-                                    className="flex-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 font-black text-[9px] uppercase tracking-wider py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
-                                  >
-                                    Mature Now
-                                  </button>
+                              <div className="flex flex-col gap-2.5 w-full bg-rose-50/30 border border-rose-100 p-4 rounded-[18px]">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-[10px] font-black text-rose-700 uppercase font-mono tracking-wider">Early Termination</span>
+                                  <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">10% Penalty</span>
                                 </div>
+                                <p className="text-[11px] text-slate-500 leading-normal font-medium">
+                                  Need liquidation? Terminate this contract early. 10% principal forfeit (₦{(inv.amount * 0.1).toLocaleString()} penalty applied) and all interest is forfeited.
+                                </p>
+                                <button
+                                  onClick={() => handleCancelInvestment(inv.id)}
+                                  className="w-full bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase tracking-wider py-3 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer text-center"
+                                >
+                                  Terminate & Refund ₦{(inv.amount * 0.9).toLocaleString()}
+                                </button>
                               </div>
                             )}
 
                             {isClaimedPaid && (
-                              <div className="w-full text-center py-2 bg-slate-100 border border-slate-200 border-dashed rounded-xl select-none">
+                              <div className="w-full text-center py-2.5 bg-slate-100 border border-slate-200 border-dashed rounded-xl select-none">
                                 <span className="text-[9px] font-black font-mono text-slate-500 uppercase tracking-widest">
-                                  ✓ REDEEMED TRANSACTION LOGGED TO Available WALLET
+                                  {inv.canceled 
+                                    ? "✕ CONTRACT TERMINATED - 90% PRINCIPAL RETURNED" 
+                                    : "✓ MATURITY SETTLED - PRINCIPAL + EARNINGS CREDITED"}
                                 </span>
                               </div>
                             )}
@@ -2890,7 +2893,7 @@ const App: React.FC = () => {
     );
   };
 
-  const renderFund = () => {
+  const renderWallet = () => {
     if (!userData) return null;
 
     const { canWithdraw } = checkWithdrawalAvailability();
@@ -2904,8 +2907,8 @@ const App: React.FC = () => {
         {/* Navigation title header */}
         <div className="flex items-center justify-between mb-1">
           <div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Fund Management</h2>
-            <p className="text-slate-500 text-xs font-bold leading-none mt-1">Recharge and Withdraw funds</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Wallet Management</h2>
+            <p className="text-slate-500 text-xs font-bold leading-none mt-1">Deposit or withdraw from your wallet</p>
           </div>
         </div>
 
@@ -3568,7 +3571,7 @@ const App: React.FC = () => {
               case Screen.Funds: return renderFunds();
               case Screen.Portfolio: return renderPortfolio();
               case Screen.Profile: return renderProfile();
-              case Screen.Fund: return renderFund();
+              case Screen.Wallet: return renderWallet();
               case Screen.AIAdvisor: return renderAIAdvisor();
               default: return renderDashboard();
             }

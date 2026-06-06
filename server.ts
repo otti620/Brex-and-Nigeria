@@ -1994,10 +1994,10 @@ function startServer() {
       }
 
       const fundList = [
-        { id: "fund_samsung", name: "Samsung Growth Fund", min: 2000, rate: 1.2, company: "Samsung Electronics" },
-        { id: "fund_pepsi", name: "Pepsi Consumer Fund", min: 3000, rate: 1.5, company: "PepsiCo Inc." },
-        { id: "fund_dangote", name: "Dangote Industrial Fund", min: 5000, rate: 2.0, company: "Dangote Industries" },
-        { id: "fund_nestle", name: "Nestle Nutrition Fund", min: 4000, rate: 1.8, company: "Nestle S.A." }
+        { id: "fund_samsung", name: "Samsung Growth Fund", min: 2000, rate: 4.8, company: "Samsung Electronics" },
+        { id: "fund_pepsi", name: "Pepsi Consumer Fund", min: 3000, rate: 5.5, company: "PepsiCo Inc." },
+        { id: "fund_dangote", name: "Dangote Industrial Fund", min: 5000, rate: 9.0, company: "Dangote Industries" },
+        { id: "fund_nestle", name: "Nestle Nutrition Fund", min: 4000, rate: 7.2, company: "Nestle S.A." }
       ];
 
       const fund = fundList.find(f => f.id === fundId);
@@ -2256,14 +2256,12 @@ function startServer() {
     }
   });
 
-  // Sandbox simulation: Fast forward custom investment days
-  app.post("/api/user/funds/fast-forward", async (req, res) => {
+  // Early cancel active investment (10% principal penalty, interest forfeited)
+  app.post("/api/user/funds/cancel", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const { investmentId, daysToOffset } = req.body;
+      const { investmentId } = req.body;
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
-
-      const offsetDays = Number(daysToOffset) || 1;
 
       if (serverDb) {
         const userRef = doc(serverDb, 'users', authHeader);
@@ -2289,39 +2287,47 @@ function startServer() {
           const inv = { ...activeFunds[invIndex] };
 
           if (inv.claimed) {
-            errorMsg = "This investment has already been settled and claimed";
+            errorMsg = "This investment has already been redeemed or canceled";
             return;
           }
 
-          const oldStartDate = new Date(inv.startDate);
-          const oldEndDate = new Date(inv.endDate);
+          const penalty = Math.round(Number(inv.amount) * 0.10);
+          const refund = Number(inv.amount) - penalty;
 
-          const timeOffsetMs = offsetDays * 24 * 60 * 60 * 1000;
-          const newStartDate = new Date(oldStartDate.getTime() - timeOffsetMs);
-          const newEndDate = new Date(oldEndDate.getTime() - timeOffsetMs);
-
-          inv.startDate = newStartDate.toISOString();
-          inv.endDate = newEndDate.toISOString();
-
-          const now = new Date();
-          if (now >= newEndDate) {
-            inv.matured = true;
-          }
-
+          inv.claimed = true;
+          // Mark as canceled
+          inv.canceled = true; 
+          inv.comment = `Early terminated. 10% penalty (₦${penalty}) applied.`;
           activeFunds[invIndex] = inv;
 
+          const balance = Number(userData.balance) || 0;
+          const newBalance = balance + refund;
+
           transaction.update(userRef, {
+            balance: newBalance,
             fundsInvestments: activeFunds
           });
 
-          finalProfile = { ...userData, fundsInvestments: activeFunds };
+          const txnId = `txn_fund_cancel_${Date.now()}`;
+          const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+          transaction.set(txnRef, {
+            id: txnId,
+            userId: authHeader,
+            amount: refund,
+            type: "claim",
+            status: "success",
+            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            details: `Early Terminated ${inv.fundName}: principal ₦${inv.amount.toLocaleString()} - 10% penalty (₦${penalty.toLocaleString()}). Refunded ₦${refund.toLocaleString()} and interest forfeited.`
+          });
+
+          finalProfile = { ...userData, balance: newBalance, fundsInvestments: activeFunds };
         });
 
         if (errorMsg) {
           return res.status(400).json({ error: errorMsg });
         }
 
-        return res.json({ message: `Successfully fast-forwarded time by ${offsetDays} days!`, user: finalProfile });
+        return res.json({ message: "Investment successfully terminated. 90% of principal credited to your wallet immediately.", user: finalProfile });
       } else {
         const db = loadDatabase();
         const idx = db.users.findIndex(u => u.id === authHeader);
@@ -2338,31 +2344,35 @@ function startServer() {
         const inv = activeFunds[invIndex];
 
         if (inv.claimed) {
-          return res.status(400).json({ error: "This investment has already been settled and claimed" });
+          return res.status(400).json({ error: "This investment has already been redeemed or canceled" });
         }
 
-        const oldStartDate = new Date(inv.startDate);
-        const oldEndDate = new Date(inv.endDate);
+        const penalty = Math.round(Number(inv.amount) * 0.10);
+        const refund = Number(inv.amount) - penalty;
 
-        const timeOffsetMs = offsetDays * 24 * 60 * 60 * 1000;
-        const newStartDate = new Date(oldStartDate.getTime() - timeOffsetMs);
-        const newEndDate = new Date(oldEndDate.getTime() - timeOffsetMs);
+        inv.claimed = true;
+        inv.canceled = true;
+        inv.comment = `Early terminated. 10% penalty (₦${penalty}) applied.`;
 
-        inv.startDate = newStartDate.toISOString();
-        inv.endDate = newEndDate.toISOString();
+        user.balance = (user.balance || 0) + refund;
 
-        const now = new Date();
-        if (now >= newEndDate) {
-          inv.matured = true;
-        }
+        const txnId = `txn_fund_cancel_${Date.now()}`;
+        user.transactions.unshift({
+          id: txnId,
+          amount: refund,
+          type: "claim",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Early Terminated ${inv.fundName}: principal ₦${inv.amount.toLocaleString()} - 10% penalty (₦${penalty.toLocaleString()}). Refunded ₦${refund.toLocaleString()} and interest forfeited.`
+        });
 
         saveDatabase(db);
         const { passwordHash, ...profile } = user;
-        return res.json({ message: `Successfully fast-forwarded time by ${offsetDays} days!`, user: profile });
+        return res.json({ message: "Investment successfully terminated. 90% of principal credited to your wallet immediately.", user: profile });
       }
     } catch (err: any) {
-      console.error("[Funds Fast Forward Error]", err);
-      res.status(500).json({ error: "Exception occurred during time simulation" });
+      console.error("[Funds Terminate/Cancel Error]", err);
+      res.status(500).json({ error: "Exception occurred during early termination" });
     }
   });
 
