@@ -10,7 +10,7 @@ export enum Screen {
   BankLinking = 'bank_linking',
   Dashboard = 'dashboard',
   Market = 'market',
-  Promotions = 'promotions',
+  Funds = 'funds',
   Portfolio = 'portfolio',
   Profile = 'profile',
   Fund = 'fund',
@@ -66,6 +66,21 @@ export interface TransactionRecord {
   details: string;
 }
 
+export interface FundInvestment {
+  id: string;
+  fundId: string;
+  fundName: string;
+  companyName: string;
+  amount: number;
+  days: number;
+  dailyRate: number;
+  totalInterest: number;
+  startDate: string;
+  endDate: string;
+  matured: boolean;
+  claimed: boolean;
+}
+
 export interface UserState {
   isLoggedIn: boolean;
   name: string;
@@ -90,6 +105,7 @@ export interface UserState {
   effectiveSizeToday?: number;
   teamSizeToday?: number;
   investments?: UserInvestment[];
+  fundsInvestments?: FundInvestment[];
   transactions?: TransactionRecord[];
   spinBalance?: number;
   currentReferrals?: number;

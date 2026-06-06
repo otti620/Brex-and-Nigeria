@@ -53,6 +53,7 @@ export interface DbUser {
   isAdmin?: boolean;
   firstDepositBonusAwarded?: boolean;
   investments: UserInvestment[];
+  fundsInvestments?: any[];
   transactions: TransactionRecord[];
   currentReferrals?: number;
   referralTier?: number;
@@ -392,6 +393,10 @@ export function loadDatabase(): { users: DbUser[] } {
       }
       if (u.notifications === undefined) {
         u.notifications = [];
+        changed = true;
+      }
+      if (u.fundsInvestments === undefined) {
+        u.fundsInvestments = [];
         changed = true;
       }
       if (changed) dirty = true;

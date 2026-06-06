@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import flyer1 from './src/assets/images/revenue_stream_flyer_1780385009267.png';
+import flyer2 from './src/assets/images/wealth_builder_flyer_1780385024026.png';
 import { FlyerPopup } from './components/FlyerPopup';
-import { BalanceCounter } from './components/BalanceCounter';
 import { LiveActivityBar } from './components/LiveActivityBar';
 import { TelegramModal } from './components/TelegramModal';
 import { Screen, UserState } from './types';
@@ -166,225 +167,27 @@ const App: React.FC = () => {
   const [selectedIntent, setSelectedIntent] = useState<string>('safe');
   const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
 
-  // Promotions / Game States
+  // Funds / Savings States
+  const [fundsTab, setFundsTab] = useState<'explore' | 'my_investments'>('explore');
+  const [selectedFund, setSelectedFund] = useState<any | null>(null);
+  const [fundInvestAmount, setFundInvestAmount] = useState<string>('');
+  const [fundInvestDays, setFundInvestDays] = useState<number>(14); // default 14 days
+  const [isAllocatingFund, setIsAllocatingFund] = useState<boolean>(false);
+
+  // Unused legacy promo states held solely to keep the obsolete/unused renderPromotions function compiling cleanly
   const [promoTab, setPromoTab] = useState<'spin' | 'bids' | 'offers' | 'deal'>('deal');
   const [spinWheelType, setSpinWheelType] = useState<'regular' | 'mega'>('regular');
   const [spinning, setSpinning] = useState(false);
   const [wheelRotation, setWheelRotation] = useState(0);
-  const [spinResultModal, setSpinResultModal] = useState<{ show: boolean, reward: number, label: string } | null>(null);
-
-  // Live Bids (Replacing Lottery Redesign)
+  const [spinResultModal, setSpinResultModal] = useState<any>(null);
   const [bidChoice, setBidChoice] = useState<'high' | 'low'>('high');
-  const [betStake, setBetStake] = useState<number>(200); // stake (₦100 to ₦50000)
+  const [betStake, setBetStake] = useState<number>(200);
   const [bidHistory, setBidHistory] = useState<any[]>([]);
   const [bidLoading, setBidLoading] = useState(false);
-  const [bidResultModal, setBidResultModal] = useState<{ show: boolean, won: boolean, result: number, choice: string, reward: number } | null>(null);
-
-  const fetchBidHistory = async () => {
-    if (!user) return;
-    try {
-      const res = await fetch("/api/user/bids/history", {
-        headers: {
-          "Authorization": user.uid
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setBidHistory(data.bids);
-        }
-      }
-    } catch (e) {
-      console.error("Error fetching bid history:", e);
-    }
-  };
-
-  // Web Audio API tick generator mimicking physical wheel stops/pegs
-  const playTickSound = () => {
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      
-      const win = window as any;
-      if (!win.__brexAudioCtx) {
-        win.__brexAudioCtx = new AudioCtx();
-      }
-      const ctx = win.__brexAudioCtx;
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
-
-      // High transient snap click
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'triangle';
-      osc1.frequency.setValueAtTime(1400, ctx.currentTime);
-      osc1.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.02);
-
-      gain1.gain.setValueAtTime(0.06, ctx.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.02);
-
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start();
-      osc1.stop(ctx.currentTime + 0.025);
-
-      // Lower body resonance wood click
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(280, ctx.currentTime);
-      osc2.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.035);
-
-      gain2.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.035);
-
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start();
-      osc2.stop(ctx.currentTime + 0.04);
-    } catch (e) {
-      console.warn("Tick audio error:", e);
-    }
-  };
-
-  // Scheduled ticks simulating precise physical angular deceleration
-  const startSpinTicks = () => {
-    let delay = 35; // fast initial speed (35ms between pegs)
-    let elapsed = 0;
-    const maxDuration = 4050;
-
-    const triggerNextTick = () => {
-      if (elapsed >= maxDuration) return;
-
-      playTickSound();
-
-      elapsed += delay;
-
-      // Easing/deceleration curve scaling
-      if (elapsed < 1200) {
-        delay += 4;
-      } else if (elapsed < 2400) {
-        delay += 11;
-      } else if (elapsed < 3400) {
-        delay = delay * 1.15;
-      } else {
-        delay = delay * 1.25;
-      }
-
-      if (delay > 550) delay = 550; // maximum interval cap
-
-      setTimeout(triggerNextTick, delay);
-    };
-
-    triggerNextTick();
-  };
-
-  const handleSpinWheel = async () => {
-    if (spinning || !user) return;
-    setSpinning(true);
-    showToast("Connecting live Brex Fortune server...");
-    
-    // reset wheel rotation first
-    setWheelRotation(0);
-    
-    try {
-      const res = await fetch("/api/user/spin-wheel", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": user.uid
-        }
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json();
-        showToast(errData.error || "Fortune spin failed");
-        setSpinning(false);
-        return;
-      }
-      
-      const data = await res.json();
-      
-      // Select wedge index from server response
-      const targetIndex = typeof data.targetIndex === 'number' ? data.targetIndex : 3;
-
-      const targetRotationAngle = 360 - (targetIndex * 45 + 22.5);
-      const spins = 6 * 360; // 6 full spins
-      const finalRotation = spins + targetRotationAngle;
-      
-      // Trigger rotation
-      setWheelRotation(finalRotation);
-
-      // Play continuous slowing mechanical ticks
-      startSpinTicks();
-      
-      // Wait for animation to finish
-      setTimeout(() => {
-        setSpinning(false);
-        setSpinResultModal({
-          show: true,
-          reward: data.reward,
-          label: data.rewardLabel
-        });
-        refreshProfile(); // refresh headers/wallet balances!
-      }, 4100);
-      
-    } catch (e) {
-      console.error(e);
-      showToast("Network dispatch failed. Re-syncing database.");
-      setSpinning(false);
-    }
-  };
-
-  const handlePlaceBid = async () => {
-    if (bidLoading || !user) return;
-    setBidLoading(true);
-    showToast("Transmitting bid to live market terminal...");
-    try {
-      const res = await fetch("/api/user/bids/place", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": user.uid
-        },
-        body: JSON.stringify({ choice: bidChoice, stake: betStake })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        showToast(errData.error || "Bid placement failed");
-        setBidLoading(false);
-        return;
-      }
-
-      const data = await res.json();
-      
-      // Simulate market volatility delay
-      setTimeout(() => {
-        setBidLoading(false);
-        setBidResultModal({
-          show: true,
-          won: data.won,
-          result: data.result,
-          choice: data.choice,
-          reward: data.reward
-        });
-        fetchBidHistory();
-        refreshProfile();
-      }, 2000);
-    } catch (e) {
-      console.error(e);
-      showToast("Network error. Checking market logs.");
-      setBidLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user && currentScreen === Screen.Promotions) {
-      fetchBidHistory();
-    }
-  }, [user, currentScreen]);
+  const [bidResultModal, setBidResultModal] = useState<any>(null);
+  const fetchBidHistory = () => {};
+  const handleSpinWheel = () => {};
+  const handlePlaceBid = () => {};
 
   // Auth states
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -1412,9 +1215,7 @@ const App: React.FC = () => {
         <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-[32px] p-6 relative overflow-hidden shadow-xl shadow-indigo-600/20">
           <p className="text-white/70 text-[10px] font-bold tracking-widest uppercase mb-1 font-mono">Available Balance</p>
           <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-3xl font-black text-white font-mono">
-              <BalanceCounter value={userData.balance} />
-            </span>
+            <span className="text-3xl font-black text-white font-mono">₦{userData.balance.toLocaleString()}</span>
             <div className="flex items-center gap-0.5 text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">
               <TrendingUp size={10} /> +14.5% Daily Interest
             </div>
@@ -1695,6 +1496,630 @@ const App: React.FC = () => {
             );
           })}
         </div>
+      </div>
+    );
+  };
+
+  const renderFunds = () => {
+    if (!userData) return null;
+
+    const SAVINGS_PRODUCTS = [
+      {
+        id: "fund_samsung",
+        name: "Samsung Growth Fund",
+        companyName: "Samsung Electronics",
+        minInvestment: 2000,
+        dailyRate: 1.2,
+        description: "Samsung Electronics is a global leader in semiconductor, mobile, and display engineering. This growth fund concentrates on Next-Gen logic foundry expansion and high-yield display technology scaling.",
+        avatar: "📱",
+        iconColor: "text-blue-600 bg-blue-50 border border-blue-100",
+        accentBorder: "border-blue-100 bg-blue-50/20",
+        badgeColor: "bg-blue-600 text-white",
+        companyTag: "KOSPI: 005930"
+      },
+      {
+        id: "fund_pepsi",
+        name: "Pepsi Consumer Fund",
+        companyName: "PepsiCo Inc.",
+        minInvestment: 3000,
+        dailyRate: 1.5,
+        description: "PepsiCo is a diversified global food and beverage force active across 200+ countries. This retail fund captures high fast-moving grocery yields and robust global bottling distribution margins.",
+        avatar: "🥤",
+        iconColor: "text-red-500 bg-red-50 border border-red-100",
+        accentBorder: "border-red-100 bg-red-50/20",
+        badgeColor: "bg-red-500 text-white",
+        companyTag: "NASDAQ: PEP"
+      },
+      {
+        id: "fund_dangote",
+        name: "Dangote Industrial Fund",
+        companyName: "Dangote Industries",
+        minInvestment: 5000,
+        dailyRate: 2.0,
+        description: "Dangote Industries is sub-Saharan Africa's premier industrial titan, dominating sectors including cement infrastructure products, oil & gas refining, logistics, and sugar processing.",
+        avatar: "🏗️",
+        iconColor: "text-emerald-600 bg-emerald-50 border border-emerald-100",
+        accentBorder: "border-emerald-100 bg-emerald-50/20",
+        badgeColor: "bg-emerald-600 text-white",
+        companyTag: "NGX: DANGCEM"
+      },
+      {
+        id: "fund_nestle",
+        name: "Nestle Nutrition Fund",
+        companyName: "Nestle S.A.",
+        minInvestment: 4000,
+        dailyRate: 1.8,
+        description: "Nestle is the global leading provider of nutritional foods, dairy drinks, and wellness formulas. This structural savings fund is targeted on emerging markets food processing efficiency.",
+        avatar: "🍫",
+        iconColor: "text-amber-600 bg-amber-50 border border-amber-100",
+        accentBorder: "border-amber-100 bg-amber-50/20",
+        badgeColor: "bg-amber-600 text-white",
+        companyTag: "SIX: NESN"
+      }
+    ];
+
+    const activePlacements = userData.fundsInvestments || [];
+    const ongoingPlacements = activePlacements.filter(p => !p.claimed);
+
+    const handleAllocateFund = async () => {
+      if (!selectedFund) return;
+      const amount = Number(fundInvestAmount);
+      if (isNaN(amount) || amount <= 0) {
+        showToast("Please specify a valid deposit amount.");
+        return;
+      }
+      if (amount < selectedFund.minInvestment) {
+        showToast(`Minimum deposit required is ₦${selectedFund.minInvestment.toLocaleString()}`);
+        return;
+      }
+      if (userData.balance < amount) {
+        showToast("Insufficient balance. Head over to the Wallet tab to recharge.");
+        return;
+      }
+
+      setIsAllocatingFund(true);
+      try {
+        const response = await fetch("/api/user/funds/invest", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": userData.id || userData.phoneNumber || ""
+          },
+          body: JSON.stringify({
+            fundId: selectedFund.id,
+            amount: amount,
+            days: fundInvestDays
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          showToast(`Successfully invested ₦${amount.toLocaleString()} into ${selectedFund.name}!`);
+          setSelectedFund(null);
+          setFundInvestAmount('');
+          setFundInvestDays(14);
+          refreshProfile();
+        } else {
+          showToast(data.error || "Allocation failed. Please try again.");
+        }
+      } catch (err) {
+        showToast("Network exception occurred.");
+      } finally {
+        setIsAllocatingFund(false);
+      }
+    };
+
+    const handleClaimFundMaturity = async (invId: string) => {
+      try {
+        const response = await fetch("/api/user/funds/claim", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": userData.id || userData.phoneNumber || ""
+          },
+          body: JSON.stringify({ investmentId: invId })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          showToast("Matured capital and accrued interest successfully credited to your main balance!");
+          refreshProfile();
+        } else {
+          showToast(data.error || "Claim settlement failed.");
+        }
+      } catch (err) {
+        showToast("Network exception during settlement checkout.");
+      }
+    };
+
+    const handleFastForwardFund = async (invId: string, daysOffset: number) => {
+      try {
+        const response = await fetch("/api/user/funds/fast-forward", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": userData.id || userData.phoneNumber || ""
+          },
+          body: JSON.stringify({ investmentId: invId, daysToOffset: daysOffset })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          showToast(`Time offset by +${daysOffset} days simulated successfully!`);
+          refreshProfile();
+        } else {
+          showToast(data.error || "Fast forward simulation failed.");
+        }
+      } catch (err) {
+        showToast("Simulation exception occurred.");
+      }
+    };
+
+    // Calculate dynamic growth yield for previewing in invest modal
+    const parsedAmount = Number(fundInvestAmount) || 0;
+    const dailyInterestPreview = Math.round(parsedAmount * ((selectedFund?.dailyRate || 0) / 100));
+    const totalAccruedYield = dailyInterestPreview * fundInvestDays;
+    const estimatedTotalMaturityPayout = parsedAmount + totalAccruedYield;
+
+    const calculateTimeRemainingDisplay = (endDateStr: string, isMaturedState: boolean) => {
+      if (isMaturedState) return "Matured & Ready";
+      const now = new Date().getTime();
+      const end = new Date(endDateStr).getTime();
+      const diff = end - now;
+
+      if (diff <= 0) return "Matured & Ready";
+
+      const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+      const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+      const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+      const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+
+      if (days > 0) {
+        return `${days}d ${hours}h ${minutes}m left`;
+      }
+      return `${hours}h ${minutes}m ${seconds}s left`;
+    };
+
+    return (
+      <div className="px-5 pt-7 pb-24 flex flex-col gap-6 bg-[#FAF9F6] min-h-screen font-sans">
+        
+        {/* Modern Swiss-pair Header */}
+        <div className="flex flex-col gap-1.5 pt-1">
+          <div className="flex items-center gap-2">
+            <div className="bg-indigo-600 text-white rounded-xl p-2.5 shadow-sm">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">Funds Vault</h2>
+              <p className="text-[10px] uppercase font-black tracking-widest text-[#64748B] font-mono">Realtime Term Placements</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Balance Status overview bar */}
+        <div className="bg-white border border-slate-100 p-5 rounded-[24px] shadow-sm flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider font-mono">Available Wallet Liquidity</span>
+            <span className="text-xl font-black text-slate-900 tracking-tight font-mono">₦{userData.balance.toLocaleString()} NGN</span>
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-[9px] font-black bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-100">
+              ● SECURED ASSETS
+            </span>
+          </div>
+        </div>
+
+        {/* Premium Tab Selection Pill Toggle */}
+        <div className="flex bg-slate-100 rounded-2xl p-1.5 border border-slate-200/40">
+          <button
+            onClick={() => setFundsTab('explore')}
+            className={`flex-1 py-3 text-center rounded-[12px] font-black text-xs uppercase tracking-wider transition-all cursor-pointer ${
+              fundsTab === 'explore'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200/10'
+                : 'text-[#64748B] hover:text-slate-900'
+            }`}
+          >
+            Explore Catalog
+          </button>
+          <button
+            onClick={() => setFundsTab('my_investments')}
+            className={`flex-1 py-3 text-center rounded-[12px] font-black text-xs uppercase tracking-wider transition-all cursor-pointer relative ${
+              fundsTab === 'my_investments'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200/10'
+                : 'text-[#64748B] hover:text-slate-900'
+            }`}
+          >
+            My Registries
+            {ongoingPlacements.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-indigo-600 text-white font-mono text-[9px] font-black h-5 w-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-pulse">
+                {ongoingPlacements.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Dynamic Display Screens */}
+        {fundsTab === 'explore' && (
+          <div className="flex flex-col gap-4">
+            
+            {/* Catalog Info Banner */}
+            <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-[28px] relative overflow-hidden shadow-md shadow-indigo-950/10">
+              <div className="absolute right-0 bottom-0 opacity-10 font-black text-8xl pointer-events-none select-none font-mono">
+                Term
+              </div>
+              <span className="text-[8px] font-black tracking-widest text-indigo-300 uppercase block mb-1 font-mono">Institutional Securities</span>
+              <h3 className="text-lg font-black tracking-tight leading-none mb-2">High-Yield Fixed Term Deposits</h3>
+              <p className="text-[11px] text-slate-300 leading-normal font-sans">
+                Commit funds to institutional corporate portfolios secure from industrial market volatility with fixed daily interest returns returned at maturity.
+              </p>
+            </div>
+
+            {/* List Array products */}
+            <div className="flex flex-col gap-4">
+              {SAVINGS_PRODUCTS.map((prod) => (
+                <div
+                  key={prod.id}
+                  className="bg-white border border-slate-100 rounded-[24px] p-5.5 hover:border-slate-300 transition-all shadow-sm shadow-slate-100 flex flex-col gap-4.5"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex gap-3">
+                      <span className={`text-2xl h-12 w-12 rounded-xl flex items-center justify-center ${prod.iconColor}`}>
+                        {prod.avatar}
+                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-black text-slate-400 font-mono tracking-wider block leading-none mb-1">{prod.companyTag}</span>
+                        <h4 className="text-base font-black text-slate-950 tracking-tight leading-none">{prod.name}</h4>
+                        <span className="text-xs text-slate-500 font-bold leading-none mt-1">{prod.companyName}</span>
+                      </div>
+                    </div>
+                    <span className="text-sm font-mono font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                      +{prod.dailyRate}% Daily
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 font-bold leading-normal border-t border-slate-50 pt-3.5 italic">
+                    {prod.description}
+                  </p>
+
+                  <div className="border-t border-slate-50 pt-4 flex items-center justify-between gap-3 bg-slate-50/40 p-3 rounded-2xl">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-black text-slate-400 uppercase font-mono">Min Deposit Limit</span>
+                      <span className="text-sm font-mono font-black text-slate-800">₦{prod.minInvestment.toLocaleString()}</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[9px] font-black text-slate-400 uppercase font-mono">Locked Duration</span>
+                      <span className="text-sm font-mono font-black text-slate-800">7 - 30 Days</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedFund(prod);
+                        setFundInvestAmount(prod.minInvestment.toString());
+                        setFundInvestDays(14); // resetting
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-wider px-4.5 py-2.5 rounded-lg transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1"
+                    >
+                      Invest
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {fundsTab === 'my_investments' && (
+          <div className="flex flex-col gap-4">
+            {activePlacements.length === 0 ? (
+              <div className="text-center py-16 bg-white border border-slate-100 rounded-[28px] p-8 flex flex-col items-center justify-center gap-3">
+                <span className="text-4xl">💼</span>
+                <h4 className="text-sm font-black text-slate-900 tracking-tight uppercase">No Term Allocations</h4>
+                <p className="text-xs text-[#64748B] max-w-xs leading-relaxed">
+                  You have not subscribed to any treasury products. Venture into the Explore catalog to kickstart compound savings.
+                </p>
+                <button
+                  onClick={() => setFundsTab('explore')}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-wider px-5 py-3 rounded-xl shadow-md cursor-pointer transition-all active:scale-95 mt-2"
+                >
+                  Allocate First Savings
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                
+                {/* Active placements list summary */}
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Invested Portfolios Tracker</span>
+                  <span className="text-[10px] font-bold text-slate-400 font-mono uppercase">{activePlacements.length} Registries logged</span>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  {activePlacements.map((inv) => {
+                    const isMatured = inv.matured || new Date() >= new Date(inv.endDate);
+                    const isClaimedPaid = inv.claimed;
+
+                    return (
+                      <div
+                        key={inv.id}
+                        className={`bg-white border rounded-[24px] p-5.5 shadow-sm flex flex-col gap-4 transition-all relative ${
+                          isClaimedPaid 
+                            ? 'border-slate-100 opacity-65 bg-slate-50/50' 
+                            : isMatured 
+                              ? 'border-emerald-500 ring-1 ring-emerald-500/10' 
+                              : 'border-amber-200'
+                        }`}
+                      >
+                        
+                        {/* Status Label badge */}
+                        <div className="absolute top-4.5 right-4.5">
+                          {isClaimedPaid ? (
+                            <span className="font-mono text-[8px] font-black uppercase text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-md">
+                              ✓ REFUNDED & RETRIEVED
+                            </span>
+                          ) : isMatured ? (
+                            <span className="font-mono text-[8px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md animate-pulse">
+                              ● MATURED READY
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[8px] font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                              ⏳ LOCKED ACCRUING
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] uppercase font-black tracking-widest text-[#64748B] block mb-0.5 font-mono">{inv.companyName}</span>
+                          <h4 className="text-base font-black text-slate-950 tracking-tight leading-none">{inv.fundName}</h4>
+                        </div>
+
+                        {/* Breakdown Receipt UI */}
+                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-400 font-bold uppercase text-[10px]">Staked Principal:</span>
+                            <span className="font-mono font-black text-slate-900">₦{inv.amount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-400 font-bold uppercase text-[10px]">Daily Compound ({inv.dailyRate}%):</span>
+                            <span className="font-mono font-extrabold text-[#64748B]">₦{Math.round(inv.amount * (inv.dailyRate / 100)).toLocaleString()} / day</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-400 font-bold uppercase text-[10px]">Contract Duration:</span>
+                            <span className="font-sans font-extrabold text-slate-800">{inv.days} Days Term</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-emerald-600 font-bold uppercase text-[10px]">Est. Maturity Interest:</span>
+                            <span className="font-mono font-black text-emerald-600">+₦{inv.totalInterest.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs border-t border-slate-50 pt-2 bg-slate-50/50 p-2 rounded-xl">
+                            <span className="text-slate-900 font-black uppercase text-[9px]">Maturity Payout:</span>
+                            <span className="font-mono font-black text-[13px] text-indigo-700">₦{(inv.amount + inv.totalInterest).toLocaleString()}</span>
+                          </div>
+                        </div>
+
+                        {/* Countdown or claim buttons */}
+                        <div className="border-t border-slate-50 pt-3 flex flex-col gap-2">
+                          <div className="flex justify-between items-center text-[10px] font-mono font-black uppercase text-slate-400">
+                            <span>MATURATION PROGRESSBAR</span>
+                            <span className="text-slate-800">
+                              {calculateTimeRemainingDisplay(inv.endDate, isMatured)}
+                            </span>
+                          </div>
+
+                          {/* Action rows */}
+                          <div className="flex gap-2.5 mt-2">
+                            {!isClaimedPaid && isMatured && (
+                              <button
+                                onClick={() => handleClaimFundMaturity(inv.id)}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md cursor-pointer text-center active:scale-95"
+                              >
+                                Claim ₦{(inv.amount + inv.totalInterest).toLocaleString()} Returns
+                              </button>
+                            )}
+
+                            {!isClaimedPaid && !isMatured && (
+                              <div className="flex flex-col gap-2.5 w-full bg-slate-50 border border-slate-100 p-3.5 rounded-[18px]">
+                                <span className="text-[8px] font-black text-[#64748B] font-mono tracking-widest uppercase">TESTING SANDBOX: Sim TIME FAST-FORWARD</span>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleFastForwardFund(inv.id, 3)}
+                                    className="flex-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-900 font-black text-[9px] uppercase tracking-wider py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
+                                  >
+                                    +3 Days Offset
+                                  </button>
+                                  <button
+                                    onClick={() => handleFastForwardFund(inv.id, 7)}
+                                    className="flex-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-900 font-black text-[9px] uppercase tracking-wider py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
+                                  >
+                                    +7 Days Offset
+                                  </button>
+                                  <button
+                                    onClick={() => handleFastForwardFund(inv.id, inv.days)}
+                                    className="flex-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 font-black text-[9px] uppercase tracking-wider py-1.5 rounded-lg transition-all shadow-sm cursor-pointer"
+                                  >
+                                    Mature Now
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {isClaimedPaid && (
+                              <div className="w-full text-center py-2 bg-slate-100 border border-slate-200 border-dashed rounded-xl select-none">
+                                <span className="text-[9px] font-black font-mono text-slate-500 uppercase tracking-widest">
+                                  ✓ REDEEMED TRANSACTION LOGGED TO Available WALLET
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dynamic Interactive Investment allocating sheet modal */}
+        {selectedFund && (
+          <div className="fixed inset-0 bg-slate-950/60 flex items-end justify-center z-[240] select-none p-0">
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              className="bg-white rounded-t-[36px] w-full max-w-md p-6 flex flex-col gap-5 border-t border-slate-200 shadow-2xl overflow-y-auto max-h-[90vh] pb-8 relative"
+            >
+              {/* Close Button top edge */}
+              <button
+                onClick={() => setSelectedFund(null)}
+                className="absolute top-5 right-5 h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-black cursor-pointer transition-all active:scale-90 border border-slate-200/30"
+              >
+                ✕
+              </button>
+
+              <div>
+                <span className="text-[10px] font-mono font-black uppercase text-indigo-600 tracking-wider">Configure Term Placements</span>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight leading-none mt-1">Allocate Capital</h3>
+                <span className="text-xs text-slate-400 font-bold block mt-1">{selectedFund.name} ({selectedFund.companyName})</span>
+              </div>
+
+              {/* Company Info Box */}
+              <div className="bg-slate-50 border border-slate-150 p-4.5 rounded-[20px]">
+                <p className="text-[11px] text-slate-500 font-bold justify-center leading-normal italic">
+                  {selectedFund.description}
+                </p>
+              </div>
+
+              {/* Hold Duration Days Selection */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">Placement Lock Period</span>
+                  <span className="text-sm font-mono font-black text-indigo-600">{fundInvestDays} Days Lock</span>
+                </div>
+                
+                {/* Horizontal range controls */}
+                <div className="flex items-center gap-3 bg-slate-150 p-1.5 rounded-xl border border-slate-200/20">
+                  <button
+                    onClick={() => setFundInvestDays(prev => Math.max(7, prev - 1))}
+                    className="h-9 w-9 bg-white border border-slate-200 text-slate-800 rounded-lg font-black flex items-center justify-center text-sm cursor-pointer hover:bg-slate-50"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="range"
+                    min="7"
+                    max="30"
+                    value={fundInvestDays}
+                    onChange={(e) => setFundInvestDays(Number(e.target.value))}
+                    className="flex-grow accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                  />
+                  <button
+                    onClick={() => setFundInvestDays(prev => Math.min(30, prev + 1))}
+                    className="h-9 w-9 bg-white border border-slate-200 text-slate-800 rounded-lg font-black flex items-center justify-center text-sm cursor-pointer hover:bg-slate-50"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="flex justify-between px-1 text-[8px] font-black text-slate-400 font-mono">
+                  <span>MIN: 7 DAYS</span>
+                  <span>PREMIUM OUTCOMES ON MAX CAPS</span>
+                  <span>MAX: 30 DAYS</span>
+                </div>
+              </div>
+
+              {/* Amount allocation form */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">Investment Amount (₦)</span>
+                  <span className="text-[10px] font-bold text-slate-400">Min: ₦{selectedFund.minInvestment.toLocaleString()}</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-4.5 top-1/2 -translate-y-1/2 font-mono font-black text-slate-400 text-lg">₦</span>
+                  <input
+                    type="number"
+                    value={fundInvestAmount}
+                    onChange={(e) => setFundInvestAmount(e.target.value)}
+                    placeholder={selectedFund.minInvestment.toString()}
+                    className="w-full pl-8.5 pr-4 py-4.5 bg-slate-100 border border-slate-200 rounded-2xl outline-none text-slate-900 font-black font-mono tracking-tight text-base"
+                  />
+                </div>
+
+                {/* Percentage Quick-set selectors */}
+                <div className="grid grid-cols-4 gap-2 mt-1">
+                  {[0.25, 0.50, 0.75, 1.0].map((percent) => (
+                    <button
+                      key={percent}
+                      onClick={() => {
+                        const calculated = Math.max(
+                          selectedFund.minInvestment, 
+                          Math.round(userData.balance * percent)
+                        );
+                        setFundInvestAmount(calculated.toString());
+                      }}
+                      className="py-2.5 rounded-lg border border-slate-200 font-black text-[10px] uppercase text-[#64748B] hover:bg-slate-100 transition-all cursor-pointer bg-white"
+                    >
+                      {percent * 100}% Wallet
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Earnings slip receipt simulation panel */}
+              <div className="bg-slate-900 text-white rounded-[24px] p-5 flex flex-col gap-3 font-mono border border-indigo-950/20 shadow-md">
+                <span className="text-[8px] font-black text-indigo-300 uppercase tracking-widest text-center border-b border-indigo-950/40 pb-2.5">
+                  ESTIMATION LEDGER BREAKDOWN
+                </span>
+                
+                <div className="flex justify-between items-center text-[10.5px]">
+                  <span className="text-slate-400 uppercase font-black">Capital Allocation:</span>
+                  <span>₦{parsedAmount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-[10.5px]">
+                  <span className="text-slate-400 uppercase font-black">Daily Interest ({selectedFund.dailyRate}%):</span>
+                  <span className="text-emerald-400">+₦{dailyInterestPreview.toLocaleString()} / daily</span>
+                </div>
+                <div className="flex justify-between items-center text-[10.5px]">
+                  <span className="text-slate-400 uppercase font-black">Contract Lockterm:</span>
+                  <span>{fundInvestDays} Days Contract</span>
+                </div>
+                
+                <div className="flex justify-between items-baseline text-xs border-t border-indigo-950/40 pt-3.5 mt-1.5 font-sans">
+                  <span className="text-indigo-200 font-black uppercase text-[9.5px]">Total Accrued Interest:</span>
+                  <span className="font-mono font-black text-[#10B981] text-base">+₦{totalAccruedYield.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-baseline text-sm border-t border-dashed border-indigo-950/40 pt-3 font-sans">
+                  <span className="text-white font-black uppercase text-[10px]">Net Payout Maturity:</span>
+                  <span className="font-mono font-black text-indigo-300 text-lg">₦{estimatedTotalMaturityPayout.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Form trigger buttons */}
+              <div className="flex gap-3.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedFund(null)}
+                  className="flex-1 py-4.5 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-800 font-black text-xs uppercase tracking-wider text-center cursor-pointer transition-all active:scale-95"
+                >
+                  Go Back
+                </button>
+                <button
+                  type="button"
+                  disabled={isAllocatingFund || parsedAmount < selectedFund.minInvestment || userData.balance < parsedAmount}
+                  onClick={handleAllocateFund}
+                  className={`flex-2 py-4.5 text-white font-black text-xs uppercase tracking-wider text-center rounded-2xl transition-all shadow-lg active:scale-95 ${
+                    isAllocatingFund || parsedAmount < selectedFund.minInvestment || userData.balance < parsedAmount
+                      ? 'bg-slate-300 cursor-not-allowed shadow-none'
+                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/10 cursor-pointer'
+                  }`}
+                >
+                  {isAllocatingFund ? "Contracting..." : "Approve & Stake"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
       </div>
     );
   };
@@ -2226,105 +2651,13 @@ const App: React.FC = () => {
 
         {/* Tab CONTENT 3: Special Banner Flyer offers */}
         {promoTab === 'offers' && (
-          <div className="flex flex-col gap-6 animate-in fade-in duration-300">
-            {/* Brex Employee Deal Flyer */}
-            <div className="bg-gradient-to-b from-[#f8fafc] to-[#eef2f6] rounded-[40px] p-8 border border-slate-200/60 shadow-xl relative overflow-hidden flex flex-col gap-6">
-              {/* Outer Subtle Radial Background Glow */}
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-blue-50/40 via-transparent to-transparent pointer-events-none" />
-
-              {/* Logo Header */}
-              <div className="flex items-center justify-center gap-3 pt-4 relative z-10">
-                <svg className="w-10 h-10 shrink-0 shadow-sm rounded-2xl" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <g clipPath="url(#clipLogo)">
-                    <rect width="120" height="120" rx="30" fill="url(#logoBgGrad)" />
-                    {/* Dark overlapping blue swooshes matching the uploaded image */}
-                    <path d="M-10 110 C 35 48, 85 35, 130 10 L 130 130 H -10 Z" fill="url(#logoWaveGrad)" />
-                    <path d="M-10 95 C 40 38, 90 25, 130 3 C 85 22, 35 35, -10 95" fill="white" fillOpacity="0.85" />
-                  </g>
-                  <defs>
-                    <clipPath id="clipLogo">
-                      <rect width="120" height="120" rx="30" fill="white" />
-                    </clipPath>
-                    <linearGradient id="logoBgGrad" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stopColor="#0284c7" />
-                      <stop offset="100%" stopColor="#2563eb" />
-                    </linearGradient>
-                    <linearGradient id="logoWaveGrad" x1="0" y1="120" x2="120" y2="0" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stopColor="#2563eb" />
-                      <stop offset="100%" stopColor="#60a5fa" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <span className="text-[34px] font-extrabold text-[#0f172a] tracking-tight font-sans">Brex</span>
-              </div>
-
-              {/* Main Titles */}
-              <div className="text-center flex flex-col gap-2 relative z-10">
-                <h3 className="text-[28px] font-black text-[#1e293b] tracking-tight leading-tight">
-                  Brex Employee Deal
-                </h3>
-                
-                {/* Thin fade-out divider with centered royal blue text */}
-                <div className="relative flex py-2 items-center justify-center w-full max-w-xs mx-auto">
-                  <div className="flex-grow border-t border-slate-300/60"></div>
-                  <span className="flex-shrink mx-4 text-blue-600 font-extrabold text-[12px] tracking-wide uppercase font-sans">
-                    Refer & Earn More!
-                  </span>
-                  <div className="flex-grow border-t border-slate-300/60"></div>
-                </div>
-              </div>
-
-              {/* Milestone Cards Tracker Grid (derived from real user statistics if logged in) */}
-              <div className="flex flex-col gap-4.5 relative z-10 w-full">
-                {(() => {
-                  const activeRefs = userData?.rechargeMembers || 0;
-                  const milestonesList = [
-                    { target: 10, payout: 30000 },
-                    { target: 20, payout: 65000 },
-                    { target: 32, payout: 100000 }
-                  ];
-
-                  return milestonesList.map((m) => {
-                    const pct = Math.min((activeRefs / m.target) * 100, 100);
-                    return (
-                      <div key={m.target} className="bg-white border border-slate-100 rounded-[24px] p-5.5 shadow-md flex flex-col gap-3.5 transition-transform hover:scale-[1.01] duration-300">
-                        <div className="flex justify-between items-center px-1">
-                          <span className="font-extrabold text-[#111827] text-[16px] font-sans">
-                            {m.target} Referrals
-                          </span>
-                          <span className="font-black text-[#2563eb] text-[16px] font-sans">
-                            ₦{m.payout.toLocaleString()} <span className="text-[10px] text-slate-400 font-bold font-mono">/ Month</span>
-                          </span>
-                        </div>
-                        
-                        {/* iOS / modern stylized progress bar */}
-                        <div className="h-[28px] bg-[#eef2f6] rounded-[10px] w-full relative overflow-hidden flex items-center border border-slate-100 shadow-inner">
-                          {pct > 0 ? (
-                            <div 
-                              className="h-full bg-gradient-to-r from-[#1d4ed8] to-[#3b82f6] rounded-[10px] flex items-center px-3 text-[10px] font-black font-mono text-white select-none transition-all duration-700 shadow-sm"
-                              style={{ width: `${Math.max(pct, 15)}%` }}
-                            >
-                              {activeRefs} / {m.target}
-                            </div>
-                          ) : (
-                            <div className="pl-3.5 text-[10px] font-black font-mono text-slate-400 select-none">
-                              0 / {m.target}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-
-              {/* Static Motivational Footer matching Flyer */}
-              <div className="text-center pt-4 border-t border-slate-200/50 pb-2">
-                <p className="text-[13px] font-bold text-slate-600 tracking-wide font-sans italic selection:bg-blue-100">
-                  Track Progress. Boost Earnings.
-                </p>
-              </div>
+          <div className="flex flex-col gap-6">
+            <div className="text-center bg-white border border-slate-100 p-4 rounded-3xl">
+              <h3 className="text-sm font-black text-slate-800 tracking-tight">Active VIP Portfolio Streams</h3>
+              <p className="text-[10px] text-slate-400 font-bold font-mono uppercase tracking-widest mt-0.5">Official Promos & Circular Bulletins</p>
             </div>
+            <img src={flyer1} alt="Revenue Stream Plan" className="rounded-[32px] shadow-lg w-full border border-slate-100" />
+            <img src={flyer2} alt="Wealth Builder Plan" className="rounded-[32px] shadow-lg w-full border border-slate-100" />
           </div>
         )}
 
@@ -2843,7 +3176,7 @@ const App: React.FC = () => {
 
                 <div className="bg-white border border-slate-200 p-6 rounded-[32px] flex justify-between items-center shadow-sm">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono">Available Balance</p>
-                   <p className="text-xl font-black text-blue-600 font-mono italic"><BalanceCounter value={userData.balance} /></p>
+                   <p className="text-xl font-black text-blue-600 font-mono italic">₦{userData.balance.toLocaleString()}</p>
                 </div>
 
                 {userData.spinBalance && userData.spinBalance > 0 ? (
@@ -3232,7 +3565,7 @@ const App: React.FC = () => {
               case Screen.Admin: return <AdminPanel onBack={() => navigate(Screen.Profile)} onRefreshUser={refreshProfile} />;
               case Screen.Dashboard: return renderDashboard();
               case Screen.Market: return renderMarket();
-              case Screen.Promotions: return renderPromotions();
+              case Screen.Funds: return renderFunds();
               case Screen.Portfolio: return renderPortfolio();
               case Screen.Profile: return renderProfile();
               case Screen.Fund: return renderFund();

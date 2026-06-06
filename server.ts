@@ -1750,133 +1750,11 @@ function startServer() {
   });
 
   // Query real-time referral list
-  app.get("/api/user/team", async (req, res) => {
+  app.get("/api/user/team", (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
 
-      if (serverDb) {
-        // --- REAL FIRESTORE MODE (Production) ---
-        // 1. Fetch all users from Firestore
-        const usersCol = collection(serverDb, "users");
-        const usersSnap = await getDocs(usersCol);
-        const allUsers = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
-
-        const currentUser = allUsers.find(u => u.id === authHeader);
-        if (!currentUser) return res.status(404).json({ error: "User not found" });
-
-        const ourCode = (currentUser.invitationCode || "").toUpperCase();
-
-        // Level 1 downlines: referredBy matches ourCode OR referrerUid matches authHeader
-        const lvl1Users = allUsers.filter(u => 
-          (u.referredBy && u.referredBy.toUpperCase() === ourCode) ||
-          (u.referrerUid && u.referrerUid === authHeader)
-        );
-        const lvl1Codes = lvl1Users.map(u => (u.invitationCode || "").toUpperCase());
-        const lvl1Ids = lvl1Users.map(u => u.id);
-
-        // Level 2 downlines
-        const lvl2Users = lvl1Codes.length > 0
-          ? allUsers.filter(u => 
-              !lvl1Ids.includes(u.id) && u.id !== authHeader &&
-              ((u.referredBy && lvl1Codes.includes(u.referredBy.toUpperCase())) ||
-               (u.referrerUid && lvl1Ids.includes(u.referrerUid)))
-            )
-          : [];
-        const lvl2Codes = lvl2Users.map(u => (u.invitationCode || "").toUpperCase());
-        const lvl2Ids = lvl2Users.map(u => u.id);
-
-        // Level 3 downlines
-        const lvl3Users = lvl2Codes.length > 0
-          ? allUsers.filter(u => 
-              !lvl1Ids.includes(u.id) && !lvl2Ids.includes(u.id) && u.id !== authHeader &&
-              ((u.referredBy && lvl2Codes.includes(u.referredBy.toUpperCase())) ||
-               (u.referrerUid && lvl2Ids.includes(u.referrerUid)))
-            )
-          : [];
-
-        // Build a list of all downline user objects to fetch their transactions
-        const allDownlines = [
-          ...lvl1Users.map(u => ({ u, lvl: 1 })),
-          ...lvl2Users.map(u => ({ u, lvl: 2 })),
-          ...lvl3Users.map(u => ({ u, lvl: 3 }))
-        ];
-
-        // Format downline members asynchronously
-        const members = await Promise.all(allDownlines.map(async ({ u, lvl }) => {
-          const cleanPhone = u.phoneNumber || "";
-          let phoneObfuscated = "Phone hidden";
-          if (cleanPhone.length >= 7) {
-            phoneObfuscated = cleanPhone.slice(0, 4) + "****" + cleanPhone.slice(-3);
-          }
-
-          // Total joined active plans cost
-          const investedAmt = (u.investments || []).reduce((sum: number, inv: any) => sum + (inv.joined ? (Number(inv.cost) || 0) : 0), 0);
-          
-          let totalRechargedFromTxns = 0;
-          let totalWithdrawals = 0;
-          let regDate = "";
-
-          try {
-            const txnsCol = collection(serverDb, `users/${u.id}/transactions`);
-            const tx = await getDocs(txnsCol);
-            const txDocs = tx.docs.map(doc => doc.data() as any);
-            
-            totalRechargedFromTxns = txDocs
-              .filter(t => t.type === "recharge" && t.status === "success")
-              .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
-
-            totalWithdrawals = txDocs
-              .filter(t => t.type === "withdraw" && t.status === "success")
-              .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
-
-            // Find setup welcome bonus transaction or any transaction for date
-            const welcomeTx = txDocs.find(t => t.details?.toLowerCase().includes("setup") || t.details?.toLowerCase().includes("welcome"));
-            if (welcomeTx && welcomeTx.date) {
-              regDate = welcomeTx.date;
-            } else if (txDocs.length > 0) {
-              // Get the oldest transaction date
-              txDocs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-              regDate = txDocs[0].date;
-            }
-          } catch (err) {
-            console.warn(`Failed to fetch transactions subcollection for downline ${u.id}:`, err);
-          }
-
-          const finalRecharge = Math.max(investedAmt, totalRechargedFromTxns, u.balance > 1000 ? u.balance : 0);
-
-          if (!regDate) {
-            // Fallback to timestamp ID parse or standard date
-            if (u.id.startsWith("user_") && !isNaN(Number(u.id.slice(5)))) {
-              regDate = new Date(Number(u.id.slice(5))).toISOString().slice(0, 19).replace('T', ' ');
-            } else {
-              regDate = "2026-05-30 12:00:00";
-            }
-          }
-
-          return {
-            phone: phoneObfuscated,
-            recharge: finalRecharge,
-            withdraw: totalWithdrawals,
-            date: regDate,
-            lvl
-          };
-        }));
-
-        const rechargeMembersCount = allDownlines.filter(({ u }) => {
-          const hasJoinedPlans = u.investments && u.investments.some((p: any) => p.joined);
-          const hasBalance = (u.balance || 0) > 2000;
-          return hasJoinedPlans || hasBalance;
-        }).length;
-
-        return res.json({
-          teamSize: members.length,
-          rechargeMembers: rechargeMembersCount,
-          members
-        });
-      }
-
-      // ---fallback local database.json ---
       const db = loadDatabase();
       const user = db.users.find(u => u.id === authHeader);
       if (!user) return res.status(404).json({ error: "User not found" });
@@ -1945,7 +1823,6 @@ function startServer() {
         members
       });
     } catch (err: any) {
-      console.error("Team query failed:", err);
       res.status(500).json({ error: "Failed to pull referral logs" });
     }
   });
@@ -2096,6 +1973,396 @@ function startServer() {
     } catch (err: any) {
       console.error(err);
       res.status(500).json({ error: "Failed to inject simulated downline" });
+    }
+  });
+
+  // Invest in a fund savings product
+  app.post("/api/user/funds/invest", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const { fundId, amount, days } = req.body;
+      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
+
+      const investAmount = Number(amount);
+      const investDays = Number(days);
+
+      if (isNaN(investAmount) || investAmount <= 0) {
+        return res.status(400).json({ error: "Invalid investment amount" });
+      }
+      if (isNaN(investDays) || investDays < 7 || investDays > 30) {
+        return res.status(400).json({ error: "Duration must be between 7 and 30 days" });
+      }
+
+      const fundList = [
+        { id: "fund_samsung", name: "Samsung Growth Fund", min: 2000, rate: 1.2, company: "Samsung Electronics" },
+        { id: "fund_pepsi", name: "Pepsi Consumer Fund", min: 3000, rate: 1.5, company: "PepsiCo Inc." },
+        { id: "fund_dangote", name: "Dangote Industrial Fund", min: 5000, rate: 2.0, company: "Dangote Industries" },
+        { id: "fund_nestle", name: "Nestle Nutrition Fund", min: 4000, rate: 1.8, company: "Nestle S.A." }
+      ];
+
+      const fund = fundList.find(f => f.id === fundId);
+      if (!fund) {
+        return res.status(400).json({ error: "Selected fund does not exist" });
+      }
+
+      if (investAmount < fund.min) {
+        return res.status(400).json({ error: `Minimum investment for ${fund.name} is ₦${fund.min.toLocaleString()}` });
+      }
+
+      const dailyRate = fund.rate;
+      const totalInterest = Math.round(investAmount * (dailyRate / 100) * investDays);
+
+      if (serverDb) {
+        const userRef = doc(serverDb, 'users', authHeader);
+        let errorMsg = null;
+        let finalProfile: any = null;
+
+        await runTransaction(serverDb, async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          if (!userSnap.exists()) {
+            errorMsg = "User profile not found";
+            return;
+          }
+
+          const userData = userSnap.data();
+          const balance = Number(userData.balance) || 0;
+
+          if (balance < investAmount) {
+            errorMsg = `Insufficient balance. Deposit at least ₦${(investAmount - balance).toLocaleString()} NGN additional to activate.`;
+            return;
+          }
+
+          const activeFunds = userData.fundsInvestments || [];
+          const newInvestment = {
+            id: `fund_inv_${Date.now()}`,
+            fundId: fund.id,
+            fundName: fund.name,
+            companyName: fund.company,
+            amount: investAmount,
+            days: investDays,
+            dailyRate: dailyRate,
+            totalInterest: totalInterest,
+            startDate: new Date().toISOString(),
+            endDate: new Date(Date.now() + investDays * 24 * 60 * 60 * 1000).toISOString(),
+            matured: false,
+            claimed: false
+          };
+
+          const updatedFunds = [...activeFunds, newInvestment];
+          const newBalance = balance - investAmount;
+
+          transaction.update(userRef, {
+            balance: newBalance,
+            fundsInvestments: updatedFunds
+          });
+
+          const txnId = `txn_fund_${Date.now()}`;
+          const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+          transaction.set(txnRef, {
+            id: txnId,
+            userId: authHeader,
+            amount: investAmount,
+            type: "subscribe",
+            status: "success",
+            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            details: `Allocated to ${fund.name} for ${investDays} days`
+          });
+
+          finalProfile = { ...userData, balance: newBalance, fundsInvestments: updatedFunds };
+        });
+
+        if (errorMsg) {
+          return res.status(400).json({ error: errorMsg });
+        }
+
+        return res.json({ message: `Successfully allocated ₦${investAmount.toLocaleString()} to ${fund.name}!`, user: finalProfile });
+      } else {
+        const db = loadDatabase();
+        const idx = db.users.findIndex(u => u.id === authHeader);
+        if (idx === -1) return res.status(404).json({ error: "Identity session expired" });
+
+        const user = db.users[idx];
+        const balance = Number(user.balance) || 0;
+
+        if (balance < investAmount) {
+          return res.status(400).json({ error: `Insufficient balance. Deposit at least ₦${(investAmount - balance).toLocaleString()} NGN additional to activate.` });
+        }
+
+        if (!user.fundsInvestments) {
+          user.fundsInvestments = [];
+        }
+
+        const newInvestment = {
+          id: `fund_inv_${Date.now()}`,
+          fundId: fund.id,
+          fundName: fund.name,
+          companyName: fund.company,
+          amount: investAmount,
+          days: investDays,
+          dailyRate: dailyRate,
+          totalInterest: totalInterest,
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + investDays * 24 * 60 * 60 * 1000).toISOString(),
+          matured: false,
+          claimed: false
+        };
+
+        user.fundsInvestments.push(newInvestment);
+        user.balance = balance - investAmount;
+
+        const txnId = `txn_fund_${Date.now()}`;
+        user.transactions.unshift({
+          id: txnId,
+          amount: investAmount,
+          type: "subscribe",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Allocated to ${fund.name} for ${investDays} days`
+        });
+
+        saveDatabase(db);
+        const { passwordHash, ...profile } = user;
+        return res.json({ message: `Successfully allocated ₦${investAmount.toLocaleString()} to ${fund.name}!`, user: profile });
+      }
+    } catch (err: any) {
+      console.error("[Funds Invest API Error]", err);
+      res.status(500).json({ error: "Exception occurred during investment allocation" });
+    }
+  });
+
+  // Claim payout from a matured funds investment
+  app.post("/api/user/funds/claim", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const { investmentId } = req.body;
+      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
+
+      if (serverDb) {
+        const userRef = doc(serverDb, 'users', authHeader);
+        let errorMsg = null;
+        let finalProfile: any = null;
+
+        await runTransaction(serverDb, async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          if (!userSnap.exists()) {
+            errorMsg = "User profile not found";
+            return;
+          }
+
+          const userData = userSnap.data();
+          const activeFunds = userData.fundsInvestments || [];
+          const invIndex = activeFunds.findIndex((p: any) => p.id === investmentId);
+
+          if (invIndex === -1) {
+            errorMsg = "Selected investment record not found";
+            return;
+          }
+
+          const inv = { ...activeFunds[invIndex] };
+
+          if (inv.claimed) {
+            errorMsg = "This investment principal and interest have already been redeemed";
+            return;
+          }
+
+          const now = new Date();
+          const endDate = new Date(inv.endDate);
+          if (now < endDate && !inv.matured) {
+            errorMsg = `This investment is locked and not yet mature. Matures on ${endDate.toLocaleString()}`;
+            return;
+          }
+
+          inv.matured = true;
+          inv.claimed = true;
+          activeFunds[invIndex] = inv;
+
+          const payoutAmount = Number(inv.amount) + Number(inv.totalInterest);
+          const balance = Number(userData.balance) || 0;
+          const newBalance = balance + payoutAmount;
+
+          transaction.update(userRef, {
+            balance: newBalance,
+            fundsInvestments: activeFunds
+          });
+
+          const txnId = `txn_fund_maturity_${Date.now()}`;
+          const txnRef = doc(serverDb, `users/${authHeader}/transactions/${txnId}`);
+          transaction.set(txnRef, {
+            id: txnId,
+            userId: authHeader,
+            amount: payoutAmount,
+            type: "claim",
+            status: "success",
+            date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            details: `Redeemed ${inv.fundName} maturity: principal ₦${inv.amount.toLocaleString()} + interest ₦${inv.totalInterest.toLocaleString()}`
+          });
+
+          finalProfile = { ...userData, balance: newBalance, fundsInvestments: activeFunds };
+        });
+
+        if (errorMsg) {
+          return res.status(400).json({ error: errorMsg });
+        }
+
+        return res.json({ message: "Investment principal and earnings successfully credited to your wallet!", user: finalProfile });
+      } else {
+        const db = loadDatabase();
+        const idx = db.users.findIndex(u => u.id === authHeader);
+        if (idx === -1) return res.status(404).json({ error: "Identity session expired" });
+
+        const user = db.users[idx];
+        const activeFunds = user.fundsInvestments || [];
+        const invIndex = activeFunds.findIndex((p: any) => p.id === investmentId);
+
+        if (invIndex === -1) {
+          return res.status(400).json({ error: "Investment record not found" });
+        }
+
+        const inv = activeFunds[invIndex];
+
+        if (inv.claimed) {
+          return res.status(400).json({ error: "This investment principal and interest have already been redeemed" });
+        }
+
+        const now = new Date();
+        const endDate = new Date(inv.endDate);
+        if (now < endDate && !inv.matured) {
+          return res.status(400).json({ error: `This investment is locked and not yet mature. Matures on ${endDate.toLocaleString()}` });
+        }
+
+        inv.matured = true;
+        inv.claimed = true;
+
+        const payoutAmount = Number(inv.amount) + Number(inv.totalInterest);
+        user.balance = (user.balance || 0) + payoutAmount;
+
+        const txnId = `txn_fund_maturity_${Date.now()}`;
+        user.transactions.unshift({
+          id: txnId,
+          amount: payoutAmount,
+          type: "claim",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Redeemed ${inv.fundName} maturity: principal ₦${inv.amount.toLocaleString()} + interest ₦${inv.totalInterest.toLocaleString()}`
+        });
+
+        saveDatabase(db);
+        const { passwordHash, ...profile } = user;
+        return res.json({ message: "Investment principal and earnings successfully credited to your wallet!", user: profile });
+      }
+    } catch (err: any) {
+      console.error("[Funds Payout Claim Error]", err);
+      res.status(500).json({ error: "Exception occurred during payout settlement" });
+    }
+  });
+
+  // Sandbox simulation: Fast forward custom investment days
+  app.post("/api/user/funds/fast-forward", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const { investmentId, daysToOffset } = req.body;
+      if (!authHeader) return res.status(401).json({ error: "Unauthorized access" });
+
+      const offsetDays = Number(daysToOffset) || 1;
+
+      if (serverDb) {
+        const userRef = doc(serverDb, 'users', authHeader);
+        let errorMsg = null;
+        let finalProfile: any = null;
+
+        await runTransaction(serverDb, async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          if (!userSnap.exists()) {
+            errorMsg = "User profile not found";
+            return;
+          }
+
+          const userData = userSnap.data();
+          const activeFunds = userData.fundsInvestments || [];
+          const invIndex = activeFunds.findIndex((p: any) => p.id === investmentId);
+
+          if (invIndex === -1) {
+            errorMsg = "Selected investment record not found";
+            return;
+          }
+
+          const inv = { ...activeFunds[invIndex] };
+
+          if (inv.claimed) {
+            errorMsg = "This investment has already been settled and claimed";
+            return;
+          }
+
+          const oldStartDate = new Date(inv.startDate);
+          const oldEndDate = new Date(inv.endDate);
+
+          const timeOffsetMs = offsetDays * 24 * 60 * 60 * 1000;
+          const newStartDate = new Date(oldStartDate.getTime() - timeOffsetMs);
+          const newEndDate = new Date(oldEndDate.getTime() - timeOffsetMs);
+
+          inv.startDate = newStartDate.toISOString();
+          inv.endDate = newEndDate.toISOString();
+
+          const now = new Date();
+          if (now >= newEndDate) {
+            inv.matured = true;
+          }
+
+          activeFunds[invIndex] = inv;
+
+          transaction.update(userRef, {
+            fundsInvestments: activeFunds
+          });
+
+          finalProfile = { ...userData, fundsInvestments: activeFunds };
+        });
+
+        if (errorMsg) {
+          return res.status(400).json({ error: errorMsg });
+        }
+
+        return res.json({ message: `Successfully fast-forwarded time by ${offsetDays} days!`, user: finalProfile });
+      } else {
+        const db = loadDatabase();
+        const idx = db.users.findIndex(u => u.id === authHeader);
+        if (idx === -1) return res.status(404).json({ error: "Identity session expired" });
+
+        const user = db.users[idx];
+        const activeFunds = user.fundsInvestments || [];
+        const invIndex = activeFunds.findIndex((p: any) => p.id === investmentId);
+
+        if (invIndex === -1) {
+          return res.status(400).json({ error: "Investment record not found" });
+        }
+
+        const inv = activeFunds[invIndex];
+
+        if (inv.claimed) {
+          return res.status(400).json({ error: "This investment has already been settled and claimed" });
+        }
+
+        const oldStartDate = new Date(inv.startDate);
+        const oldEndDate = new Date(inv.endDate);
+
+        const timeOffsetMs = offsetDays * 24 * 60 * 60 * 1000;
+        const newStartDate = new Date(oldStartDate.getTime() - timeOffsetMs);
+        const newEndDate = new Date(oldEndDate.getTime() - timeOffsetMs);
+
+        inv.startDate = newStartDate.toISOString();
+        inv.endDate = newEndDate.toISOString();
+
+        const now = new Date();
+        if (now >= newEndDate) {
+          inv.matured = true;
+        }
+
+        saveDatabase(db);
+        const { passwordHash, ...profile } = user;
+        return res.json({ message: `Successfully fast-forwarded time by ${offsetDays} days!`, user: profile });
+      }
+    } catch (err: any) {
+      console.error("[Funds Fast Forward Error]", err);
+      res.status(500).json({ error: "Exception occurred during time simulation" });
     }
   });
 
@@ -2305,9 +2572,35 @@ function startServer() {
         }
 
         if ((user.balance || 0) < 0) {
-          console.log(`[Auto-Audit Reversal - Local] Found user with negative balance: ${user.name} (${user.id}) = ₦${user.balance}. Auto-correcting to 0.`);
-          user.balance = 0;
-          localDbChanged = true;
+          console.log(`[Auto-Audit Reversal - Local] Found user with negative balance: ${user.name} (${user.id}) = ₦${user.balance}. Deactivating investments to restore balance...`);
+          
+          let activeInvestments = (user.investments || []).filter((inv: any) => inv.joined);
+          activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
+          
+          for (const inv of activeInvestments) {
+            if (user.balance >= 0) break;
+            
+            const refundAmt = inv.balance || inv.cost || 0;
+            if (refundAmt > 0) {
+              user.balance += refundAmt;
+              inv.joined = false;
+              inv.balance = 0;
+              inv.earnYesterday = 0;
+              
+              const revTxnId = `rev_${Date.now()}_${inv.id}`;
+              user.transactions.unshift({
+                id: revTxnId,
+                amount: refundAmt,
+                type: "bonus",
+                status: "success",
+                date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                details: `Regulatory Reversal Refund: ${inv.name} deactivated & returned to correct negative balance.`
+              });
+              
+              console.log(`[Auto-Audit Reversal - Local] Reversed ${inv.name}, refunded ₦${refundAmt}. New user balance: ₦${user.balance}`);
+              localDbChanged = true;
+            }
+          }
         }
       }
       
@@ -2350,17 +2643,50 @@ function startServer() {
           }
           
           if (currentBalance < 0) {
-            console.log(`[Auto-Audit Reversal - Firestore] Found Firestore user with negative balance: ${userData.name || userId} = ₦${currentBalance}. Correcting to 0.`);
-            currentBalance = 0;
-            userChanged = true;
+            console.log(`[Auto-Audit Reversal - Firestore] Found Firestore user with negative balance: ${userData.name || userId} = ₦${currentBalance}`);
+            
+            const userInvestments = userData.investments || [];
+            let activeInvestments = userInvestments.filter((inv: any) => inv.joined);
+            activeInvestments.sort((a: any, b: any) => (b.balance || b.cost || 0) - (a.balance || a.cost || 0));
+            
+            for (const inv of activeInvestments) {
+              if (currentBalance >= 0) break;
+              
+              const refundAmt = inv.balance || inv.cost || 0;
+              if (refundAmt > 0) {
+                currentBalance += refundAmt;
+                
+                const targetIdx = userInvestments.findIndex((p: any) => p.id === inv.id);
+                if (targetIdx !== -1) {
+                  userInvestments[targetIdx].joined = false;
+                  userInvestments[targetIdx].balance = 0;
+                  userInvestments[targetIdx].earnYesterday = 0;
+                }
+                
+                const revId = `rev_${Date.now()}_${inv.id}`;
+                batch.set(doc(serverDb, `users/${userId}/transactions/${revId}`), {
+                  id: revId,
+                  userId: userId,
+                  amount: refundAmt,
+                  type: "bonus",
+                  status: "success",
+                  date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                  details: `Regulatory Reversal Refund: ${inv.name} deactivated & returned to correct negative balance.`
+                });
+                
+                userChanged = true;
+                console.log(`[Auto-Audit Reversal - Firestore] Reversed ${inv.name} for ${userData.name || userId}, refunded ₦${refundAmt}.`);
+              }
+            }
           }
           
           if (userChanged) {
             batch.update(doc(serverDb, "users", userId), {
-              balance: currentBalance
+              balance: currentBalance,
+              investments: userData.investments || []
             });
             await batch.commit();
-            console.log(`[Auto-Audit Reversal - Firestore] Successfully committed balance corrections for ${userData.name || userId}. New balance: ₦${currentBalance}`);
+            console.log(`[Auto-Audit Reversal - Firestore] Successfully committed reversals for ${userData.name || userId}. New balance: ₦${currentBalance}`);
           }
         }
       } catch (err) {

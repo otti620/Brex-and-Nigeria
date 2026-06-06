@@ -870,7 +870,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
                                             {/* Stylized Portfolio Breakdowns inside full-width sub-dashboard grid */}
                                             {(() => {
-                                                const investedAmt = (u.investments || []).reduce((sum: number, inv: any) => sum + (inv.joined ? (Number(inv.balance || inv.cost) || 0) : 0), 0);
+                                                const investedAmt = (u.investments || []).reduce((sum: number, inv: any) => sum + (inv.joined ? (Number(inv.balance) || 0) : 0), 0);
                                                 const totalVal = (Number(u.balance) || 0) + investedAmt;
                                                 return (
                                                     <div className="grid grid-cols-2 gap-3 bg-slate-50 border border-slate-100/80 p-3.5 rounded-2xl">
