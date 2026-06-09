@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 
 const CLIENT_DEFAULT_VIP_PLANS = [
+  { id: 'vip-0', name: 'Micro Seed', period: '365 Days', workingDays: 0, cost: 2000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 0, avatar: '🌾', dailyProfit: 50 },
   { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 180 },
   { id: 'vip-2', name: 'Starter Compound', period: '365 Days', workingDays: 0, cost: 7500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '🪴', dailyProfit: 420 },
   { id: 'vip-3', name: 'Wealth Builder', period: '365 Days', workingDays: 0, cost: 16000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '📈', dailyProfit: 960 },
@@ -71,6 +72,7 @@ const App: React.FC = () => {
     user, 
     userData, 
     loading, 
+    siteSettings,
     login, 
     register, 
     logout, 
@@ -3088,6 +3090,16 @@ const App: React.FC = () => {
           /* WITHDRAWAL FLOW */
           <div className="flex flex-col gap-6 animate-in fade-in duration-300">
             
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-5 rounded-[28px] text-[11px] flex flex-col gap-2 shadow-sm font-semibold">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-600 text-lg">💡</span>
+                <span className="font-extrabold uppercase tracking-widest text-[#ff9c00] text-xs">Smart Wealth Strategy</span>
+              </div>
+              <p className="leading-relaxed text-amber-900/80">
+                Withdrawing interrupts your wealth multiplication cycle. Reinvesting your profits can accelerate your earning power up to <span className="font-black text-amber-700">300% faster</span>. Consider compounding before withdrawing.
+              </p>
+            </div>
+
             <div className={`p-5 rounded-[28px] text-xs flex items-start gap-4 shadow-sm font-semibold ${
               canWithdraw 
                 ? 'bg-emerald-50 border border-emerald-100 text-emerald-800' 
@@ -3563,6 +3575,25 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    if (siteSettings?.maintenanceMode && userData && !userData.isAdmin) {
+      return (
+        <div className="h-screen w-full flex flex-col items-center justify-center bg-[#0C1017] p-8 max-w-md mx-auto">
+          <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6">
+            <Shield size={40} className="text-indigo-400" />
+          </div>
+          <h1 className="text-2xl font-black text-white uppercase tracking-widest text-center mb-3">System Maintenance</h1>
+          <p className="text-slate-400 text-sm text-center leading-relaxed font-semibold">
+            We are currently upgrading our platform's core infrastructure to serve you better. Please check back later.
+          </p>
+          <button 
+            onClick={logout} 
+            className="mt-10 px-8 py-3 bg-[#131926] border border-[#1E293B] rounded-xl text-slate-300 font-extrabold uppercase text-[10px] tracking-[0.2em] hover:bg-[#1E293B] transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      );
+    }
     return (
       <AnimatePresence mode="wait">
         <motion.div

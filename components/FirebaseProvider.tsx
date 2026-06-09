@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UserState, UserInvestment, TransactionRecord } from '../types';
+import { UserState, UserInvestment, TransactionRecord, SiteSettings } from '../types';
 import { auth, db, isConfigured, config } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, updatePassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, addDoc, onSnapshot, query, where, orderBy, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
@@ -8,6 +8,8 @@ interface FirebaseContextType {
   user: { uid: string; email: string; name: string } | null;
   userData: UserState | null;
   loading: boolean;
+  siteSettings: SiteSettings;
+  updateSiteSettings: (settings: SiteSettings) => Promise<void>;
   login: (loginId: string, securityKey: string) => Promise<any>;
   register: (payload: any) => Promise<any>;
   logout: () => Promise<void>;
@@ -35,6 +37,8 @@ const FirebaseContext = createContext<FirebaseContextType>({
   user: null,
   userData: null,
   loading: true,
+  siteSettings: { maintenanceMode: false, holidayMode: false },
+  updateSiteSettings: async () => {},
   login: async () => {},
   register: async () => {},
   logout: async () => {},
@@ -71,6 +75,7 @@ export const normalizePhoneNumber = (phone: string): string => {
 };
 
 const CLIENT_DEFAULT_VIP_PLANS = [
+  { id: 'vip-0', name: 'Micro Seed', period: '365 Days', workingDays: 0, cost: 2000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 0, avatar: '🌾', dailyProfit: 50 },
   { id: 'vip-1', name: 'Seed Capital', period: '365 Days', workingDays: 0, cost: 3500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 1, avatar: '🌱', dailyProfit: 180 },
   { id: 'vip-2', name: 'Starter Compound', period: '365 Days', workingDays: 0, cost: 7500, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 2, avatar: '🪴', dailyProfit: 420 },
   { id: 'vip-3', name: 'Wealth Builder', period: '365 Days', workingDays: 0, cost: 16000, balance: 0, earnYesterday: 0, earnTotal: 0, joined: false, level: 3, avatar: '📈', dailyProfit: 960 },
@@ -140,6 +145,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [user, setUser] = useState<{ uid: string; email: string; name: string } | null>(null);
   const [userData, setUserData] = useState<UserState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>({ maintenanceMode: false, holidayMode: false });
   const [originalAdminData, setOriginalAdminData] = useState<UserState | null>(null);
   const [isImpersonating, setIsImpersonating] = useState<boolean>(false);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -181,8 +187,31 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.warn("Firestore: unable to load global VIP plans snapshot, using local defaults.", err.message);
     });
 
-    return () => unsubGlobal();
+    const unsubSettings = onSnapshot(doc(db, 'config', 'site_settings'), async (docSnap) => {
+      if (docSnap.exists()) {
+        setSiteSettings(docSnap.data() as SiteSettings);
+      } else {
+        try {
+          await setDoc(doc(db, 'config', 'site_settings'), { maintenanceMode: false, holidayMode: false });
+        } catch (e) {
+          console.error("Failed to init site settings:", e);
+        }
+      }
+    });
+
+    return () => {
+      unsubGlobal();
+      unsubSettings();
+    };
   }, []);
+
+  const updateSiteSettings = async (settings: SiteSettings) => {
+    try {
+      await setDoc(doc(db, 'config', 'site_settings'), settings, { merge: true });
+    } catch(err) {
+      console.error("Failed to update site settings", err);
+    }
+  };
 
   useEffect(() => {
     if (userData?.isAdmin && globalPlans) {
@@ -832,6 +861,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         spinBalance: calculateSpinBalance(transactions)
       } : null,
       loading,
+      siteSettings,
+      updateSiteSettings,
       login,
       register,
       logout,

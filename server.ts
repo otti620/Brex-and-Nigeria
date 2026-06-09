@@ -1257,6 +1257,11 @@ function startServer() {
 
         let globalPlan = plan;
         try {
+          const siteSettingsDoc = await getDoc(doc(serverDb, "config", "site_settings"));
+          if (siteSettingsDoc.exists() && siteSettingsDoc.data()?.holidayMode) {
+              return res.status(400).json({ error: "It's a public holiday. Trading and yield generation are paused for today. Normal operations resume tomorrow." });
+          }
+
           const configDoc = await getDoc(doc(serverDb, "config", "global_vip_plans"));
           if (configDoc.exists() && configDoc.data()?.plans) {
             const matched = configDoc.data().plans.find((gp: any) => gp.id === planId);

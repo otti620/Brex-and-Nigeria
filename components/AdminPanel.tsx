@@ -23,7 +23,8 @@ import {
   Percent,
   Lock,
   Unlock,
-  KeyRound
+  KeyRound,
+  Shield
 } from 'lucide-react';
 import { 
   collection, 
@@ -61,7 +62,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser }) => {
-    const { userData, approveTransaction, rejectTransaction, globalPlans, impersonateUser } = useFirebase();
+    const { userData, approveTransaction, rejectTransaction, globalPlans, impersonateUser, siteSettings, updateSiteSettings } = useFirebase();
     const [users, setUsers] = useState<any[]>([]);
     const [pendingTxns, setPendingTxns] = useState<any[]>([]);
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
@@ -70,7 +71,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
     const [faqData, setFaqData] = useState<any[]>([]);
     const [plans, setPlans] = useState<any[]>([]);
     
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'transactions' | 'plans' | 'tickets'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'transactions' | 'plans' | 'tickets' | 'settings'>('dashboard');
     const [selectedUser, setSelectedUser] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [operationMsg, setOperationMsg] = useState('');
@@ -697,13 +698,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             )}
 
             {/* Visual Glassmorphic Grid Sidebar and Tab buttons */}
-            <div className="grid grid-cols-2 gap-1 bg-white rounded-2xl p-1 mb-6 border border-slate-200 shadow-sm md:grid-cols-5 md:text-[10px]">
+            <div className="grid grid-cols-2 gap-1 bg-white rounded-2xl p-1 mb-6 border border-slate-200 shadow-sm md:grid-cols-6 md:text-[10px]">
                 {[
                     { id: 'dashboard', label: 'Overview', icon: Activity },
                     { id: 'users', label: 'Users & Teams', icon: Users },
                     { id: 'transactions', label: 'Transactions & Bank Info', icon: Landmark },
                     { id: 'plans', label: 'Packages & News', icon: Percent },
                     { id: 'tickets', label: 'Support & Logs', icon: FileText },
+                    { id: 'settings', label: 'Site Settings', icon: Shield },
                 ].map(item => {
                     const Icon = item.icon;
                     return (
@@ -1466,6 +1468,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                 ))}
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* 6. SITE SETTINGS */}
+                {activeTab === 'settings' && (
+                    <div className="flex flex-col gap-6">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 tracking-tight mb-1">Site Configuration</h3>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest font-mono">Control core platform functional behavior</p>
+                        </div>
+                        
+                        <div className="flex flex-col gap-4 max-w-xl">
+                            {/* Maintenance Mode */}
+                            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div>
+                                        <h4 className="font-extrabold text-sm text-slate-900 mb-1">Site Maintenance Mode</h4>
+                                        <p className="text-[10px] uppercase font-mono tracking-wide text-slate-500 max-w-sm">
+                                            Blocks all standard user access with a maintenance screen. Admin login will still function.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            if (window.confirm(`Turn ${siteSettings?.maintenanceMode ? 'OFF' : 'ON'} maintenance mode?`)) {
+                                                await updateSiteSettings({ ...siteSettings, maintenanceMode: !siteSettings?.maintenanceMode });
+                                                setOperationMsg('Maintenance setting updated');
+                                            }
+                                        }}
+                                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all tracking-wider ${
+                                            siteSettings?.maintenanceMode ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                        }`}
+                                    >
+                                        {siteSettings?.maintenanceMode ? 'ACTIVE - TURN OFF' : 'TURN ON'}
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {/* Holiday Mode */}
+                            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div>
+                                        <h4 className="font-extrabold text-sm text-slate-900 mb-1">Platform Holiday Mode</h4>
+                                        <p className="text-[10px] uppercase font-mono tracking-wide text-slate-500 max-w-sm">
+                                            Users can login, deposit and register, but daily profit claims will be globally disabled for the day.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            if (window.confirm(`Turn ${siteSettings?.holidayMode ? 'OFF' : 'ON'} holiday mode?`)) {
+                                                await updateSiteSettings({ ...siteSettings, holidayMode: !siteSettings?.holidayMode });
+                                                setOperationMsg('Holiday Mode updated');
+                                            }
+                                        }}
+                                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all tracking-wider ${
+                                            siteSettings?.holidayMode ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                        }`}
+                                    >
+                                        {siteSettings?.holidayMode ? 'ACTIVE - TURN OFF' : 'TURN ON'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 )}
             </Card>

@@ -83,6 +83,11 @@ export interface FundInvestment {
   claimed: boolean;
 }
 
+export interface SiteSettings {
+  maintenanceMode: boolean;
+  holidayMode: boolean;
+}
+
 export interface UserState {
   isLoggedIn: boolean;
   name: string;

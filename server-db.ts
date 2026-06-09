@@ -70,6 +70,20 @@ const DB_FILE = path.join(DB_DIR, "database.json");
 // Define VIP Level Products (with added cheaper plans between ₦7,000 and ₦50,000, and slightly adjusted prices)
 export const DEFAULTS_YIELDS: UserInvestment[] = [
   {
+    id: "vip-0",
+    level: 0,
+    name: "Micro Seed",
+    avatar: "🌾",
+    cost: 2000,
+    dailyProfit: 50,
+    workingDays: 0,
+    period: 365,
+    joined: false,
+    balance: 0,
+    earnYesterday: 0,
+    earnTotal: 0
+  },
+  {
     id: "vip-1",
     level: 1,
     name: "Seed Capital",
