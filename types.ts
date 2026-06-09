@@ -64,6 +64,8 @@ export interface TransactionRecord {
   status: 'pending' | 'success' | 'failed';
   date: string;
   details: string;
+  requestedAmount?: number;
+  feeCharged?: number;
 }
 
 export interface FundInvestment {

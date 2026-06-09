@@ -95,6 +95,13 @@ const App: React.FC = () => {
     const reference = params.get('reference') || params.get('trxref');
     const paymentSuccess = params.get('payment') === 'success';
 
+    const refCode = params.get('ref') || params.get('code') || params.get('invitation');
+    if (refCode) {
+      setInvitationCode(refCode);
+      setAuthMode('register');
+      showToast(`Referral link detected! Code ${refCode} auto-applied.`);
+    }
+
     if (reference || paymentSuccess) {
       const verifyPaymentReference = async (ref: string) => {
         // Small timeout to allow Toast and component state initialization
@@ -243,7 +250,7 @@ const App: React.FC = () => {
     const dayOfMonth = watDate.getDate(); // 1 to 31
     const freeDays = [5, 20, 29];
     const isFreeDay = freeDays.includes(dayOfMonth);
-    const feePercent = isFreeDay ? 0 : 10;
+    const feePercent = isFreeDay ? 0 : 20;
     return {
       feePercent,
       isFreeDay,
@@ -718,6 +725,10 @@ const App: React.FC = () => {
       setAuthError('Passwords do not match');
       return;
     }
+    if (!invitationCode.trim()) {
+      setAuthError('An invitation code is required to sign up. Please obtain a valid referral link or code.');
+      return;
+    }
 
     try {
       setAuthError('');
@@ -725,7 +736,7 @@ const App: React.FC = () => {
         name: userName.trim() || 'Brex Member',
         phoneNumber: enteredPhone,
         password: password,
-        invitationCode: invitationCode || '16662861',
+        invitationCode: invitationCode.trim(),
         selectedIntent: 'safe'
       };
       await register(payload);
@@ -1091,7 +1102,7 @@ const App: React.FC = () => {
 
                 {/* Invitation Field */}
                 <div className="flex flex-col gap-2.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Invitation Code (Optional)</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Invitation Code (Mandatory)</label>
                   <div className="flex bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-100 transition-all">
                     <input 
                       type="text"

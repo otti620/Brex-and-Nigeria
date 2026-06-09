@@ -638,67 +638,71 @@ function startServer() {
       // Track referral parent
       let parentBy: string | undefined = undefined;
       const cleanInvite = invitationCode ? invitationCode.trim().toUpperCase() : "";
-      if (cleanInvite) {
-        const parent = db.users.find(u => u.invitationCode.toUpperCase() === cleanInvite);
-        if (parent) {
-          parentBy = parent.invitationCode;
-          parent.teamSize = (parent.teamSize || 0) + 1;
-          parent.teamSizeToday = (parent.teamSizeToday || 0) + 1;
+      if (!cleanInvite) {
+        return res.status(400).json({ error: "An invitation code is required to sign up. Please obtain a valid referral link or code." });
+      }
 
-          // Initialize referral variables if missing
-          if (parent.currentReferrals === undefined) parent.currentReferrals = 0;
-          if (parent.referralTier === undefined) parent.referralTier = 1;
-          if (parent.totalReferrals === undefined) parent.totalReferrals = 0;
-          if (!parent.notifications) parent.notifications = [];
+      const parent = db.users.find(u => u.invitationCode && u.invitationCode.toUpperCase() === cleanInvite);
+      if (!parent) {
+        return res.status(400).json({ error: "Invalid invitation code. You must provide a real, existing referral invitation code to register." });
+      }
 
-          parent.currentReferrals += 1;
-          parent.totalReferrals += 1;
+      parentBy = parent.invitationCode;
+      parent.teamSize = (parent.teamSize || 0) + 1;
+      parent.teamSizeToday = (parent.teamSizeToday || 0) + 1;
 
-          let milestoneTarget = 10;
-          let milestoneReward = 30000;
+      // Initialize referral variables if missing
+      if (parent.currentReferrals === undefined) parent.currentReferrals = 0;
+      if (parent.referralTier === undefined) parent.referralTier = 1;
+      if (parent.totalReferrals === undefined) parent.totalReferrals = 0;
+      if (!parent.notifications) parent.notifications = [];
 
-          if (parent.referralTier === 2) {
-            milestoneTarget = 20;
-            milestoneReward = 65000;
-          } else if (parent.referralTier === 3) {
-            milestoneTarget = 32;
-            milestoneReward = 100000;
-          }
+      parent.currentReferrals += 1;
+      parent.totalReferrals += 1;
 
-          if (parent.currentReferrals >= milestoneTarget) {
-            parent.balance += milestoneReward;
-            
-            parent.notifications.unshift({
-              id: `notif_${Date.now()}`,
-              message: `Congratulations! You’ve unlocked ₦${milestoneReward.toLocaleString()} monthly from your referral milestone!`,
-              read: false,
-              date: new Date().toISOString()
-            });
+      let milestoneTarget = 10;
+      let milestoneReward = 30000;
 
-            parent.transactions.unshift({
-              id: `txn_milestone_${Date.now()}`,
-              amount: milestoneReward,
-              type: "bonus" as const,
-              status: "success" as const,
-              date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-              details: `Referral Milestone Unlocked: Level ${parent.referralTier}`
-            });
+      if (parent.referralTier === 2) {
+        milestoneTarget = 20;
+        milestoneReward = 65000;
+      } else if (parent.referralTier === 3) {
+        milestoneTarget = 32;
+        milestoneReward = 100000;
+      }
 
-            if (parent.referralTier < 3) {
-              parent.referralTier += 1;
-              parent.currentReferrals = 0;
-            } else {
-              parent.currentReferrals = 0;
-            }
-          } else {
-            parent.notifications.unshift({
-              id: `notif_${Date.now()}`,
-              message: `You’re now ${parent.currentReferrals}/${milestoneTarget} referrals! Keep going!`,
-              read: false,
-              date: new Date().toISOString()
-            });
-          }
+      if (parent.currentReferrals >= milestoneTarget) {
+        parent.balance += milestoneReward;
+        
+        parent.notifications.unshift({
+          id: `notif_${Date.now()}`,
+          message: `Congratulations! You’ve unlocked ₦${milestoneReward.toLocaleString()} monthly from your referral milestone!`,
+          read: false,
+          date: new Date().toISOString()
+        });
+
+        parent.transactions.unshift({
+          id: `txn_milestone_${Date.now()}`,
+          amount: milestoneReward,
+          type: "bonus" as const,
+          status: "success" as const,
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Referral Milestone Unlocked: Level ${parent.referralTier}`
+        });
+
+        if (parent.referralTier < 3) {
+          parent.referralTier += 1;
+          parent.currentReferrals = 0;
+        } else {
+          parent.currentReferrals = 0;
         }
+      } else {
+        parent.notifications.unshift({
+          id: `notif_${Date.now()}`,
+          message: `You’re now ${parent.currentReferrals}/${milestoneTarget} referrals! Keep going!`,
+          read: false,
+          date: new Date().toISOString()
+        });
       }
 
       const ourOwnCode = `BREX-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -710,7 +714,7 @@ function startServer() {
         phoneNumber: cleanPhone,
         passwordHash: password, // For development verification transparency stored as is
         kycLevel: 0,
-        balance: 3000, // Preloaded deposit bonus for account setup activation
+        balance: 500, // Preloaded deposit bonus for account setup activation reduced to 500 NGN
         monthlyGains: 0,
         streak: 1,
         badges: ["First Brex 💧"],
@@ -727,7 +731,7 @@ function startServer() {
         transactions: [
           {
             id: `txn_${Date.now()}`,
-            amount: 3000,
+            amount: 500, // Setup activation welcome bonus reduced to 500 NGN
             type: "bonus" as const,
             status: "success" as const,
             date: new Date().toISOString().slice(0, 19).replace('T', ' '),
@@ -995,14 +999,26 @@ function startServer() {
 
       db.users[idx].balance -= payout;
 
+      // Calculate 20% withdrawal fee if not a free day (WAT 5th, 20th, 29th)
+      const nowLoc = new Date();
+      const utcTimestamp = nowLoc.getTime() + (nowLoc.getTimezoneOffset() * 60000);
+      const watDate = new Date(utcTimestamp + 3600000);
+      const dayOfMonth = watDate.getDate();
+      const freeDays = [5, 20, 29];
+      const isFree = freeDays.includes(dayOfMonth);
+      const feePercent = isFree ? 0 : 20;
+      const netAmount = Math.round(payout * (1 - feePercent / 100));
+
       // Log transaction record
       db.users[idx].transactions.unshift({
         id: `txn_${Date.now()}`,
-        amount: payout,
+        amount: netAmount, // Stores the net amount after removing fee to show in admin panel
+        requestedAmount: payout,
+        feeCharged: payout - netAmount,
         type: "withdraw" as const,
         status: "success" as const,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: "Instant Payout Completed"
+        details: `Instant Payout Completed (Requested: ₦${payout.toLocaleString()} - Fee: ₦${(payout - netAmount).toLocaleString()})`
       });
 
       saveDatabase(db);

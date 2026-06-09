@@ -303,7 +303,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               email: fbUser.email,
               phoneNumber: fbUser.phoneNumber || '',
               kycLevel: 0,
-              balance: 1000,
+              balance: 500,
               monthlyGains: 0,
               streak: 1,
               badges: ["First Brex 💧"],
@@ -406,6 +406,28 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const register = async (payload: any) => {
     setLoading(true);
     try {
+      const searchCode = payload.invitationCode ? payload.invitationCode.trim().toUpperCase() : "";
+      if (!searchCode) {
+        throw new Error("An invitation code is required to sign up. Please obtain a valid referral link or code.");
+      }
+
+      let referrerUid = "";
+      try {
+        const res = await fetch(`/api/referrer/lookup/${encodeURIComponent(searchCode)}`);
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.found) {
+            referrerUid = resData.id;
+          }
+        }
+      } catch (e) {
+        console.error("Referrer lookup via secure API failed:", e);
+      }
+
+      if (!referrerUid) {
+        throw new Error("Invalid invitation code. You must provide a real, existing referral invitation code to register.");
+      }
+
       // Use phone number as the primary identifier if email isn't provided or preferred
       const normalizedPhone = normalizePhoneNumber(payload.phoneNumber);
       const loginEmail = payload.email || `${normalizedPhone}@brex.internal`;
@@ -418,30 +440,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const isAdminPhone = normalizedPhone === '7077599057';
       const isAdminEmail = loginEmail === "ottigospel@gmail.com";
       
-      // Resolve referrerUid if possible
-      let referrerUid = "";
-      const searchCode = payload.invitationCode ? payload.invitationCode.trim().toUpperCase() : "";
-      if (searchCode) {
-        try {
-          const res = await fetch(`/api/referrer/lookup/${encodeURIComponent(searchCode)}`);
-          if (res.ok) {
-            const resData = await res.json();
-            if (resData.found) {
-              referrerUid = resData.id;
-            }
-          }
-        } catch (e) {
-          console.error("Referrer lookup via secure API failed:", e);
-        }
-      }
-      
       const newUserProfile = {
         id: userCred.user.uid,
         name: payload.name.trim(),
         email: loginEmail,
         phoneNumber: payload.phoneNumber,
         kycLevel: 0,
-        balance: 1000,
+        balance: 500,
         monthlyGains: 0,
         streak: 1,
         badges: ["First Brex 💧"],
@@ -464,7 +469,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const txnRecord = {
         id: `txn_${Date.now()}`,
         userId: userCred.user.uid,
-        amount: 1000,
+        amount: 500,
         type: "bonus",
         status: "success",
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
@@ -624,10 +629,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       throw new Error("Regulatory Compliance Notice: Withdrawals exceeding ₦5,000 or any transaction on wallets containing spin-to-win promo winnings require an active Level 3 (Wealth Builder - ₦16,000) or Level 4 (Micro Venture - ₦30,000) savings package to complete the NDIC anti-fraud validation check.");
     }
 
+    // Calculate 20% withdrawal fee if not a free day (WAT 5th, 20th, 29th)
+    const nowLocal = new Date();
+    const utcTimestamp = nowLocal.getTime() + (nowLocal.getTimezoneOffset() * 60000);
+    const watDate = new Date(utcTimestamp + 3600000);
+    const dayOfMonth = watDate.getDate();
+    const freeDays = [5, 20, 29];
+    const isFree = freeDays.includes(dayOfMonth);
+    const feePercent = isFree ? 0 : 20;
+
+    const netAmount = Math.round(amount * (1 - feePercent / 100));
+
     try {
       const batch = writeBatch(db);
       
-      // Deduct balance immediately
+      // Deduct full amount balance immediately
       const userRef = doc(db, 'users', user.uid);
       batch.update(userRef, {
         balance: increment(-amount)
@@ -639,14 +655,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         userId: user.uid,
         userName: userData.name,
         userPhone: userData.phoneNumber,
-        amount: amount,
+        amount: netAmount, // Stores the net amount after removing fee to show in admin panel
+        requestedAmount: amount,
+        feeCharged: amount - netAmount,
         type: "withdraw",
         status: "pending",
         bank: bank,
         code: code,
         owner: owner,
         date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        details: "Pending Payout Processing"
+        details: `Pending Payout Processing (Requested: ₦${amount.toLocaleString()} - Fee: ₦${(amount - netAmount).toLocaleString()})`
       };
 
       const txnRef = doc(db, `users/${user.uid}/transactions/${txnId}`);
