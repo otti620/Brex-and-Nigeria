@@ -49,7 +49,8 @@ import {
   Ticket,
   FileText,
   Award,
-  Shield
+  Shield,
+  Rocket
 } from 'lucide-react';
 
 const CLIENT_DEFAULT_VIP_PLANS = [
@@ -1225,34 +1226,37 @@ const App: React.FC = () => {
 
 
         {/* Balance block */}
-        <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-[32px] p-6 relative overflow-hidden shadow-xl shadow-indigo-600/20">
-          <p className="text-white/70 text-[10px] font-bold tracking-widest uppercase mb-1 font-mono">Available Balance</p>
-          <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-3xl font-black text-white font-mono">₦{userData.balance.toLocaleString()}</span>
-            <div className="flex items-center gap-0.5 text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">
-              <TrendingUp size={10} /> +14.5% Daily Interest
-            </div>
+        <div className="bg-gradient-to-br from-indigo-700 to-violet-800 rounded-[32px] p-6 relative overflow-hidden shadow-xl shadow-indigo-600/30">
+          <div className="absolute top-0 right-0 p-3 opacity-20 transform rotate-12">
+            <Rocket size={100} className="text-white" />
+          </div>
+          <p className="text-white/70 text-[10px] font-bold tracking-widest uppercase mb-1 font-mono relative z-10">Total Wealth Portfolio</p>
+          <div className="flex items-baseline gap-2 mb-2 relative z-10">
+            <span className="text-3xl font-black text-white font-mono tracking-tight">₦{userData.balance.toLocaleString()}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[9px] bg-emerald-500/20 text-emerald-300 px-2 flex-wrap py-1 rounded-full font-black w-max relative z-10 uppercase tracking-widest border border-emerald-500/30">
+            <TrendingUp size={10} /> +14.5% Active Compound Interest 
           </div>
           
-          <div className="grid grid-cols-2 gap-4 mt-2">
+          <div className="mt-6 flex flex-col gap-3 relative z-10">
             <button 
               onClick={() => {
                 setFundTab('recharge');
                 setRechargeStep('input');
                 navigate(Screen.Wallet);
               }}
-              className="bg-black text-white font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-900 transition-all cursor-pointer outline-none shadow-lg "
+              className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 text-black font-black text-xs py-4 rounded-[20px] flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-yellow-500/30 ring-2 ring-yellow-300 uppercase tracking-widest"
             >
-              <Coins size={14} /> Recharge
+              <Rocket size={18} /> Deposit & Grow Faster
             </button>
             <button 
               onClick={() => {
                 setFundTab('withdrawal');
                 navigate(Screen.Wallet);
               }}
-              className="bg-white/20 hover:bg-white/30 text-black border border-black/10 font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer outline-none"
+              className="w-full bg-black/20 hover:bg-black/30 text-white/60 font-bold text-[10px] py-2 rounded-xl transition-all cursor-pointer outline-none uppercase tracking-widest"
             >
-              <Wallet size={14} /> Withdraw
+              Forfeit compounding & withdraw
             </button>
           </div>
         </div>
@@ -2966,10 +2970,16 @@ const App: React.FC = () => {
           /* WEBHOOK-DRIVEN DEPOSIT FLOW */
           <div className="flex flex-col gap-6 animate-in fade-in duration-300">
             
-            <div className="bg-blue-50 border border-blue-100 text-blue-700 p-5 rounded-[28px] text-[11px] flex items-start gap-3 shadow-sm font-semibold">
-              <Zap size={18} className="shrink-0 mt-0.5 text-blue-600" />
-              <p className="leading-relaxed">
-                Please enter a deposit amount. Your funds are securely processed via standard financial settlement nodes.
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-[32px] text-[11px] flex flex-col gap-3 shadow-xl shadow-blue-500/20 font-semibold relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                 <Rocket size={120} />
+              </div>
+              <div className="flex items-center gap-2 relative z-10">
+                <Zap size={24} className="shrink-0 text-yellow-300" />
+                <span className="font-black uppercase tracking-widest text-yellow-300 text-[13px]">Fast Track Your Wealth 🚀</span>
+              </div>
+              <p className="leading-relaxed relative z-10 text-white text-xs font-semibold">
+                Depositing allows you to unlock high-yield VIP plans instantly. Members who deposit aggressively and leave funds compounding earn <span className="font-black text-yellow-300 text-sm">500% MORE</span> than standard members. Don't wait on the sidelines!
               </p>
             </div>
 
@@ -3203,6 +3213,16 @@ const App: React.FC = () => {
                 <div className="bg-white border border-slate-200 p-6 rounded-[32px] flex justify-between items-center shadow-sm">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono">Available Balance</p>
                    <p className="text-xl font-black text-blue-600 font-mono italic">₦{userData.balance.toLocaleString()}</p>
+                </div>
+
+                <div className="bg-rose-50 border-l-[6px] border-l-rose-500 p-6 border-y border-r border-rose-200 rounded-[28px] shadow-sm text-left flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                     <span className="text-xl">🚨</span>
+                     <span className="font-black uppercase tracking-widest text-rose-700 text-[10px]">Critical Wealth Warning</span>
+                  </div>
+                  <p className="text-[11px] font-medium leading-relaxed font-mono text-rose-900/80 mt-1">
+                    Withdrawing funds breaks your compound interest cycle permanently! By withdrawing today, you instantly forfeit the <span className="font-extrabold text-rose-800">10% Diamond Holder's Loyalty Bonus</span> and your account's Trust Score will drop. Top earners leave their capital compounding 24/7.
+                  </p>
                 </div>
 
                 {userData.spinBalance && userData.spinBalance > 0 ? (
