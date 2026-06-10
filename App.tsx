@@ -560,8 +560,20 @@ const App: React.FC = () => {
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showTelegramModal, setShowTelegramModal] = useState(false);
   const [showFlyerModal, setShowFlyerModal] = useState(false);
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [hasShownNoticeThisSession, setHasShownNoticeThisSession] = useState(false);
   const [hasShownTelegramThisSession, setHasShownTelegramThisSession] = useState(false);
+
+  const handleActionAttempt = (actionType: string) => {
+    if (siteSettings?.holidayMode) {
+      if (actionType === 'deposit') {
+        return true; 
+      }
+      setShowHolidayModal(true);
+      return false; 
+    }
+    return true;
+  };
 
   // Side-effect mapping user state correctly to profiles forms
   useEffect(() => {
@@ -827,6 +839,7 @@ const App: React.FC = () => {
 
   // Withdrawal validation REST submit
   const handleWithdrawSubmit = async () => {
+    if (!handleActionAttempt('withdraw')) return;
     // 1. Time check restriction: Daily 9am - 2pm WAT (UTC+1), excluding Sunday
     const { canWithdraw, isSunday } = checkWithdrawalAvailability();
     if (!canWithdraw) {
@@ -884,6 +897,7 @@ const App: React.FC = () => {
 
   // Subscribe / Invest in yield plans
   const handleSubscribeInvestmentPlan = async (planId: string, cost: number) => {
+    if (!handleActionAttempt('subscribe')) return;
     if (isSubscribing) return;
     if (!userData || userData.balance < cost) {
       showToast(`Insufficient balance. You need at least ₦${cost.toLocaleString()} to activate this pool.`);
@@ -906,6 +920,7 @@ const App: React.FC = () => {
 
   // Claim Daily Earnings
   const claimDailyEarnings = async (plan: any) => {
+    if (!handleActionAttempt('claim')) return;
     const todayStr = new Date().toISOString().slice(0, 10);
     if (plan.lastClaimedDate === todayStr) {
       showToast("This plan yield has already been claimed for today.");
@@ -1579,6 +1594,7 @@ const App: React.FC = () => {
     const ongoingPlacements = activePlacements.filter(p => !p.claimed);
 
     const handleAllocateFund = async () => {
+      if (!handleActionAttempt('allocate')) return;
       if (!selectedFund) return;
       const amount = Number(fundInvestAmount);
       if (isNaN(amount) || amount <= 0) {
@@ -1627,6 +1643,7 @@ const App: React.FC = () => {
     };
 
     const handleClaimFundMaturity = async (invId: string) => {
+      if (!handleActionAttempt('claim')) return;
       try {
         const response = await fetch("/api/user/funds/claim", {
           method: "POST",
@@ -1650,6 +1667,7 @@ const App: React.FC = () => {
     };
 
     const handleCancelInvestment = async (invId: string) => {
+      if (!handleActionAttempt('cancel')) return;
       const confirmCancel = window.confirm("Are you sure you want to terminate this contract early? 10% of your principal will be deducted as penalty, and all interest will be forfeited.");
       if (!confirmCancel) return;
 
@@ -3703,6 +3721,51 @@ const App: React.FC = () => {
                   className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl mt-8 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
                 >
                   Understood
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Holiday Announcement Modal Overlay */}
+      <AnimatePresence>
+        {showHolidayModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className="bg-[#131926] border border-orange-500/30 w-full max-w-md rounded-[32px] p-0 overflow-hidden shadow-2xl"
+            >
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-8 text-white flex flex-col items-center text-center relative overflow-hidden">
+                <div className="absolute -right-4 -top-4 opacity-20">
+                  <span className="text-9xl">🌴</span>
+                </div>
+                <div className="relative z-10 bg-white/20 p-4 rounded-full mb-4">
+                  <span className="text-4xl">🏖️</span>
+                </div>
+                <h3 className="text-2xl font-black tracking-tight relative z-10">Public Holiday</h3>
+                <p className="text-[10px] uppercase font-black opacity-80 tracking-widest font-mono mt-1 relative z-10">Trading & Operations Paused</p>
+              </div>
+              <div className="p-8">
+                <div className="text-slate-300 text-sm font-medium leading-relaxed text-center flex flex-col gap-4">
+                  <p>In observation of the public holiday, all trading functions, withdrawals, and yield generation operations are temporarily suspended.</p>
+                  
+                  <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-2xl">
+                    <p className="text-orange-400 font-extrabold text-xs uppercase tracking-widest mb-1">However, Deposits Are Open!</p>
+                    <p className="text-[11px] leading-relaxed">You can still secure your position today. All new deposits will remain held and successfully put into operation as soon as regular trading resumes tomorrow!</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowHolidayModal(false)}
+                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black py-4 rounded-2xl mt-8 shadow-lg shadow-orange-500/20 active:scale-95 transition-all text-sm tracking-widest uppercase"
+                >
+                  Confirm & Close
                 </button>
               </div>
             </motion.div>
