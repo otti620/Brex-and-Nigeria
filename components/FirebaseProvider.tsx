@@ -274,6 +274,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const data = docSnap.data();
             console.log("User data loaded:", data);
             
+            if (data.isSuspended) {
+                await signOut(auth);
+                setUser(null);
+                setUserData(null);
+                return;
+            }
+
             // Merge global plan configs into user investment states
             const userInvestments = data.investments || CLIENT_DEFAULT_VIP_PLANS;
             const mergedInvestments = globalPlans.map((gp: any) => {

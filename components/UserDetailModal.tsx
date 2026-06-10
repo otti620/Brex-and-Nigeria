@@ -32,16 +32,42 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, onClose 
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-black text-slate-900 tracking-tight">User Activity: {user.name}</h2>
+          <div>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              {user.name}
+              {user.isSuspended && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">Fired</span>}
+            </h2>
+            <p className="text-[11px] text-gray-500 font-mono mt-0.5">{user.email}</p>
+          </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-all">
             <X size={20} />
           </button>
         </div>
 
         <div className="space-y-4">
-            <div className="bg-slate-50 p-4 rounded-2xl">
+            <div className="bg-slate-50 p-4 rounded-2xl flex justify-between items-center">
+              <div>
                 <p className="text-[10px] uppercase font-bold text-slate-400">Total Portfolio</p>
                 <p className="text-3xl font-black text-slate-900">₦{Number(user.balance || 0).toLocaleString()}</p>
+              </div>
+              <button 
+                onClick={async () => {
+                  if (window.confirm(`Are you sure you want to ${user.isSuspended ? 'reinstate' : 'FIRE'} ${user.name}?`)) {
+                    try {
+                      const { doc, updateDoc } = await import('firebase/firestore');
+                      await updateDoc(doc(db, 'users', user.id), {
+                        isSuspended: !user.isSuspended
+                      });
+                      onClose(); // Close to refresh visually
+                    } catch (err) {
+                      alert('Failed to modify user status');
+                    }
+                  }
+                }}
+                className={`px-4 py-2 rounded-xl font-bold text-xs shadow-sm active:scale-95 transition-all ${user.isSuspended ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+              >
+                {user.isSuspended ? 'Reinstate User' : 'Fire User'}
+              </button>
             </div>
             
             <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2">Transaction History</h3>

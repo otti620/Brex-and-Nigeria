@@ -1075,7 +1075,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
                                             <div className="flex justify-between items-start">
                                                 <div>
-                                                    <p className="text-white text-sm font-black font-mono">₦{txn.amount.toLocaleString()}</p>
+                                                    <p className="text-white text-sm font-black font-mono">
+                                                        ₦{(isWithdrawal ? (txn.netAmount || (txn.amount * 0.8)) : txn.amount).toLocaleString()}
+                                                    </p>
                                                     <p className="text-[10px] text-slate-500 mt-0.5">Submitted: {txn.date}</p>
                                                 </div>
                                                 <div className="text-right mr-16">

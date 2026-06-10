@@ -1,6 +1,7 @@
 import React from 'react';
 import { Screen } from '../types';
 import { useFirebase } from './FirebaseProvider';
+import { RefreshCw } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -107,6 +108,22 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
       {/* SEC Educational Banner hidden from user view as requested */}
       
       <main className="flex-1 overflow-y-auto hide-scrollbar pb-24 safe-pb bg-[#f8f8f8]">
+        <div 
+           onClick={() => window.location.reload()}
+           className="bg-indigo-600 text-white w-full text-center py-2.5 font-black text-[10px] tracking-widest uppercase cursor-pointer active:bg-indigo-700 flex items-center justify-center gap-2"
+        >
+          <RefreshCw size={12} className="animate-spin" /> Tap to Refresh Page Data
+        </div>
+        
+        {userData && !hideNav && (
+          <div 
+             onClick={() => onNavigate(Screen.Portfolio)}
+             className="bg-gradient-to-r from-amber-400 to-orange-500 text-white w-full text-center py-2 font-black text-xs tracking-wider uppercase cursor-pointer hover:opacity-90 animate-pulse border-b border-orange-600"
+          >
+             🔥 Earn 10% on Every Referral! Invite Now! 🔥
+          </div>
+        )}
+
         {children}
       </main>
 

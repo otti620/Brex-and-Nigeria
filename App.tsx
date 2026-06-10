@@ -563,6 +563,17 @@ const App: React.FC = () => {
   const [hasShownNoticeThisSession, setHasShownNoticeThisSession] = useState(false);
   const [hasShownTelegramThisSession, setHasShownTelegramThisSession] = useState(false);
 
+  // Always force users to refresh the page when returning to the app
+  useEffect(() => {
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') {
+        window.location.reload();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVis);
+    return () => document.removeEventListener("visibilitychange", handleVis);
+  }, []);
+
   const handleActionAttempt = (actionType: string) => {
     if (siteSettings?.holidayMode) {
       if (actionType === 'deposit') {
@@ -1184,6 +1195,19 @@ const App: React.FC = () => {
     return (
       <div className="px-5 pt-8 pb-14 flex flex-col gap-6 bg-[#f8f8f8] min-h-screen">
         
+        {/* MASSIVE Referral Banner */}
+        <div 
+           onClick={() => setCurrentScreen(Screen.Portfolio)}
+           className="w-full bg-gradient-to-r from-orange-400 via-orange-500 to-amber-500 p-5 rounded-[28px] shadow-lg shadow-orange-500/30 text-white flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all animate-pulse border-2 border-white"
+        >
+            <span className="text-3xl mb-2">🎁</span>
+            <h3 className="font-black text-xl tracking-tight uppercase">Get 10% Referral Bonus!</h3>
+            <p className="text-xs font-bold mt-1 opacity-90">Invite your friends and earn an instant 10% bonus when they make their FIRST deposit!</p>
+            <div className="mt-3 bg-white text-orange-600 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
+              Copy Invite Link Here
+            </div>
+        </div>
+
         {/* Top Header */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
