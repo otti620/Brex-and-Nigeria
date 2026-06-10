@@ -454,9 +454,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
             const txnRef = doc(db, `users/${txn.userId}/transactions/${txn.id}`);
             
             if (txn.type === 'withdraw') {
-                // Restore their balance since payout was rejected
+                // Restore their balance since payout was rejected. Refund the gross amount!
+                const refundAmount = txn.requestedAmount || txn.amount;
                 await updateDoc(userRef, {
-                    balance: increment(txn.amount)
+                    balance: increment(refundAmount)
                 });
                 await updateDoc(txnRef, {
                     status: 'failed',
@@ -467,7 +468,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                 } catch (e) {
                     console.warn("Global admin_withdrawals rejection sync skipped:", e);
                 }
-                await addSystemLog(`Rejected payout of ₦${txn.amount} for user ${txn.userId} (Refunded)`, 'financial');
+                await addSystemLog(`Rejected payout of ₦${refundAmount} for user ${txn.userId} (Refunded)`, 'financial');
             } else {
                 await updateDoc(txnRef, {
                     status: 'failed',

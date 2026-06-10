@@ -645,6 +645,49 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!user || !userData) return;
     if (userData.balance < amount) throw new Error("Insufficient balance");
     
+    // 1. User Weekly Limit Check (Max 2 withdrawals per week)
+    const nowLocal = new Date();
+    const utcTimestamp = nowLocal.getTime() + (nowLocal.getTimezoneOffset() * 60000);
+    const watDate = new Date(utcTimestamp + 3600000);
+    const startOfWeek = new Date(watDate);
+    startOfWeek.setDate(watDate.getDate() - watDate.getDay()); // Start on Sunday
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const userWithdrawalsThisWeek = userData.transactions?.filter((t: any) => {
+      if (t.type !== 'withdraw') return false;
+      const tDate = new Date(t.date.replace(' ', 'T')); 
+      return tDate >= startOfWeek;
+    }).length || 0;
+
+    if (userWithdrawalsThisWeek >= 2) {
+      throw new Error("You have reached your limit of 2 withdrawals per week.");
+    }
+
+    // 2. Global Daily Slots Check (Limited to 2 per day globally)
+    try {
+      const todayString = watDate.toISOString().slice(0, 10);
+      const { collection, getDocs, query, where } = await import('firebase/firestore');
+      const withdrawalsRef = collection(db, 'admin_withdrawals');
+      const globalSnapshot = await getDocs(withdrawalsRef);
+      let countToday = 0;
+      globalSnapshot.docs.forEach(doc => {
+        const d = doc.data();
+        if (d.date) {
+            let tDateStr = "";
+            if (typeof d.date === 'string') tDateStr = d.date;
+            else if (d.date.toDate) tDateStr = d.date.toDate().toISOString();
+            else tDateStr = new Date().toISOString();
+            if (tDateStr.startsWith(todayString)) countToday++;
+        }
+      });
+      if (countToday >= 2) {
+        throw new Error("Withdrawal slots for the day are fully booked. Please try again tomorrow during the withdrawal window.");
+      }
+    } catch (err: any) {
+      if (err.message.includes("Withdrawal slots")) throw err;
+      console.warn("Global withdrawal check failed/skipped:", err);
+    }
+
     // Check if user has joined a plan (HYIP rule)
     const hasJoinedPlan = userData.investments && userData.investments.some((p: any) => p.joined);
     if (!hasJoinedPlan) {
@@ -659,9 +702,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     // Calculate 20% withdrawal fee if not a free day (WAT 5th, 20th, 29th)
-    const nowLocal = new Date();
-    const utcTimestamp = nowLocal.getTime() + (nowLocal.getTimezoneOffset() * 60000);
-    const watDate = new Date(utcTimestamp + 3600000);
     const dayOfMonth = watDate.getDate();
     const freeDays = [5, 20, 29];
     const isFree = freeDays.includes(dayOfMonth);

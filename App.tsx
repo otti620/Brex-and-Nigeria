@@ -231,18 +231,17 @@ const App: React.FC = () => {
     const utcTimestamp = now.getTime() + (now.getTimezoneOffset() * 60000);
     const watDate = new Date(utcTimestamp + 3600000);
     
-    const watDay = watDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const watDay = watDate.getDay(); // 0 = Sunday, 6 = Saturday
     const watHour = watDate.getHours(); // Hour 0-23
     
-    const isSunday = watDay === 0;
-    const isWithinHours = watHour >= 9 && watHour < 14;
+    const isWeekend = watDay === 0 || watDay === 6;
+    const isWithinHours = watHour >= 10 && watHour < 12;
     
     return {
       watDay,
       watHour,
-      isSunday,
-      isWithinHours,
-      canWithdraw: !isSunday && isWithinHours
+      isWeekend,
+      canWithdraw: !isWeekend && isWithinHours
     };
   };
 
@@ -840,12 +839,11 @@ const App: React.FC = () => {
   // Withdrawal validation REST submit
   const handleWithdrawSubmit = async () => {
     if (!handleActionAttempt('withdraw')) return;
-    // 1. Time check restriction: Daily 9am - 2pm WAT (UTC+1), excluding Sunday
-    const { canWithdraw, isSunday } = checkWithdrawalAvailability();
+    const { canWithdraw, isWeekend } = checkWithdrawalAvailability();
     if (!canWithdraw) {
-      setWithdrawErrorMsg(isSunday 
-        ? "Withdrawals are closed on Sundays. Standard payouts take place from Monday to Saturday." 
-        : "Standard settlements are only open between 9:00 AM and 2:00 PM WAT daily."
+      setWithdrawErrorMsg(isWeekend 
+        ? "Withdrawals are closed on weekends (Saturday and Sunday). Standard payouts take place from Monday to Friday." 
+        : "Standard settlements are only open between 10:00 AM and 12:00 PM WAT daily."
       );
       return;
     }
@@ -3134,13 +3132,27 @@ const App: React.FC = () => {
                 : 'bg-rose-50 border border-rose-100 text-rose-800'
             }`}>
               <Clock size={20} className={`shrink-0 mt-0.5 ${canWithdraw ? 'text-emerald-600' : 'text-rose-600'}`} />
-              <div>
+              <div className="flex-1">
                 <p className="font-black uppercase tracking-widest text-[11px] mb-1">
                   {canWithdraw ? 'Withdrawal Status: Open' : 'Withdrawal Status: Closed'}
                 </p>
                 <p className="leading-relaxed opacity-70">
-                  Withdrawal hours: <span className="font-black">9:00 AM - 2:00 PM WAT</span> (Mon-Sat). Closed on Sundays.
+                  Withdrawal hours: <span className="font-black">10:00 AM - 12:00 PM WAT</span> (Mon-Fri). Closed on weekends.
                 </p>
+                {canWithdraw && (
+                  <div className="mt-4 bg-white/50 p-3 rounded-2xl border border-emerald-100/50 relative overflow-hidden">
+                    <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest font-mono mb-2">
+                        <span className="flex items-center gap-1.5"><Rocket size={10} /> Daily Dispatch Slots</span>
+                        <span className="text-rose-600 animate-pulse">FILLING FAST</span>
+                    </div>
+                    <div className="w-full bg-emerald-200/50 rounded-full h-2 overflow-hidden shadow-inner">
+                        <div 
+                          className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-full rounded-full transition-all duration-1000" 
+                          style={{ width: `${Math.min(99, Math.max(15, Math.floor(((new Date(new Date().getTime() + (new Date().getTimezoneOffset() * 60000) + 3600000).getMinutes() + ((new Date(new Date().getTime() + (new Date().getTimezoneOffset() * 60000) + 3600000).getHours() - 10) * 60)) / 120) * 85 + 10)))}%` }} 
+                        />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
