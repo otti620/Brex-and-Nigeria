@@ -22,6 +22,8 @@ interface FirebaseContextType {
   rejectTransaction: (txnId: string, userId: string) => Promise<any>;
   accrueYield: (planId: string) => Promise<any>;
   subscribeToPlan: (planId: string) => Promise<any>;
+  investDigitalSavings?: (assetId: string, amount: number, durationDays: number) => Promise<any>;
+  claimDigitalSavings?: (placementId: string) => Promise<any>;
   loadTeamData: () => Promise<any>;
   refreshProfile: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -49,6 +51,8 @@ const FirebaseContext = createContext<FirebaseContextType>({
   withdraw: async () => {},
   accrueYield: async () => {},
   subscribeToPlan: async () => {},
+  investDigitalSavings: async () => {},
+  claimDigitalSavings: async () => {},
   loadTeamData: async () => ({ members: [], teamSize: 0, rechargeMembers: 0 }),
   refreshProfile: async () => {},
   resetPassword: async () => {},
@@ -799,6 +803,169 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const investDigitalSavings = async (assetId: string, amount: number, durationDays: number) => {
+    if (!user || !userData) return;
+    if (userData.balance < amount) {
+      throw new Error("Insufficient balance");
+    }
+
+    const assetRates: Record<string, { rate: number; exchangeRate: number; name: string; symbol: string }> = {
+      usdt: { rate: 1.2, exchangeRate: 1600, name: 'Tether', symbol: 'USDT' },
+      btc: { rate: 1.5, exchangeRate: 100000000, name: 'Bitcoin', symbol: 'BTC' },
+      eth: { rate: 1.4, exchangeRate: 5000000, name: 'Ethereum', symbol: 'ETH' }
+    };
+
+    const config = assetRates[assetId];
+    if (!config) {
+      throw new Error("Invalid asset selected");
+    }
+
+    const assetUnitAmount = amount / config.exchangeRate;
+    const dailyProfitNgn = amount * (config.rate / 100);
+    const totalInterestNgn = Math.round(dailyProfitNgn * durationDays);
+
+    const placement = {
+      id: `ds_${Date.now()}`,
+      assetId,
+      assetName: config.name,
+      assetSymbol: config.symbol,
+      ngnAmount: amount,
+      assetAmount: assetUnitAmount,
+      dailyRate: config.rate,
+      exchangeRate: config.exchangeRate,
+      days: durationDays,
+      totalInterestNgn,
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString(),
+      claimed: false
+    };
+
+    try {
+      const batch = writeBatch(db);
+      const userRef = doc(db, 'users', user.uid);
+      const currentSavings = userData.digitalSavingsInvestments || [];
+      
+      batch.update(userRef, {
+        balance: increment(-amount),
+        digitalSavingsInvestments: [...currentSavings, placement]
+      });
+
+      const txnId = `txn_ds_${Date.now()}`;
+      const txnRef = doc(db, `users/${user.uid}/transactions/${txnId}`);
+      batch.set(txnRef, {
+        id: txnId,
+        userId: user.uid,
+        userName: userData.name,
+        userPhone: userData.phoneNumber,
+        amount: amount,
+        type: "withdraw",
+        status: "success",
+        date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        details: `Subscribed (Digital Asset Savings - ${config.symbol} ${durationDays} Days)`
+      });
+
+      await batch.commit();
+      await refreshProfile();
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to make digital asset savings investment");
+    }
+  };
+
+  const claimDigitalSavings = async (placementId: string) => {
+    if (!user || !userData) return;
+    const currentSavings = userData.digitalSavingsInvestments || [];
+    const placement = currentSavings.find((p: any) => p.id === placementId);
+    
+    if (!placement) {
+      throw new Error("Savings plan not found");
+    }
+    if (placement.claimed) {
+      throw new Error("This savings contract has already been claimed");
+    }
+
+    const isMatured = new Date() >= new Date(placement.endDate);
+    if (!isMatured) {
+      const confirmCancel = window.confirm("This savings plan has not completed its term yet. Early settlement will forfeit all profit projections and incur a 10% administrative settlement penalty on your principal. Do you want to settle early?");
+      if (!confirmCancel) return;
+
+      const penaltyAmount = Math.round(placement.ngnAmount * 0.10);
+      const refundAmount = placement.ngnAmount - penaltyAmount;
+
+      try {
+        const batch = writeBatch(db);
+        const userRef = doc(db, 'users', user.uid);
+        const updatedSavings = currentSavings.map((p: any) => {
+          if (p.id === placementId) {
+            return { ...p, claimed: true, cancelledEarly: true };
+          }
+          return p;
+        });
+
+        batch.update(userRef, {
+          balance: increment(refundAmount),
+          digitalSavingsInvestments: updatedSavings
+        });
+
+        const txnId = `txn_dscancel_${Date.now()}`;
+        const txnRef = doc(db, `users/${user.uid}/transactions/${txnId}`);
+        batch.set(txnRef, {
+          id: txnId,
+          userId: user.uid,
+          userName: userData.name,
+          userPhone: userData.phoneNumber,
+          amount: refundAmount,
+          type: "deposit",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Early Liquidated (USDT/BTC/ETH Savings - Formatted Less 10% administrative penalty)`
+        });
+
+        await batch.commit();
+        await refreshProfile();
+      } catch (err: any) {
+        throw new Error(err.message || "Termination failed");
+      }
+    } else {
+      const creditAmount = placement.ngnAmount + placement.totalInterestNgn;
+
+      try {
+        const batch = writeBatch(db);
+        const userRef = doc(db, 'users', user.uid);
+        const updatedSavings = currentSavings.map((p: any) => {
+          if (p.id === placementId) {
+            return { ...p, claimed: true };
+          }
+          return p;
+        });
+
+        batch.update(userRef, {
+          balance: increment(creditAmount),
+          monthlyGains: increment(placement.totalInterestNgn),
+          digitalSavingsInvestments: updatedSavings
+        });
+
+        const txnId = `txn_dsclaim_${Date.now()}`;
+        const txnRef = doc(db, `users/${user.uid}/transactions/${txnId}`);
+        batch.set(txnRef, {
+          id: txnId,
+          userId: user.uid,
+          userName: userData.name,
+          userPhone: userData.phoneNumber,
+          amount: creditAmount,
+          type: "deposit",
+          status: "success",
+          date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          details: `Claimed Digital Savings Maturity (Accrued principal and daily profits from ${placement.assetSymbol})`
+        });
+
+        await batch.commit();
+        await refreshProfile();
+      } catch (err: any) {
+        throw new Error(err.message || "Claim processing failed");
+      }
+    }
+  };
+
   const loadTeamData = async () => {
     if (!user || !userData) return { members: [], teamSize: 0, rechargeMembers: 0 };
     
@@ -920,6 +1087,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       withdraw,
       accrueYield,
       subscribeToPlan,
+      investDigitalSavings,
+      claimDigitalSavings,
       loadTeamData,
       globalPlans,
       refreshProfile,

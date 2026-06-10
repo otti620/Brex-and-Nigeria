@@ -84,6 +84,8 @@ const App: React.FC = () => {
     withdraw, 
     accrueYield,
     subscribeToPlan,
+    investDigitalSavings,
+    claimDigitalSavings,
     simulateInvite,
     loadTeamData,
     refreshProfile,
@@ -173,7 +175,10 @@ const App: React.FC = () => {
     }, 4000);
   };
 
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.Auth);
+  const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
+    const saved = localStorage.getItem('brex_active_screen');
+    return (saved as Screen) || Screen.Auth;
+  });
   const [selectedIntent, setSelectedIntent] = useState<string>('safe');
   const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
 
@@ -183,6 +188,61 @@ const App: React.FC = () => {
   const [fundInvestAmount, setFundInvestAmount] = useState<string>('');
   const [fundInvestDays, setFundInvestDays] = useState<number>(14); // default 14 days
   const [isAllocatingFund, setIsAllocatingFund] = useState<boolean>(false);
+
+  // Digital Asset Savings states
+  const [showDigitalSavingsModal, setShowDigitalSavingsModal] = useState<boolean>(false);
+  const [dsSelectedAsset, setDsSelectedAsset] = useState<'usdt' | 'btc' | 'eth'>('usdt');
+  const [dsAmount, setDsAmount] = useState<string>('');
+  const [dsDuration, setDsDuration] = useState<number>(14);
+  const [dsLoading, setDsLoading] = useState<boolean>(false);
+
+  const handleDigitalSavingsSubscribe = async () => {
+    if (!investDigitalSavings || !userData) return;
+    const amountVal = Number(dsAmount);
+    if (isNaN(amountVal) || amountVal <= 0) {
+      showToast("Please enter a valid investment amount.");
+      return;
+    }
+
+    const mins: Record<string, number> = { usdt: 3000, btc: 5000, eth: 4000 };
+    const minRequired = mins[dsSelectedAsset] || 3000;
+    if (amountVal < minRequired) {
+      showToast(`Minimum deposit required is ₦${minRequired.toLocaleString()}`);
+      return;
+    }
+
+    if (userData.balance < amountVal) {
+      showToast(`Insufficient wallet balance. Please recharge NGN first.`);
+      return;
+    }
+
+    setDsLoading(true);
+    try {
+      await investDigitalSavings(dsSelectedAsset, amountVal, dsDuration);
+      showToast(`Subscription successful! Allocated ₦${amountVal.toLocaleString()} into digital savings.`);
+      setDsAmount('');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      showToast(err.message || "E-liquidity block routing error.");
+    } finally {
+      setDsLoading(false);
+    }
+  };
+
+  const handleDigitalSavingsClaim = async (id: string) => {
+    if (!claimDigitalSavings) return;
+    try {
+      await claimDigitalSavings(id);
+      showToast("Yield maturity asset payout settled to your main balance!");
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      showToast(err.message || "Payout settlement failed.");
+    }
+  };
 
   // Unused legacy promo states held solely to keep the obsolete/unused renderPromotions function compiling cleanly
   const [promoTab, setPromoTab] = useState<'spin' | 'bids' | 'offers' | 'deal'>('deal');
@@ -673,15 +733,22 @@ const App: React.FC = () => {
       if (user) {
         if (userData) {
           if (currentScreen === Screen.Auth) {
-            if (userData?.isAdmin) {
-              setCurrentScreen(Screen.Admin);
+            const saved = localStorage.getItem('brex_active_screen');
+            if (saved && saved !== Screen.Auth && saved !== Screen.Signup) {
+              setCurrentScreen(saved as Screen);
             } else {
-              setCurrentScreen(Screen.Dashboard);
+              if (userData?.isAdmin) {
+                setCurrentScreen(Screen.Admin);
+              } else {
+                setCurrentScreen(Screen.Dashboard);
+              }
             }
           }
         }
       } else {
-        setCurrentScreen(Screen.Auth);
+        if (currentScreen !== Screen.Auth && currentScreen !== Screen.Signup) {
+          setCurrentScreen(Screen.Auth);
+        }
       }
     }
   }, [user, userData, loading, currentScreen]);
@@ -690,7 +757,10 @@ const App: React.FC = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  const navigate = (screen: Screen) => setCurrentScreen(screen);
+  const navigate = (screen: Screen) => {
+    localStorage.setItem('brex_active_screen', screen);
+    window.location.reload();
+  };
 
   const refreshTeamData = async () => {
     try {
@@ -1197,7 +1267,7 @@ const App: React.FC = () => {
         
         {/* MASSIVE Referral Banner */}
         <div 
-           onClick={() => setCurrentScreen(Screen.Portfolio)}
+           onClick={() => navigate(Screen.Portfolio)}
            className="w-full bg-gradient-to-r from-orange-400 via-orange-500 to-amber-500 p-5 rounded-[28px] shadow-lg shadow-orange-500/30 text-white flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all animate-pulse border-2 border-white"
         >
             <span className="text-3xl mb-2">🎁</span>
@@ -1332,6 +1402,54 @@ const App: React.FC = () => {
           <div className="w-7 h-7 bg-black/5 rounded-full flex items-center justify-center text-black relative z-10 group-hover:bg-[#ff9c00] group-hover:text-black transition-all">
             <ArrowUpRight size={14} />
           </div>
+        </div>
+
+        {/* Digital Asset Savings Promo Card */}
+        <div 
+          onClick={() => setShowDigitalSavingsModal(true)}
+          className="p-5 bg-gradient-to-br from-indigo-900 via-indigo-950 to-purple-950 border border-indigo-500/30 rounded-[32px] flex flex-col gap-3.5 cursor-pointer active:scale-[0.99] transition-all relative overflow-hidden group shadow-lg shadow-indigo-900/40"
+        >
+          {/* Animated Background Orbs */}
+          <div className="absolute -top-10 -right-10 w-28 h-28 bg-purple-500/20 rounded-full blur-2xl group-hover:bg-purple-500/30 transition-all" />
+          <div className="absolute -bottom-10 -left-10 w-28 h-28 bg-blue-500/20 rounded-full blur-2xl group-hover:bg-blue-500/30 transition-all" />
+          
+          <div className="flex justify-between items-start relative z-10">
+            <div className="flex gap-3">
+              <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-400/20 rounded-2xl flex items-center justify-center text-2xl shadow-inner shadow-white/5">
+                🔮
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-white font-black text-sm tracking-tight">Digital Asset Savings</h4>
+                  <span className="bg-gradient-to-r from-amber-400 to-orange-500 text-black text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase font-mono tracking-widest animate-pulse">NEW</span>
+                </div>
+                <p className="text-indigo-200/80 text-[10px] font-bold mt-0.5">High-Yield Liquidity & Projected Profits</p>
+              </div>
+            </div>
+            
+            <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center text-[#ff9c00] border border-white/10 group-hover:bg-[#ff9c00] group-hover:text-black hover:scale-110 active:scale-95 transition-all">
+              <ArrowUpRight size={15} />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-2.5 pt-1 relative z-10">
+            <div className="bg-white/[0.03] border border-white/5 p-2 rounded-xl text-center">
+              <p className="text-[7.5px] font-black text-indigo-300 tracking-wider uppercase font-mono">USDT</p>
+              <p className="text-[11px] font-black text-white font-mono mt-0.5">1.2% Daily</p>
+            </div>
+            <div className="bg-white/[0.03] border border-white/5 p-2 rounded-xl text-center">
+              <p className="text-[7.5px] font-black text-indigo-300 tracking-wider uppercase font-mono">BTC</p>
+              <p className="text-[11px] font-black text-white font-mono mt-0.5">1.5% Daily</p>
+            </div>
+            <div className="bg-white/[0.03] border border-white/5 p-2 rounded-xl text-center">
+              <p className="text-[7.5px] font-black text-indigo-300 tracking-wider uppercase font-mono">ETH</p>
+              <p className="text-[11px] font-black text-white font-mono mt-0.5">1.4% Daily</p>
+            </div>
+          </div>
+          
+          <p className="text-[9.5px] font-bold text-indigo-200/50 uppercase tracking-widest text-center mt-0.5 font-mono relative z-10 group-hover:text-indigo-100 transition-colors">
+            ⚡ CLICK TO START COLLECTING YIELD ⚡
+          </p>
         </div>
 
         {/* Performance metrics gains */}
@@ -4736,6 +4854,239 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Digital Asset Savings Modal Overlay */}
+      <AnimatePresence>
+        {showDigitalSavingsModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 30 }}
+              className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl relative flex flex-col md:max-h-[85vh] max-h-[90vh] text-slate-900 border border-slate-100"
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-br from-indigo-900 to-indigo-950 p-6 text-white text-center relative shrink-0">
+                <button 
+                  onClick={() => setShowDigitalSavingsModal(false)}
+                  className="absolute right-5 top-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer active:scale-95 transition-transform"
+                >
+                  ✕
+                </button>
+                <div className="w-12 h-12 bg-white/15 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]">
+                  <span className="text-2xl">🔮</span>
+                </div>
+                <h3 className="text-lg font-black uppercase tracking-wider">Digital Asset Savings</h3>
+                <p className="text-[10px] text-indigo-200/80 uppercase font-black tracking-widest font-mono mt-1">E-Liquidity High-Yield savings Pool</p>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="overflow-y-auto p-6 flex flex-col gap-5 bg-slate-50">
+                {/* Asset Selectors */}
+                <div className="space-y-2 shrink-0">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono">1. Select Target Blockchain Asset</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['usdt', 'btc', 'eth'] as const).map((asset) => {
+                      const isActive = dsSelectedAsset === asset;
+                      const conf = {
+                        usdt: { n: 'USDT', y: '1.2%', avatar: '💵', border: 'border-emerald-500' },
+                        btc: { n: 'BTC', y: '1.5%', avatar: '🪙', border: 'border-amber-500' },
+                        eth: { n: 'ETH', y: '1.4%', avatar: '🔷', border: 'border-indigo-400' }
+                      }[asset];
+                      return (
+                        <div 
+                          key={asset}
+                          onClick={() => setDsSelectedAsset(asset)}
+                          className={`p-3 rounded-2xl border text-center cursor-pointer transition-all ${
+                            isActive 
+                              ? `${conf.border} bg-white shadow-md scale-102 font-black border-2` 
+                              : 'border-slate-200 bg-white hover:border-slate-300 font-bold'
+                          }`}
+                        >
+                          <span className="text-lg block mb-0.5">{conf.avatar}</span>
+                          <p className="text-xs text-slate-800 uppercase font-mono">{conf.n}</p>
+                          <p className="text-[9px] text-[#ff9c00] font-black font-mono mt-0.5">{conf.y} Daily</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Input block */}
+                <div className="space-y-2 bg-white p-4.5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono">2. Enter Investment Amount (NGN)</p>
+                  
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black font-mono text-slate-400 text-sm">₦</span>
+                    <input 
+                      type="number"
+                      placeholder="e.g. 5,000"
+                      value={dsAmount}
+                      onChange={(e) => setDsAmount(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 py-3 pl-8 pr-4 rounded-xl text-xs font-black font-mono outline-none transition-colors"
+                    />
+                  </div>
+
+                  {/* Calculations breakdown */}
+                  <div className="pt-2 divide-y divide-slate-100 text-[11px] text-slate-600 font-medium">
+                    <div className="py-2 flex justify-between items-center">
+                      <span className="opacity-70">Exchange Rate parity:</span>
+                      <span className="font-mono text-slate-800 font-black">
+                        1 {dsSelectedAsset.toUpperCase()} = ₦{({ usdt: 1600, btc: 100000000, eth: 5000000 }[dsSelectedAsset]).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="py-2 flex justify-between items-center">
+                      <span className="opacity-70">Secured Equivalent:</span>
+                      <span className="font-mono text-indigo-600 font-black">
+                        {((Number(dsAmount) || 0) / ({ usdt: 1600, btc: 100000000, eth: 5000000 }[dsSelectedAsset])).toFixed(6)} {dsSelectedAsset.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="py-2 flex justify-between items-center bg-indigo-50/20 px-2 rounded-lg gap-2 mt-1">
+                      <span className="font-black text-indigo-700/80">Est. Daily Savings:</span>
+                      <span className="font-mono text-emerald-600 font-black">
+                        +₦{Math.round((Number(dsAmount) || 0) * ({ usdt: 1.2, btc: 1.5, eth: 1.4 }[dsSelectedAsset] / 100)).toLocaleString()} / day
+                      </span>
+                    </div>
+                    <div className="py-2 flex justify-between items-center bg-indigo-50/20 px-2 rounded-lg gap-2">
+                      <span className="font-black text-indigo-700/80">Est. 365-Day Yield:</span>
+                      <span className="font-mono text-indigo-700 font-black">
+                        +₦{Math.round((Number(dsAmount) || 0) * ({ usdt: 1.2, btc: 1.5, eth: 1.4 }[dsSelectedAsset] / 100) * 365).toLocaleString()} / yr
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Duration select */}
+                <div className="space-y-2 shrink-0">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono">3. Select Lock Period (Duration)</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {([7, 14, 30, 90] as const).map((days) => {
+                      const isActive = dsDuration === days;
+                      const currentAssetRate = { usdt: 1.2, btc: 1.5, eth: 1.4 }[dsSelectedAsset];
+                      return (
+                        <div 
+                          key={days}
+                          onClick={() => setDsDuration(days)}
+                          className={`py-2 rounded-xl border text-center text-xs cursor-pointer transition-all ${
+                            isActive 
+                              ? 'border-indigo-600 bg-indigo-600 text-white font-black shadow-md' 
+                              : 'border-slate-200 bg-white hover:border-indigo-100 text-slate-600'
+                          }`}
+                        >
+                          <span className="font-mono font-bold">{days}D</span>
+                          <span className="text-[8px] block opacity-70 mt-0.5">{currentAssetRate}%/D</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Action button */}
+                <button 
+                  onClick={handleDigitalSavingsSubscribe}
+                  disabled={dsLoading}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-600/20 transition-all font-mono text-xs uppercase tracking-widest cursor-pointer shrink-0"
+                >
+                  {dsLoading ? 'Rerouting Contract Block...' : '✓ Activate Savings Plan'}
+                </button>
+
+                {/* Active Placements list */}
+                <div className="space-y-3 shrink-0 pt-2 border-t border-slate-200">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono">Active Savings Leases & Contracts</p>
+                    <span className="bg-slate-200/50 text-slate-500 font-mono font-black text-[9px] px-2 py-0.5 rounded-full">
+                      {(userData.digitalSavingsInvestments || []).filter((p: any) => !p.claimed).length} active
+                    </span>
+                  </div>
+
+                  {(userData.digitalSavingsInvestments || []).length === 0 ? (
+                    <div className="bg-white p-6 border border-slate-200 rounded-2xl text-center text-[11px] text-slate-400 font-semibold italic">
+                      No active blockchain saving liquidity leases. Allocate principal above to begin making static automated yields daily!
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                      {(userData.digitalSavingsInvestments || []).map((p: any) => {
+                        const isMatured = new Date() >= new Date(p.endDate);
+                        const start = new Date(p.startDate).getTime();
+                        const end = new Date(p.endDate).getTime();
+                        const progress = Math.min(100, Math.max(0, ((Date.now() - start) / (end - start)) * 100));
+                        
+                        return (
+                          <div key={p.id} className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col gap-3 shadow-none">
+                            <div className="flex justify-between items-start">
+                              <div className="flex gap-2">
+                                <span className="text-xl">{p.assetSymbol === 'USDT' ? '💵' : p.assetSymbol === 'BTC' ? '🪙' : '🔷'}</span>
+                                <div>
+                                  <h5 className="font-black text-xs text-slate-800 leading-none">{p.assetName}</h5>
+                                  <p className="text-[8px] text-slate-400 font-mono uppercase tracking-widest mt-0.5">{p.days} Days lock • {p.dailyRate}% yield/day</p>
+                                </div>
+                              </div>
+                              
+                              <div>
+                                {p.claimed ? (
+                                  <span className="bg-slate-100 text-slate-500 text-[8px] font-black px-2 py-0.5 rounded font-mono uppercase">Settled</span>
+                                ) : isMatured ? (
+                                  <span className="bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded font-mono uppercase animate-pulse">Matured</span>
+                                ) : (
+                                  <span className="bg-blue-600 text-white text-[8px] font-black px-2 py-0.5 rounded font-mono uppercase">Ongoing</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Details values */}
+                            <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-50 p-2.5 rounded-xl border border-slate-100 divide-x divide-slate-100">
+                              <div>
+                                <p className="opacity-60 text-[8px] font-black uppercase tracking-wider font-mono">Leased capital</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5">₦{p.ngnAmount.toLocaleString()} <span className="text-[8.5px] opacity-60 font-medium italic">({p.assetAmount.toFixed(4)} {p.assetSymbol})</span></p>
+                              </div>
+                              <div className="pl-2">
+                                <p className="opacity-60 text-[8px] font-black uppercase tracking-wider font-mono text-emerald-600">Total Profit yield</p>
+                                <p className="font-black text-emerald-600 mt-0.5">+₦{p.totalInterestNgn.toLocaleString()}</p>
+                              </div>
+                            </div>
+
+                            {/* Progress bar */}
+                            {!p.claimed && (
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-[8px] text-slate-400 font-mono font-black uppercase">
+                                  <span>Lock timeline Progress</span>
+                                  <span>{progress.toFixed(1)}% ({Math.ceil(Math.max(0, (end - Date.now()) / (24*60*60*1000)))}D left)</span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/50">
+                                  <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full transition-all" style={{ width: `${progress}%` }} />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Claim action */}
+                            {!p.claimed && (
+                              <button 
+                                onClick={() => handleDigitalSavingsClaim(p.id)}
+                                className={`w-full py-2.5 rounded-xl text-center text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+                                  isMatured 
+                                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10 active:bg-emerald-700' 
+                                    : 'bg-rose-50 hover:bg-rose-100 border border-rose-200/50 text-rose-600 active:scale-95'
+                                }`}
+                              >
+                                {isMatured ? '✓ Claim Mature Yield & Capital' : '⛔ Early Liquidation (10% Penalty)'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </Layout>
   );

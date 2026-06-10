@@ -113,6 +113,7 @@ export interface UserState {
   teamSizeToday?: number;
   investments?: UserInvestment[];
   fundsInvestments?: FundInvestment[];
+  digitalSavingsInvestments?: any[];
   transactions?: TransactionRecord[];
   spinBalance?: number;
   currentReferrals?: number;
