@@ -903,7 +903,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                 {/* Suspension */}
                                                 {!isSelf && (
                                                     <button
-                                                        onClick={async () => {
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation();
                                                             await updateDoc(doc(db, 'users', u.id), { isSuspended: !u.isSuspended });
                                                             await addSystemLog(`Toggled suspension state of user ${u.id}`, 'audit');
                                                             await loadAdminRegistry();
@@ -925,7 +926,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
                                                         {[1, 2, 3].map(lvl => (
                                                             <button
                                                                 key={lvl}
-                                                                onClick={() => updateKycStatus(u.id, lvl)}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    updateKycStatus(u.id, lvl);
+                                                                }}
                                                                 className={`text-[9px] px-2 py-1 rounded font-black font-mono cursor-pointer transition-all ${u.kycLevel === lvl ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-indigo-600'}`}
                                                             >
                                                                 L{lvl}

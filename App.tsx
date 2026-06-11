@@ -305,6 +305,24 @@ const App: React.FC = () => {
     };
   };
 
+  const getTodayReferralsCount = (): number => {
+    if (!teamMembers || teamMembers.length === 0) return 0;
+    
+    const now = new Date();
+    const utcTimestamp = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const watDate = new Date(utcTimestamp + 3600000);
+    const todayStrStr = watDate.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    
+    const lvl1ReferredToday = teamMembers.filter((m: any) => {
+      if (m.lvl !== 1) return false;
+      const regDateStr = m.createdAt || m.createdAtStr || m.date || '';
+      if (!regDateStr) return false;
+      return regDateStr.includes(todayStrStr);
+    });
+    
+    return lvl1ReferredToday.length;
+  };
+
   const getWithdrawalFeeInfo = () => {
     const now = new Date();
     const utcTimestamp = now.getTime() + (now.getTimezoneOffset() * 60000);
@@ -527,6 +545,19 @@ const App: React.FC = () => {
 
   // Recharge states
   const [rechargeAmt, setRechargeAmt] = useState<number>(10000);
+  const [watTime, setWatTime] = useState<string>('');
+
+  useEffect(() => {
+    const updateWatTime = () => {
+      const now = new Date();
+      const utcTimestamp = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const watDate = new Date(utcTimestamp + 3600000);
+      setWatTime(watDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
+    };
+    updateWatTime();
+    const interval = setInterval(updateWatTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
   const [paymentErrorDetails, setPaymentErrorDetails] = useState<{ error: string; details?: any; debug?: any; resolvedPublicKey?: string; isConfigured?: boolean } | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<string>('Hpay');
   const [rechargeStep, setRechargeStep] = useState<'input' | 'payment_instructions' | 'confirming' | 'success'>('input');
@@ -662,25 +693,29 @@ const App: React.FC = () => {
     }
   }, [userData]);
 
-  // Load team data when referral tree is active
+  // Load team data when referral tree is active, or user is on the Wallet / Withdrawal view
   useEffect(() => {
-    if (activeProfileOverlay === 'referral_tree' && userData) {
+    if (userData && (activeProfileOverlay === 'referral_tree' || currentScreen === Screen.Wallet || fundTab === 'withdrawal')) {
       let isMounted = true;
       const fetchTeam = async () => {
-        const data = await loadTeamData();
-        if (isMounted && data && data.members) {
-          setTeamMembers(data.members);
+        try {
+          const data = await loadTeamData();
+          if (isMounted && data && data.members) {
+            setTeamMembers(data.members);
+          }
+        } catch (e) {
+          console.error("Failed to fetch team data:", e);
         }
       };
       
       fetchTeam();
-      const interval = setInterval(fetchTeam, 15000); // 15s polling for team tree
+      const interval = setInterval(fetchTeam, 10000); // 10s polling for team tree and withdrawal checks
       return () => {
         isMounted = false;
         clearInterval(interval);
       };
     }
-  }, [activeProfileOverlay, userData?.uid]);
+  }, [activeProfileOverlay, currentScreen, fundTab, userData?.uid]);
 
   // Trigger popups automatically when navigating to dashboard
   useEffect(() => {
@@ -926,6 +961,12 @@ const App: React.FC = () => {
         ? "Withdrawals are closed on weekends (Saturday and Sunday). Standard payouts take place from Monday to Friday." 
         : "Standard settlements are only open between 10:00 AM and 12:00 PM WAT daily."
       );
+      return;
+    }
+
+    const todayRefs = getTodayReferralsCount();
+    if (todayRefs < 1) {
+      setWithdrawErrorMsg("🛡️ System Policy Upgraded: To request a withdrawal on any official payout day, you must successfully refer at least 1 new active partner under your registration code TODAY.");
       return;
     }
 
@@ -3268,6 +3309,64 @@ const App: React.FC = () => {
               </p>
             </div>
 
+            {/* OFFICIAL SYSTEM POLICY BOARD */}
+            <div className="bg-slate-900 border border-slate-800 text-slate-100 p-6 rounded-[32px] text-xs flex flex-col gap-4 shadow-xl relative overflow-hidden text-left">
+              <div className="absolute -top-12 -right-12 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl" />
+              
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <span className="text-2xl animate-pulse">🛡️</span>
+                <div>
+                  <span className="font-extrabold uppercase tracking-wider text-[11px] text-indigo-400 block font-mono">System Policy Board</span>
+                  <span className="font-black text-white text-sm tracking-tight leading-none mt-1 block font-sans">Anti-Abuse Settlement Upgrade v4.2</span>
+                </div>
+              </div>
+
+              <div className="space-y-3 font-medium leading-relaxed text-slate-300">
+                <p>
+                  To secure user assets and prevent illegal payout syndications or malicious automated multi-accounts, the platform has integrated a state-of-the-art <span className="text-white font-extrabold">Peer-to-Peer Referral Validator</span>.
+                </p>
+                <p className="bg-slate-950/60 p-4 border border-slate-800 rounded-2xl font-mono text-[11px] leading-relaxed text-slate-400">
+                  ⚠️ <span className="text-amber-400 font-extrabold">MANDATORY RULE:</span> For a withdrawal to be made on any official payout day, you <span className="text-indigo-400 font-extrabold">MUST refer at least one (1) new active partner under your invitation code TODAY</span>. Payout lines remain blocked without this verification step.
+                </p>
+              </div>
+
+              {/* REAL-TIME SYSTEM INFORMATION AND CLOCK */}
+              <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-800/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-[10px] text-slate-400">
+                <div className="flex flex-col">
+                  <span className="text-slate-500 uppercase font-black tracking-widest text-[8px]">System Time (WAT)</span>
+                  <span className="text-indigo-300 font-black text-sm mt-0.5">{watTime || "Loading standard clock..."}</span>
+                </div>
+                <div className="flex flex-col text-left sm:text-right">
+                  <span className="text-slate-500 uppercase font-black tracking-widest text-[8px]">Referral Verification Today</span>
+                  <span className={`font-black text-xs mt-0.5 ${getTodayReferralsCount() >= 1 ? "text-emerald-400" : "text-rose-400 animate-pulse"}`}>
+                    {getTodayReferralsCount() >= 1 
+                      ? `🟢 VERIFIED (${getTodayReferralsCount()} Registered Today)` 
+                      : `🔴 PENDING (0 / 1 Registered Today)`
+                    }
+                  </span>
+                </div>
+              </div>
+
+              {/* INVITATION INFO FOR USERS TO IMMEDIATELY SHARE */}
+              {getTodayReferralsCount() < 1 && (
+                <div className="bg-indigo-950/50 border border-indigo-900 text-indigo-400 p-4 rounded-2xl flex flex-col gap-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-[10px] font-black uppercase text-indigo-300 font-mono tracking-wider">Your Invitation Code</span>
+                    <span className="font-extrabold font-mono text-xs bg-indigo-900/60 px-3 py-1 rounded-lg border border-indigo-800 text-white select-all">{userData.invitationCode}</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/?ref=${userData.invitationCode}`);
+                      showToast("Invitation Link copied! 🔗");
+                    }}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase font-mono tracking-widest text-[10px] py-2.5 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer outline-none"
+                  >
+                    Copy Referral Link to share
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className={`p-5 rounded-[28px] text-xs flex items-start gap-4 shadow-sm font-semibold ${
               canWithdraw 
                 ? 'bg-emerald-50 border border-emerald-100 text-emerald-800' 
@@ -3458,9 +3557,21 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                <button onClick={handleWithdrawSubmit} disabled={withdrawAmt < 1000 || !canWithdraw} className="w-full bg-blue-600 hover:bg-blue-700 py-5 rounded-[28px] text-white font-black uppercase tracking-widest text-sm shadow-2xl shadow-blue-600/30 flex items-center justify-center gap-3 h-20 transition-all active:scale-95 disabled:grayscale">
-                   <ShieldCheck size={24} /> Withdraw Now
-                </button>
+                {getTodayReferralsCount() < 1 ? (
+                  <div className="bg-rose-50 border border-rose-200/55 p-6 rounded-[32px] text-center flex flex-col items-center gap-3 shadow-md animate-pulse">
+                    <span className="text-3xl">🔒</span>
+                    <div>
+                      <h5 className="text-rose-900 font-extrabold text-xs uppercase tracking-wider leading-none">Withdrawal Actions Locked</h5>
+                      <p className="text-[10px] font-bold text-rose-700/90 mt-2 font-mono leading-relaxed max-w-xs mx-auto">
+                        Our Anti-Abuse validator has hidden the payout submission button. To unlock immediate withdrawals, you must register at least <b>1 direct partner</b> under your referral code today!
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={handleWithdrawSubmit} disabled={withdrawAmt < 1000 || !canWithdraw} className="w-full bg-blue-600 hover:bg-blue-700 py-5 rounded-[28px] text-white font-black uppercase tracking-widest text-sm shadow-2xl shadow-blue-600/30 flex items-center justify-center gap-3 h-20 transition-all active:scale-95 disabled:grayscale">
+                     <ShieldCheck size={24} /> Withdraw Now
+                  </button>
+                )}
               </div>
             )}
 
@@ -3837,10 +3948,18 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <FlyerPopup isOpen={showFlyerModal} onClose={() => setShowFlyerModal(false)} />
       <TelegramModal isOpen={showTelegramModal} onClose={() => {
         setShowTelegramModal(false);
       }} />
+
+      <FlyerPopup 
+        isOpen={showFlyerModal} 
+        onClose={() => setShowFlyerModal(false)}
+        onAction={() => {
+          setShowFlyerModal(false);
+          navigate(Screen.Funds);
+        }}
+      />
 
       {/* Broadcast Notice Modal */}
       <AnimatePresence>

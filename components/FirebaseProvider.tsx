@@ -356,7 +356,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               invitationCode: ourOwnCode,
               referredBy: "",
               isAdmin: isAdminPhone || isAdminEmail,
-              investments: CLIENT_DEFAULT_VIP_PLANS
+              investments: CLIENT_DEFAULT_VIP_PLANS,
+              createdAt: new Date().toISOString(),
+              regDate: new Date().toISOString()
             };
             try {
               await setDoc(doc(db, 'users', fbUser.uid), defaultProfile);
@@ -500,7 +502,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         referredBy: searchCode,
         referrerUid: referrerUid,
         isAdmin: isAdminPhone || isAdminEmail,
-        investments: CLIENT_DEFAULT_VIP_PLANS
+        investments: CLIENT_DEFAULT_VIP_PLANS,
+        createdAt: new Date().toISOString(),
+        regDate: new Date().toISOString()
       };
 
       const batch = writeBatch(db);
@@ -1000,7 +1004,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             phone: d.phoneNumber ? `***${d.phoneNumber.slice(-4)}` : 'Hidden',
             recharge: d.balance || 0,
             withdraw: 0,
-            date: d.date || 'Recent',
+            date: d.createdAt || d.regDate || d.date || 'Recent',
+            createdAt: d.createdAt || d.regDate || null,
             lvl: lvl
           });
         });

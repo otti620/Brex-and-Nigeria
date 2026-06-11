@@ -1718,7 +1718,9 @@ function startServer() {
         referredBy: parentInvitationCode,
         referrerUid: parentUid,
         isAdmin: false,
-        investments: freshInvestments
+        investments: freshInvestments,
+        createdAt: new Date().toISOString(),
+        regDate: new Date().toISOString()
       };
 
       const directReferralBonus = Math.floor(amountChosen * 0.10);
