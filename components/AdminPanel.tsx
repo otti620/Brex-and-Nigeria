@@ -122,7 +122,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
         setOperationError('');
         setOperationMsg('');
         
-        if (!userData?.isAdmin) {
+        if (userData === null) {
+            // Wait for user database session to load
+            return;
+        }
+        
+        if (!userData.isAdmin) {
             setOperationError("No authorization session found. Access denied.");
             setLoading(false);
             return;
@@ -266,7 +271,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onRefreshUser })
 
     useEffect(() => {
         loadAdminRegistry();
-    }, []);
+    }, [userData]);
 
     // Perform manual KYC level-up
     const updateKycStatus = async (userId: string, level: number) => {
